@@ -1,0 +1,9 @@
+<Application x:Class="CubicAIExplorer.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:CubicAIExplorer.Converters">
+    <Application.Resources>
+        <converters:FileSizeConverter x:Key="FileSizeConverter" />
+        <converters:FileIconConverter x:Key="FileIconConverter" />
+    </Application.Resources>
+</Application>
