@@ -8,6 +8,7 @@ namespace CubicAIExplorer.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
+    private readonly IClipboardService _clipboardService;
 
     [ObservableProperty]
     private TabViewModel? _activeTab;
@@ -24,9 +25,10 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
 
-    public MainViewModel(IFileSystemService fileSystemService)
+    public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
+        _clipboardService = clipboardService;
         LoadDrives();
     }
 
@@ -44,7 +46,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NewTab()
     {
-        var tab = new TabViewModel(_fileSystemService);
+        var tab = new TabViewModel(_fileSystemService, _clipboardService);
         tab.PropertyChanged += (s, e) =>
         {
             if (e.PropertyName == nameof(TabViewModel.CurrentPath) && s == ActiveTab)

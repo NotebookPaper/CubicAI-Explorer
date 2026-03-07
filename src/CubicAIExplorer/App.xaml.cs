@@ -21,7 +21,8 @@ public partial class App : Application
         }
 
         var fileSystemService = new FileSystemService();
-        var mainViewModel = new MainViewModel(fileSystemService);
+        var clipboardService = new ClipboardService();
+        var mainViewModel = new MainViewModel(fileSystemService, clipboardService);
         mainViewModel.NewTabCommand.Execute(null);
 
         var mainWindow = new MainWindow

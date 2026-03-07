@@ -27,9 +27,9 @@ public partial class TabViewModel : ObservableObject
     public Guid Id { get; } = Guid.NewGuid();
     public FileListViewModel FileList { get; }
 
-    public TabViewModel(IFileSystemService fileSystemService)
+    public TabViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
-        FileList = new FileListViewModel(fileSystemService);
+        FileList = new FileListViewModel(fileSystemService, clipboardService);
         FileList.NavigateRequested += (_, path) => NavigateTo(path);
         _navigation.Navigated += (_, path) => OnNavigated(path);
     }
