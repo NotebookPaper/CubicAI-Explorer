@@ -4,6 +4,6 @@
              xmlns:converters="clr-namespace:CubicAIExplorer.Converters">
     <Application.Resources>
         <converters:FileSizeConverter x:Key="FileSizeConverter" />
-        <converters:FileIconConverter x:Key="FileIconConverter" />
+        <converters:ShellIconConverter x:Key="ShellIconConverter" />
     </Application.Resources>
 </Application>

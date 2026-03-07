@@ -1,4 +1,5 @@
 using System.Windows;
+using CubicAIExplorer.Converters;
 using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
 
@@ -22,6 +23,8 @@ public partial class App : Application
 
         var fileSystemService = new FileSystemService();
         var clipboardService = new ClipboardService();
+        var shellIconService = new ShellIconService();
+        ShellIconConverter.IconService = shellIconService;
         var mainViewModel = new MainViewModel(fileSystemService, clipboardService);
         mainViewModel.NewTabCommand.Execute(null);
 

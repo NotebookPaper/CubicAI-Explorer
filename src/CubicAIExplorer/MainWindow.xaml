@@ -14,6 +14,15 @@
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding NewTabCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
+        <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CopyCommand}" />
+        <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CutCommand}" />
+        <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.PasteCommand}" />
+        <KeyBinding Key="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
+        <KeyBinding Key="Delete" Modifiers="Shift" Command="{Binding ActiveTab.FileList.PermanentDeleteCommand}" />
+        <KeyBinding Key="F2" Command="{Binding ActiveTab.FileList.RenameCommand}" />
+        <KeyBinding Key="F5" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
+        <KeyBinding Key="N" Modifiers="Ctrl+Shift" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
+        <KeyBinding Key="A" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.SelectAllCommand}" />
         <KeyBinding Key="BrowserBack" Command="{Binding ActiveTab.GoBackCommand}" />
         <KeyBinding Key="BrowserForward" Command="{Binding ActiveTab.GoForwardCommand}" />
         <KeyBinding Key="Back" Command="{Binding NavigateUpCommand}" />
@@ -127,7 +136,10 @@
                         <HierarchicalDataTemplate DataType="{x:Type vm:FolderTreeNodeViewModel}"
                                                   ItemsSource="{Binding Children}">
                             <StackPanel Orientation="Horizontal" Margin="2">
-                                <TextBlock Text="&#x1F4C1;" Margin="0,0,6,0" />
+                                <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
+                                       Width="16"
+                                       Height="16"
+                                       Margin="0,0,6,0" />
                                 <TextBlock Text="{Binding Name}" />
                             </StackPanel>
                         </HierarchicalDataTemplate>
@@ -140,21 +152,41 @@
                           VerticalAlignment="Stretch" Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
 
             <!-- File List -->
-            <ListView Grid.Column="2"
+            <ListView x:Name="FileListView"
+                      Grid.Column="2"
                       ItemsSource="{Binding ActiveTab.FileList.Items}"
                       SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
+                      SelectionMode="Extended"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
+                      SelectionChanged="FileList_SelectionChanged"
                       MouseDoubleClick="FileList_MouseDoubleClick"
+                      ContextMenuOpening="FileList_ContextMenuOpening"
                       GridViewColumnHeader.Click="FileListHeader_Click">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
+                        <Separator x:Name="ItemSeparator1" />
+                        <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
+                        <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
+                        <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
+                        <Separator x:Name="ItemSeparator2" />
+                        <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
+                        <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
+                        <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
+                        <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
+                    </ContextMenu>
+                </ListView.ContextMenu>
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Name" Width="350">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type models:FileSystemItem}">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding ItemType, Converter={StaticResource FileIconConverter}}"
-                                                   Margin="0,0,6,0" />
+                                        <Image Source="{Binding ., Converter={StaticResource ShellIconConverter}}"
+                                               Width="16"
+                                               Height="16"
+                                               Margin="0,0,6,0" />
                                         <TextBlock Text="{Binding Name}" />
                                     </StackPanel>
                                 </DataTemplate>
