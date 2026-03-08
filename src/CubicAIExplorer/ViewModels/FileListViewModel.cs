@@ -13,8 +13,9 @@ public partial class FileListViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
-    private readonly Stack<UndoOperation> _undoStack = [];
-    private bool _isApplyingUndo;
+    private readonly Stack<HistoryOperation> _undoStack = [];
+    private readonly Stack<HistoryOperation> _redoStack = [];
+    private bool _isApplyingHistory;
     private readonly string _undoStagingPath;
 
     [ObservableProperty]
@@ -37,7 +38,14 @@ public partial class FileListViewModel : ObservableObject
     private bool _canUndo;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RedoCommand))]
+    private bool _canRedo;
+
+    [ObservableProperty]
     private string _undoDescription = "Undo";
+
+    [ObservableProperty]
+    private string _redoDescription = "Redo";
 
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
@@ -174,9 +182,13 @@ public partial class FileListViewModel : ObservableObject
         try
         {
             var createdPath = _fileSystemService.CreateFolder(CurrentPath, dialog.FolderName);
-            PushUndo(
+            var parentPath = Path.GetDirectoryName(createdPath) ?? CurrentPath;
+            var folderName = Path.GetFileName(createdPath);
+            PushHistory(
                 "Undo New Folder",
-                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true));
+                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true),
+                "Redo New Folder",
+                () => _fileSystemService.CreateFolder(parentPath, folderName));
             Refresh();
         }
         catch (Exception ex)
@@ -208,12 +220,12 @@ public partial class FileListViewModel : ObservableObject
         if (_undoStack.Count == 0) return;
 
         var operation = _undoStack.Pop();
-        UpdateUndoState();
 
         try
         {
-            _isApplyingUndo = true;
-            operation.Apply();
+            _isApplyingHistory = true;
+            operation.UndoAction();
+            _redoStack.Push(operation);
             Refresh();
         }
         catch (Exception ex)
@@ -226,8 +238,46 @@ public partial class FileListViewModel : ObservableObject
         }
         finally
         {
-            _isApplyingUndo = false;
+            _isApplyingHistory = false;
+            UpdateHistoryState();
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+
+        var operation = _redoStack.Pop();
+
+        try
+        {
+            _isApplyingHistory = true;
+            operation.RedoAction();
+            _undoStack.Push(operation);
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Redo failed: {ex.Message}",
+                "Redo Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isApplyingHistory = false;
+            UpdateHistoryState();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearHistory()
+    {
+        _undoStack.Clear();
+        _redoStack.Clear();
+        UpdateHistoryState();
     }
 
     partial void OnShowHiddenFilesChanged(bool value)
@@ -273,9 +323,12 @@ public partial class FileListViewModel : ObservableObject
             var previousPath = item.FullPath;
             var renamedPath = _fileSystemService.RenameFile(previousPath, newName);
             var previousName = item.Name;
-            PushUndo(
+            var nextName = Path.GetFileName(renamedPath);
+            PushHistory(
                 "Undo Rename",
-                () => _fileSystemService.RenameFile(renamedPath, previousName));
+                () => _fileSystemService.RenameFile(renamedPath, previousName),
+                "Redo Rename",
+                () => _fileSystemService.RenameFile(previousPath, nextName));
             Refresh();
         }
         catch (Exception ex)
@@ -351,10 +404,10 @@ public partial class FileListViewModel : ObservableObject
 
     private void RegisterMoveUndo(IReadOnlyList<FileTransferResult> results)
     {
-        if (_isApplyingUndo || results.Count == 0) return;
+        if (_isApplyingHistory || results.Count == 0) return;
 
         var undoData = results.ToArray();
-        PushUndo(
+        PushHistory(
             "Undo Move",
             () =>
             {
@@ -364,25 +417,50 @@ public partial class FileListViewModel : ObservableObject
                     if (string.IsNullOrWhiteSpace(destinationDir)) continue;
                     _fileSystemService.MoveFiles([item.DestinationPath], destinationDir);
                 }
+            },
+            "Redo Move",
+            () =>
+            {
+                foreach (var item in undoData)
+                {
+                    var destinationDir = Path.GetDirectoryName(item.DestinationPath);
+                    if (string.IsNullOrWhiteSpace(destinationDir)) continue;
+                    _fileSystemService.MoveFiles([item.SourcePath], destinationDir);
+                }
             });
     }
 
     private void RegisterCopyUndo(IReadOnlyList<FileTransferResult> results)
     {
-        if (_isApplyingUndo || results.Count == 0) return;
+        if (_isApplyingHistory || results.Count == 0) return;
 
         var copiedPaths = results.Select(static x => x.DestinationPath).ToArray();
-        PushUndo(
+        var sourcePaths = results.Select(static x => x.SourcePath).ToArray();
+        var destinationDirectories = results
+            .Select(static x => Path.GetDirectoryName(x.DestinationPath))
+            .ToArray();
+
+        PushHistory(
             "Undo Copy",
-            () => _fileSystemService.DeleteFiles(copiedPaths, permanentDelete: true));
+            () => _fileSystemService.DeleteFiles(copiedPaths, permanentDelete: true),
+            "Redo Copy",
+            () =>
+            {
+                for (var i = 0; i < sourcePaths.Length; i++)
+                {
+                    var destinationDir = destinationDirectories[i];
+                    if (string.IsNullOrWhiteSpace(destinationDir)) continue;
+                    _fileSystemService.CopyFiles([sourcePaths[i]], destinationDir);
+                }
+            });
     }
 
     private void RegisterPermanentDeleteUndo(IReadOnlyList<FileTransferResult> stagedItems)
     {
-        if (_isApplyingUndo || stagedItems.Count == 0) return;
+        if (_isApplyingHistory || stagedItems.Count == 0) return;
 
         var restoreData = stagedItems.ToArray();
-        PushUndo(
+        PushHistory(
             "Undo Permanent Delete",
             () =>
             {
@@ -401,23 +479,15 @@ public partial class FileListViewModel : ObservableObject
                         _fileSystemService.RenameFile(restoredPath, originalName);
                     }
                 }
+            },
+            "Redo Permanent Delete",
+            () =>
+            {
+                foreach (var item in restoreData)
+                {
+                    _fileSystemService.MoveFiles([item.SourcePath], _undoStagingPath);
+                }
             });
-    }
-
-    private void PushUndo(string description, Action apply)
-    {
-        if (_isApplyingUndo) return;
-
-        _undoStack.Push(new UndoOperation(description, apply));
-        UpdateUndoState();
-    }
-
-    private void UpdateUndoState()
-    {
-        CanUndo = _undoStack.Count > 0;
-        UndoDescription = _undoStack.Count > 0
-            ? _undoStack.Peek().Description
-            : "Undo";
     }
 
     public void DeletePaths(IEnumerable<string> paths, bool permanentDelete, bool promptUser)
@@ -467,5 +537,26 @@ public partial class FileListViewModel : ObservableObject
         }
     }
 
-    private sealed record UndoOperation(string Description, Action Apply);
+    private void PushHistory(string undoDescription, Action undoAction, string redoDescription, Action redoAction)
+    {
+        if (_isApplyingHistory) return;
+
+        _undoStack.Push(new HistoryOperation(undoDescription, undoAction, redoDescription, redoAction));
+        _redoStack.Clear();
+        UpdateHistoryState();
+    }
+
+    private void UpdateHistoryState()
+    {
+        CanUndo = _undoStack.Count > 0;
+        CanRedo = _redoStack.Count > 0;
+        UndoDescription = _undoStack.Count > 0 ? _undoStack.Peek().UndoDescription : "Undo";
+        RedoDescription = _redoStack.Count > 0 ? _redoStack.Peek().RedoDescription : "Redo";
+    }
+
+    private sealed record HistoryOperation(
+        string UndoDescription,
+        Action UndoAction,
+        string RedoDescription,
+        Action RedoAction);
 }

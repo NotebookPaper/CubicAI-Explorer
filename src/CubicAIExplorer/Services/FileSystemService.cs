@@ -165,12 +165,26 @@ public sealed class FileSystemService : IFileSystemService
 
             if (File.Exists(source))
             {
+                var sourceDir = Path.GetDirectoryName(source);
+                if (!string.IsNullOrWhiteSpace(sourceDir)
+                    && string.Equals(sourceDir.TrimEnd('\\'), destination.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source), isDirectory: false);
                 File.Move(source, targetPath);
                 results.Add(new FileTransferResult(source, targetPath, IsDirectory: false));
             }
             else if (Directory.Exists(source))
             {
+                var sourceParent = Path.GetDirectoryName(source.TrimEnd('\\'));
+                if (!string.IsNullOrWhiteSpace(sourceParent)
+                    && string.Equals(sourceParent.TrimEnd('\\'), destination.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source.TrimEnd('\\')), isDirectory: true);
                 MoveDirectory(source, targetPath);
                 results.Add(new FileTransferResult(source, targetPath, IsDirectory: true));

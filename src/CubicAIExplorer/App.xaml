@@ -3,6 +3,73 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:converters="clr-namespace:CubicAIExplorer.Converters">
     <Application.Resources>
+        <SolidColorBrush x:Key="ClassicChromeBorderBrush" Color="#6B8BB6" />
+        <SolidColorBrush x:Key="ClassicPaneBorderBrush" Color="#9FB7D6" />
+        <SolidColorBrush x:Key="ClassicPaneBackgroundBrush" Color="#F3F7FC" />
+        <SolidColorBrush x:Key="ClassicTextBrush" Color="#1E2A3A" />
+
+        <LinearGradientBrush x:Key="ClassicWindowBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#EAF2FD" Offset="0" />
+            <GradientStop Color="#D5E4F7" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="ClassicChromeBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F7FBFF" Offset="0" />
+            <GradientStop Color="#D6E7FB" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="ClassicHeaderBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#EAF4FF" Offset="0" />
+            <GradientStop Color="#C8DCF6" Offset="1" />
+        </LinearGradientBrush>
+
+        <Style TargetType="Window">
+            <Setter Property="FontFamily" Value="Tahoma" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource ClassicTextBrush}" />
+            <Setter Property="Background" Value="{StaticResource ClassicWindowBrush}" />
+        </Style>
+
+        <Style TargetType="Menu">
+            <Setter Property="Background" Value="{StaticResource ClassicChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ClassicChromeBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+
+        <Style TargetType="ToolBarTray">
+            <Setter Property="Background" Value="{StaticResource ClassicChromeBrush}" />
+        </Style>
+
+        <Style TargetType="ToolBar">
+            <Setter Property="Background" Value="{StaticResource ClassicChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ClassicChromeBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style TargetType="StatusBar">
+            <Setter Property="Background" Value="{StaticResource ClassicChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ClassicChromeBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1,1,1,0" />
+        </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="#D7E8FC" />
+            <Setter Property="BorderBrush" Value="{StaticResource ClassicChromeBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,1" />
+        </Style>
+
+        <Style x:Key="ClassicPaneHeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="{StaticResource ClassicHeaderBrush}" />
+        </Style>
+
+        <Style x:Key="ClassicPaneSurfaceStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource ClassicPaneBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ClassicPaneBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
         <converters:FileSizeConverter x:Key="FileSizeConverter" />
         <converters:ShellIconConverter x:Key="ShellIconConverter" />
     </Application.Resources>

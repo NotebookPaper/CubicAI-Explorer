@@ -16,13 +16,16 @@ internal static class Program
         {
             Run("rename event + rename commit", failures, () => TestRenameFlow(tempRoot));
             Run("undo rename", failures, () => TestUndoRename(tempRoot));
+            Run("redo rename", failures, () => TestRedoRename(tempRoot));
             Run("multi-select copy command", failures, () => TestMultiSelectCopy(tempRoot));
             Run("drop import copy + move", failures, () => TestDropImport(tempRoot));
             Run("undo copy", failures, () => TestUndoCopy(tempRoot));
             Run("undo move", failures, () => TestUndoMove(tempRoot));
             Run("undo permanent delete", failures, () => TestUndoPermanentDelete(tempRoot));
+            Run("clear history", failures, () => TestClearHistory(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
+            Run("move same folder no-op", failures, () => TestMoveSameFolderNoOp(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
@@ -122,6 +125,26 @@ internal static class Program
 
         vm.UndoCommand.Execute(null);
         Assert(File.Exists(original), "Undo rename should restore original name.");
+    }
+
+    private static void TestRedoRename(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "redo_rename");
+        var original = Path.Combine(folder, "before.txt");
+        var renamed = Path.Combine(folder, "after.txt");
+        File.WriteAllText(original, "x");
+
+        vm.LoadDirectory(folder);
+        var item = vm.Items.Single(i => i.Name == "before.txt");
+        vm.RenameItem(item, "after.txt");
+        vm.UndoCommand.Execute(null);
+        vm.RedoCommand.Execute(null);
+
+        Assert(File.Exists(renamed), "Redo rename should reapply the rename.");
+        Assert(!File.Exists(original), "Redo rename should remove original file name.");
     }
 
     private static void TestSelectAllEvent(string root)
@@ -245,6 +268,24 @@ internal static class Program
         Assert(File.Exists(path), "Undo permanent delete should restore file.");
     }
 
+    private static void TestClearHistory(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "clear_history");
+        var path = Path.Combine(folder, "x.txt");
+        File.WriteAllText(path, "x");
+
+        vm.LoadDirectory(folder);
+        vm.RenameItem(vm.Items.Single(i => i.Name == "x.txt"), "y.txt");
+        Assert(vm.CanUndo, "History should exist before clear.");
+
+        vm.ClearHistoryCommand.Execute(null);
+        Assert(!vm.CanUndo, "Clear history should disable undo.");
+        Assert(!vm.CanRedo, "Clear history should disable redo.");
+    }
+
     private static void TestShellIconService(string root)
     {
         var svc = new ShellIconService();
@@ -259,6 +300,19 @@ internal static class Program
         Assert(fileIcon != null, "File icon should be resolved.");
     }
 
+    private static void TestMoveSameFolderNoOp(string root)
+    {
+        var fs = new FileSystemService();
+        var folder = CreateCleanSubdir(root, "same_folder_move");
+        var file = Path.Combine(folder, "same.txt");
+        File.WriteAllText(file, "z");
+
+        var results = fs.MoveFiles([file], folder);
+        Assert(results.Count == 0, "Same-folder move should be ignored.");
+        Assert(File.Exists(file), "Source file should remain unchanged.");
+        Assert(!File.Exists(Path.Combine(folder, "same (2).txt")), "No renamed duplicate should be created.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -268,10 +322,13 @@ internal static class Program
 
         Assert(main.Contains("Key=\"F2\""), "F2 keybinding should exist.");
         Assert(main.Contains("Key=\"Z\""), "Ctrl+Z keybinding should exist.");
+        Assert(main.Contains("Key=\"Y\""), "Ctrl+Y keybinding should exist.");
         Assert(main.Contains("Ctrl+Shift"), "Ctrl+Shift+N keybinding should exist.");
         Assert(main.Contains("SelectionMode=\"Extended\""), "Extended selection should exist.");
         Assert(main.Contains("AllowDrop=\"True\""), "File list drag/drop should be enabled.");
         Assert(main.Contains("Drop=\"FileList_Drop\""), "File list drop handler should be wired.");
+        Assert(main.Contains("ClearHistoryCommand"), "Clear history command should be wired.");
+        Assert(main.Contains("BookmarkList_SelectionChanged"), "Bookmark single-click navigation should be wired.");
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
         Assert(app.Contains("ShellIconConverter"), "ShellIconConverter should be in app resources.");

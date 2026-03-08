@@ -16,6 +16,8 @@
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.UndoCommand}" />
+        <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.RedoCommand}" />
+        <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding ActiveTab.FileList.RedoCommand}" />
         <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CopyCommand}" />
         <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CutCommand}" />
         <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.PasteCommand}" />
@@ -41,6 +43,9 @@
             </MenuItem>
             <MenuItem Header="_Edit">
                 <MenuItem Header="{Binding ActiveTab.FileList.UndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding ActiveTab.FileList.UndoCommand}" />
+                <MenuItem Header="{Binding ActiveTab.FileList.RedoDescription}" InputGestureText="Ctrl+Y" Command="{Binding ActiveTab.FileList.RedoCommand}" />
+                <Separator />
+                <MenuItem Header="Clear History" Command="{Binding ActiveTab.FileList.ClearHistoryCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
@@ -76,7 +81,7 @@
         </ToolBarTray>
 
         <!-- Tab Bar -->
-        <DockPanel DockPanel.Dock="Top" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+        <DockPanel DockPanel.Dock="Top" Background="{StaticResource ClassicChromeBrush}">
             <Button DockPanel.Dock="Right" Command="{Binding NewTabCommand}"
                     Content="+" FontSize="14" Padding="8,2" Margin="2"
                     ToolTip="New Tab (Ctrl+T)" />
@@ -125,8 +130,7 @@
 
             <!-- Folder Tree Panel -->
             <DockPanel Grid.Column="0">
-                <TextBlock DockPanel.Dock="Top" Text="Bookmarks" FontWeight="SemiBold"
-                           Padding="8,4" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                <TextBlock DockPanel.Dock="Top" Text="Bookmarks" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
                 <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
                     <Button Content="+ Add Current"
                             Command="{Binding AddBookmarkCommand}"
@@ -137,45 +141,46 @@
                             CommandParameter="{Binding SelectedBookmark}"
                             Padding="6,2" />
                 </DockPanel>
-                <ListBox x:Name="BookmarkList"
-                         DockPanel.Dock="Top"
-                         Height="120"
-                         Margin="4,0,4,4"
-                         ItemsSource="{Binding Bookmarks}"
-                         SelectedItem="{Binding SelectedBookmark}"
-                         MouseDoubleClick="BookmarkList_MouseDoubleClick"
-                         DisplayMemberPath="Name" />
+                <Border DockPanel.Dock="Top" Margin="4,0,4,4" Height="120" Style="{StaticResource ClassicPaneSurfaceStyle}">
+                    <ListBox x:Name="BookmarkList"
+                             ItemsSource="{Binding Bookmarks}"
+                             SelectedItem="{Binding SelectedBookmark}"
+                             SelectionChanged="BookmarkList_SelectionChanged"
+                             MouseDoubleClick="BookmarkList_MouseDoubleClick"
+                             DisplayMemberPath="Name" />
+                </Border>
 
-                <TextBlock DockPanel.Dock="Top" Text="Folders" FontWeight="SemiBold"
-                           Padding="8,4" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                <TreeView ItemsSource="{Binding FolderTreeRoots}"
-                          VirtualizingStackPanel.IsVirtualizing="True"
-                          VirtualizingStackPanel.VirtualizationMode="Recycling">
-                    <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                            <EventSetter Event="Selected" Handler="TreeViewItem_Selected" />
-                        </Style>
-                    </TreeView.ItemContainerStyle>
-                    <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate DataType="{x:Type vm:FolderTreeNodeViewModel}"
-                                                  ItemsSource="{Binding Children}">
-                            <StackPanel Orientation="Horizontal" Margin="2">
-                                <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
-                                       Width="16"
-                                       Height="16"
-                                       Margin="0,0,6,0" />
-                                <TextBlock Text="{Binding Name}" />
-                            </StackPanel>
-                        </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
+                <TextBlock DockPanel.Dock="Top" Text="Folders" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
+                <Border Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}">
+                    <TreeView ItemsSource="{Binding FolderTreeRoots}"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                <EventSetter Event="Selected" Handler="TreeViewItem_Selected" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate DataType="{x:Type vm:FolderTreeNodeViewModel}"
+                                                      ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal" Margin="2">
+                                    <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
+                                           Width="16"
+                                           Height="16"
+                                           Margin="0,0,6,0" />
+                                    <TextBlock Text="{Binding Name}" />
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </Border>
             </DockPanel>
 
             <!-- Splitter -->
             <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+                          VerticalAlignment="Stretch" Background="#96B3D8" />
 
             <!-- File List -->
             <ListView x:Name="FileListView"
