@@ -16,6 +16,7 @@ internal static class Program
         {
             Run("rename event + rename commit", failures, () => TestRenameFlow(tempRoot));
             Run("multi-select copy command", failures, () => TestMultiSelectCopy(tempRoot));
+            Run("drop import copy + move", failures, () => TestDropImport(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
@@ -115,6 +116,29 @@ internal static class Program
         Assert(fired, "SelectAllRequested should fire.");
     }
 
+    private static void TestDropImport(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "drop_src");
+        var targetDir = CreateCleanSubdir(root, "drop_dst");
+
+        var copySource = Path.Combine(sourceDir, "copy.txt");
+        var moveSource = Path.Combine(sourceDir, "move.txt");
+        File.WriteAllText(copySource, "c");
+        File.WriteAllText(moveSource, "m");
+
+        vm.LoadDirectory(targetDir);
+        vm.ImportDroppedFiles([copySource], targetDir, moveFiles: false);
+        Assert(File.Exists(Path.Combine(targetDir, "copy.txt")), "Drop copy should create file in destination.");
+        Assert(File.Exists(copySource), "Drop copy should keep source file.");
+
+        vm.ImportDroppedFiles([moveSource], targetDir, moveFiles: true);
+        Assert(File.Exists(Path.Combine(targetDir, "move.txt")), "Drop move should create file in destination.");
+        Assert(!File.Exists(moveSource), "Drop move should remove source file.");
+    }
+
     private static void TestCreateFolderCollision(string root)
     {
         var fs = new FileSystemService();
@@ -152,6 +176,8 @@ internal static class Program
         Assert(main.Contains("Key=\"F2\""), "F2 keybinding should exist.");
         Assert(main.Contains("Ctrl+Shift"), "Ctrl+Shift+N keybinding should exist.");
         Assert(main.Contains("SelectionMode=\"Extended\""), "Extended selection should exist.");
+        Assert(main.Contains("AllowDrop=\"True\""), "File list drag/drop should be enabled.");
+        Assert(main.Contains("Drop=\"FileList_Drop\""), "File list drop handler should be wired.");
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
         Assert(app.Contains("ShellIconConverter"), "ShellIconConverter should be in app resources.");

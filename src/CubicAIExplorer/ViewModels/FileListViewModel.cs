@@ -112,27 +112,10 @@ public partial class FileListViewModel : ObservableObject
         var (paths, isCut) = _clipboardService.GetFiles();
         if (paths.Count == 0) return;
 
-        try
+        if (TransferFiles(paths, CurrentPath, moveFiles: isCut, "Paste Error"))
         {
             if (isCut)
-            {
-                _fileSystemService.MoveFiles(paths, CurrentPath);
                 _clipboardService.Clear();
-            }
-            else
-            {
-                _fileSystemService.CopyFiles(paths, CurrentPath);
-            }
-
-            Refresh();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Paste failed: {ex.Message}",
-                "Paste Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
         }
     }
 
@@ -269,6 +252,51 @@ public partial class FileListViewModel : ObservableObject
                 "Rename Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+        }
+    }
+
+    public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
+    {
+        TransferFiles(paths, destinationPath, moveFiles, "Drop Error");
+    }
+
+    public IReadOnlyList<string> GetSelectedPathsForTransfer() => GetSelectedPaths();
+
+    private bool TransferFiles(IEnumerable<string> sourcePaths, string destinationPath, bool moveFiles, string errorTitle)
+    {
+        if (string.IsNullOrWhiteSpace(destinationPath) || !_fileSystemService.DirectoryExists(destinationPath))
+            return false;
+
+        var distinctPaths = sourcePaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (distinctPaths.Length == 0)
+            return false;
+
+        try
+        {
+            if (moveFiles)
+            {
+                _fileSystemService.MoveFiles(distinctPaths, destinationPath);
+            }
+            else
+            {
+                _fileSystemService.CopyFiles(distinctPaths, destinationPath);
+            }
+
+            Refresh();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Operation failed: {ex.Message}",
+                errorTitle,
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
         }
     }
 }

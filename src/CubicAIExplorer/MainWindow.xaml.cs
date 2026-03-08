@@ -17,6 +17,9 @@ public partial class MainWindow : Window
     private MainViewModel? _boundViewModel;
     private FileListViewModel? _boundFileListViewModel;
     private FileSystemItem? _inlineRenameItem;
+    private Point _dragStartPoint;
+
+    private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
 
     public MainWindow()
     {
@@ -56,6 +59,67 @@ public partial class MainWindow : Window
         {
             ViewModel.ActiveTab.FileList.OpenItemCommand.Execute(item);
         }
+    }
+
+    private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStartPoint = e.GetPosition(FileListView);
+    }
+
+    private void FileList_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var delta = e.GetPosition(FileListView) - _dragStartPoint;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var fileList = ViewModel.ActiveTab?.FileList;
+        if (fileList == null) return;
+
+        var paths = fileList.GetSelectedPathsForTransfer();
+        if (paths.Count == 0) return;
+
+        var dropList = new System.Collections.Specialized.StringCollection();
+        dropList.AddRange(paths.ToArray());
+
+        var data = new DataObject();
+        data.SetFileDropList(dropList);
+        data.SetData(InternalDragFormat, true);
+
+        DragDrop.DoDragDrop(FileListView, data, DragDropEffects.Copy | DragDropEffects.Move);
+    }
+
+    private void FileList_DragEnter(object sender, DragEventArgs e)
+    {
+        UpdateDragEffects(e);
+    }
+
+    private void FileList_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateDragEffects(e);
+        e.Handled = true;
+    }
+
+    private void FileList_Drop(object sender, DragEventArgs e)
+    {
+        var fileList = ViewModel.ActiveTab?.FileList;
+        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
+            return;
+
+        var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
+        if (droppedPaths == null || droppedPaths.Length == 0)
+            return;
+
+        var destination = ResolveDropDestination(e.OriginalSource as DependencyObject) ?? fileList.CurrentPath;
+        var moveFiles = ShouldMove(e);
+
+        fileList.ImportDroppedFiles(droppedPaths, destination, moveFiles);
+        e.Handled = true;
     }
 
     private void FileListHeader_Click(object sender, RoutedEventArgs e)
@@ -281,6 +345,42 @@ public partial class MainWindow : Window
         }
 
         InlineRenameTextBox.SelectAll();
+    }
+
+    private void UpdateDragEffects(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        e.Effects = ShouldMove(e) ? DragDropEffects.Move : DragDropEffects.Copy;
+    }
+
+    private bool ShouldMove(DragEventArgs e)
+    {
+        var isInternalDrag = e.Data.GetDataPresent(InternalDragFormat);
+        var forceCopy = (e.KeyStates & DragDropKeyStates.ControlKey) != 0;
+        var forceMove = (e.KeyStates & DragDropKeyStates.ShiftKey) != 0;
+
+        if (forceCopy) return false;
+        if (forceMove) return true;
+        return isInternalDrag;
+    }
+
+    private string? ResolveDropDestination(DependencyObject? source)
+    {
+        var itemContainer = FindVisualParent<ListViewItem>(source);
+        if (itemContainer?.DataContext is not FileSystemItem targetItem)
+            return null;
+
+        return targetItem.ItemType switch
+        {
+            FileSystemItemType.Directory => targetItem.FullPath,
+            FileSystemItemType.Drive => targetItem.FullPath,
+            _ => null
+        };
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
