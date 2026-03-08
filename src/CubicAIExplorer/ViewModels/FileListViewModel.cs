@@ -35,6 +35,9 @@ public partial class FileListViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(UndoCommand))]
     private bool _canUndo;
 
+    [ObservableProperty]
+    private string _undoDescription = "Undo";
+
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
 
@@ -125,6 +128,10 @@ public partial class FileListViewModel : ObservableObject
             {
                 RegisterMoveUndo(transferResults);
                 _clipboardService.Clear();
+            }
+            else
+            {
+                RegisterCopyUndo(transferResults);
             }
         }
     }
@@ -303,9 +310,16 @@ public partial class FileListViewModel : ObservableObject
 
     public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
     {
-        if (TransferFiles(paths, destinationPath, moveFiles, "Drop Error", out var transferResults) && moveFiles)
+        if (!TransferFiles(paths, destinationPath, moveFiles, "Drop Error", out var transferResults))
+            return;
+
+        if (moveFiles)
         {
             RegisterMoveUndo(transferResults);
+        }
+        else
+        {
+            RegisterCopyUndo(transferResults);
         }
     }
 
@@ -373,6 +387,16 @@ public partial class FileListViewModel : ObservableObject
             });
     }
 
+    private void RegisterCopyUndo(IReadOnlyList<FileTransferResult> results)
+    {
+        if (_isApplyingUndo || results.Count == 0) return;
+
+        var copiedPaths = results.Select(static x => x.DestinationPath).ToArray();
+        PushUndo(
+            "Undo Copy",
+            () => _fileSystemService.DeleteFiles(copiedPaths, permanentDelete: true));
+    }
+
     private void PushUndo(string description, Action apply)
     {
         if (_isApplyingUndo) return;
@@ -384,6 +408,9 @@ public partial class FileListViewModel : ObservableObject
     private void UpdateUndoState()
     {
         CanUndo = _undoStack.Count > 0;
+        UndoDescription = _undoStack.Count > 0
+            ? _undoStack.Peek().Description
+            : "Undo";
     }
 
     private sealed record UndoOperation(string Description, Action Apply);

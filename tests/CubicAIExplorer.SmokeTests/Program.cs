@@ -18,6 +18,7 @@ internal static class Program
             Run("undo rename", failures, () => TestUndoRename(tempRoot));
             Run("multi-select copy command", failures, () => TestMultiSelectCopy(tempRoot));
             Run("drop import copy + move", failures, () => TestDropImport(tempRoot));
+            Run("undo copy", failures, () => TestUndoCopy(tempRoot));
             Run("undo move", failures, () => TestUndoMove(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
@@ -195,6 +196,31 @@ internal static class Program
 
         vm.UndoCommand.Execute(null);
         Assert(File.Exists(source), "Undo move should return file to source.");
+    }
+
+    private static void TestUndoCopy(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "undo_copy_src");
+        var targetDir = CreateCleanSubdir(root, "undo_copy_dst");
+
+        var source = Path.Combine(sourceDir, "file.txt");
+        File.WriteAllText(source, "c");
+
+        vm.LoadDirectory(targetDir);
+        vm.ImportDroppedFiles([source], targetDir, moveFiles: false);
+
+        var copied = Path.Combine(targetDir, "file.txt");
+        Assert(File.Exists(copied), "Copy should place file in destination.");
+        Assert(File.Exists(source), "Copy should keep source.");
+        Assert(vm.CanUndo, "Copy should create undo history.");
+        Assert(vm.UndoDescription.Contains("Copy", StringComparison.OrdinalIgnoreCase), "Undo label should describe copy.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(!File.Exists(copied), "Undo copy should remove destination copy.");
+        Assert(File.Exists(source), "Undo copy should preserve source.");
     }
 
     private static void TestShellIconService(string root)

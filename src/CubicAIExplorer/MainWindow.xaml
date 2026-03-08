@@ -40,7 +40,7 @@
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
             </MenuItem>
             <MenuItem Header="_Edit">
-                <MenuItem Header="_Undo" InputGestureText="Ctrl+Z" Command="{Binding ActiveTab.FileList.UndoCommand}" />
+                <MenuItem Header="{Binding ActiveTab.FileList.UndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding ActiveTab.FileList.UndoCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
