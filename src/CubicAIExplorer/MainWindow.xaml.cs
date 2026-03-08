@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.ViewModels;
@@ -15,6 +16,7 @@ public partial class MainWindow : Window
     private ListSortDirection _lastDirection = ListSortDirection.Ascending;
     private MainViewModel? _boundViewModel;
     private FileListViewModel? _boundFileListViewModel;
+    private FileSystemItem? _inlineRenameItem;
 
     public MainWindow()
     {
@@ -162,18 +164,115 @@ public partial class MainWindow : Window
         if (_boundFileListViewModel != null)
         {
             _boundFileListViewModel.SelectAllRequested -= FileListViewModel_SelectAllRequested;
+            _boundFileListViewModel.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
         }
 
         _boundFileListViewModel = fileListViewModel;
         if (_boundFileListViewModel != null)
         {
             _boundFileListViewModel.SelectAllRequested += FileListViewModel_SelectAllRequested;
+            _boundFileListViewModel.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
         }
     }
 
     private void FileListViewModel_SelectAllRequested(object? sender, EventArgs e)
     {
         FileListView.SelectAll();
+    }
+
+    private void FileListViewModel_InlineRenameRequested(object? sender, FileSystemItem item)
+    {
+        BeginInlineRename(item);
+    }
+
+    private void BeginInlineRename(FileSystemItem item)
+    {
+        if (item == null) return;
+
+        FileListView.ScrollIntoView(item);
+        FileListView.UpdateLayout();
+
+        var container = FileListView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
+        if (container == null) return;
+
+        var nameTextBlock = FindVisualChildren<TextBlock>(container)
+            .FirstOrDefault(tb => tb.Name == "FileNameTextBlock");
+        if (nameTextBlock == null) return;
+
+        var point = nameTextBlock.TranslatePoint(new Point(0, 0), FileListView);
+        InlineRenamePopup.HorizontalOffset = Math.Max(0, point.X - 2);
+        InlineRenamePopup.VerticalOffset = Math.Max(0, point.Y - 1);
+        InlineRenameTextBox.Width = Math.Max(180, nameTextBlock.ActualWidth + 18);
+        InlineRenameTextBox.Text = item.Name;
+        InlineRenamePopup.IsOpen = true;
+        _inlineRenameItem = item;
+
+        InlineRenameTextBox.Focus();
+        SelectRenameText(item.Name);
+    }
+
+    private void InlineRenameTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            CommitInlineRename();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            CancelInlineRename();
+            e.Handled = true;
+        }
+    }
+
+    private void InlineRenameTextBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (InlineRenamePopup.IsOpen)
+            CommitInlineRename();
+    }
+
+    private void CommitInlineRename()
+    {
+        var item = _inlineRenameItem;
+        var fileList = _boundViewModel?.ActiveTab?.FileList;
+        if (item != null && fileList != null)
+        {
+            var newName = InlineRenameTextBox.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(newName) && !string.Equals(newName, item.Name, StringComparison.Ordinal))
+            {
+                fileList.RenameItem(item, newName);
+            }
+        }
+
+        CloseInlineRename();
+    }
+
+    private void CancelInlineRename()
+    {
+        CloseInlineRename();
+    }
+
+    private void CloseInlineRename()
+    {
+        InlineRenamePopup.IsOpen = false;
+        _inlineRenameItem = null;
+    }
+
+    private void SelectRenameText(string fileName)
+    {
+        var dotIndex = fileName.LastIndexOf('.');
+        var isDotFile = dotIndex == 0;
+        var hasUsableExtension = dotIndex > 0 && dotIndex < fileName.Length - 1;
+
+        if (hasUsableExtension && !isDotFile)
+        {
+            InlineRenameTextBox.Select(0, dotIndex);
+            return;
+        }
+
+        InlineRenameTextBox.SelectAll();
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
@@ -187,5 +286,19 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        var childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < childCount; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild)
+                yield return typedChild;
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+                yield return descendant;
+        }
     }
 }

@@ -187,7 +187,7 @@
                                                Width="16"
                                                Height="16"
                                                Margin="0,0,6,0" />
-                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock x:Name="FileNameTextBlock" Text="{Binding Name}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -201,6 +201,20 @@
                     </GridView>
                 </ListView.View>
             </ListView>
+
+            <Popup x:Name="InlineRenamePopup"
+                   Grid.Column="2"
+                   PlacementTarget="{Binding ElementName=FileListView}"
+                   Placement="Relative"
+                   StaysOpen="False"
+                   AllowsTransparency="True">
+                <Border BorderBrush="#999999" BorderThickness="1" Background="White" Padding="1">
+                    <TextBox x:Name="InlineRenameTextBox"
+                             MinWidth="220"
+                             KeyDown="InlineRenameTextBox_KeyDown"
+                             LostKeyboardFocus="InlineRenameTextBox_LostKeyboardFocus" />
+                </Border>
+            </Popup>
         </Grid>
     </DockPanel>
 </Window>

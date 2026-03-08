@@ -33,6 +33,7 @@ public partial class FileListViewModel : ObservableObject
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
+    public event EventHandler<FileSystemItem>? InlineRenameRequested;
 
     public FileListViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
@@ -152,23 +153,7 @@ public partial class FileListViewModel : ObservableObject
     {
         var item = GetSingleSelectedItem();
         if (item == null) return;
-
-        var dialog = new RenameDialog(item.Name);
-        if (dialog.ShowDialog() != true) return;
-
-        try
-        {
-            _fileSystemService.RenameFile(item.FullPath, dialog.EnteredName);
-            Refresh();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Rename failed: {ex.Message}",
-                "Rename Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
+        InlineRenameRequested?.Invoke(this, item);
     }
 
     [RelayCommand]
@@ -262,6 +247,26 @@ public partial class FileListViewModel : ObservableObject
             MessageBox.Show(
                 $"Delete failed: {ex.Message}",
                 "Delete Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    public void RenameItem(FileSystemItem item, string newName)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(newName))
+            return;
+
+        try
+        {
+            _fileSystemService.RenameFile(item.FullPath, newName);
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Rename failed: {ex.Message}",
+                "Rename Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
