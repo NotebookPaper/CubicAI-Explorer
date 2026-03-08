@@ -15,6 +15,7 @@ public partial class FileListViewModel : ObservableObject
     private readonly IClipboardService _clipboardService;
     private readonly Stack<UndoOperation> _undoStack = [];
     private bool _isApplyingUndo;
+    private readonly string _undoStagingPath;
 
     [ObservableProperty]
     private string _currentPath = string.Empty;
@@ -49,6 +50,12 @@ public partial class FileListViewModel : ObservableObject
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
+        _undoStagingPath = Path.Combine(
+            Path.GetTempPath(),
+            "CubicAIExplorer",
+            "UndoStaging",
+            Environment.ProcessId.ToString());
+        Directory.CreateDirectory(_undoStagingPath);
     }
 
     public void LoadDirectory(string path)
@@ -253,34 +260,7 @@ public partial class FileListViewModel : ObservableObject
 
     private void DeleteSelected(bool permanentDelete)
     {
-        var paths = GetSelectedPaths();
-        if (paths.Count == 0) return;
-
-        var confirmationText = permanentDelete
-            ? "Permanently delete selected item(s)? This cannot be undone."
-            : "Delete selected item(s) to the Recycle Bin?";
-
-        var result = MessageBox.Show(
-            confirmationText,
-            permanentDelete ? "Permanent Delete" : "Delete",
-            MessageBoxButton.YesNo,
-            permanentDelete ? MessageBoxImage.Warning : MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes) return;
-
-        try
-        {
-            _fileSystemService.DeleteFiles(paths, permanentDelete);
-            Refresh();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Delete failed: {ex.Message}",
-                "Delete Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
+        DeletePaths(GetSelectedPaths(), permanentDelete, promptUser: true);
     }
 
     public void RenameItem(FileSystemItem item, string newName)
@@ -397,6 +377,33 @@ public partial class FileListViewModel : ObservableObject
             () => _fileSystemService.DeleteFiles(copiedPaths, permanentDelete: true));
     }
 
+    private void RegisterPermanentDeleteUndo(IReadOnlyList<FileTransferResult> stagedItems)
+    {
+        if (_isApplyingUndo || stagedItems.Count == 0) return;
+
+        var restoreData = stagedItems.ToArray();
+        PushUndo(
+            "Undo Permanent Delete",
+            () =>
+            {
+                foreach (var item in restoreData)
+                {
+                    var restoreDir = Path.GetDirectoryName(item.SourcePath);
+                    if (string.IsNullOrWhiteSpace(restoreDir)) continue;
+
+                    var movedBack = _fileSystemService.MoveFiles([item.DestinationPath], restoreDir);
+                    if (movedBack.Count == 0) continue;
+
+                    var restoredPath = movedBack[0].DestinationPath;
+                    if (!string.Equals(restoredPath, item.SourcePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var originalName = Path.GetFileName(item.SourcePath);
+                        _fileSystemService.RenameFile(restoredPath, originalName);
+                    }
+                }
+            });
+    }
+
     private void PushUndo(string description, Action apply)
     {
         if (_isApplyingUndo) return;
@@ -411,6 +418,53 @@ public partial class FileListViewModel : ObservableObject
         UndoDescription = _undoStack.Count > 0
             ? _undoStack.Peek().Description
             : "Undo";
+    }
+
+    public void DeletePaths(IEnumerable<string> paths, bool permanentDelete, bool promptUser)
+    {
+        var deletePaths = paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (deletePaths.Length == 0) return;
+
+        if (promptUser)
+        {
+            var confirmationText = permanentDelete
+                ? "Permanently delete selected item(s)? This cannot be undone."
+                : "Delete selected item(s) to the Recycle Bin?";
+
+            var result = MessageBox.Show(
+                confirmationText,
+                permanentDelete ? "Permanent Delete" : "Delete",
+                MessageBoxButton.YesNo,
+                permanentDelete ? MessageBoxImage.Warning : MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes) return;
+        }
+
+        try
+        {
+            if (permanentDelete)
+            {
+                var stagedItems = _fileSystemService.MoveFiles(deletePaths, _undoStagingPath);
+                RegisterPermanentDeleteUndo(stagedItems);
+            }
+            else
+            {
+                _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false);
+            }
+
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Delete failed: {ex.Message}",
+                "Delete Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private sealed record UndoOperation(string Description, Action Apply);

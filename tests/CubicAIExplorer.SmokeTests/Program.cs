@@ -20,6 +20,7 @@ internal static class Program
             Run("drop import copy + move", failures, () => TestDropImport(tempRoot));
             Run("undo copy", failures, () => TestUndoCopy(tempRoot));
             Run("undo move", failures, () => TestUndoMove(tempRoot));
+            Run("undo permanent delete", failures, () => TestUndoPermanentDelete(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
@@ -221,6 +222,27 @@ internal static class Program
         vm.UndoCommand.Execute(null);
         Assert(!File.Exists(copied), "Undo copy should remove destination copy.");
         Assert(File.Exists(source), "Undo copy should preserve source.");
+    }
+
+    private static void TestUndoPermanentDelete(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "undo_permanent_delete");
+
+        var path = Path.Combine(folder, "delete_me.txt");
+        File.WriteAllText(path, "d");
+        vm.LoadDirectory(folder);
+
+        vm.DeletePaths([path], permanentDelete: true, promptUser: false);
+        Assert(!File.Exists(path), "Permanent delete should remove file immediately.");
+        Assert(vm.CanUndo, "Permanent delete should create undo history.");
+        Assert(vm.UndoDescription.Contains("Permanent Delete", StringComparison.OrdinalIgnoreCase),
+            "Undo label should describe permanent delete.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(File.Exists(path), "Undo permanent delete should restore file.");
     }
 
     private static void TestShellIconService(string root)
