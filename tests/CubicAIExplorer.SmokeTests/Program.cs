@@ -19,6 +19,7 @@ internal static class Program
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
+            Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
         finally
@@ -154,6 +155,26 @@ internal static class Program
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
         Assert(app.Contains("ShellIconConverter"), "ShellIconConverter should be in app resources.");
+    }
+
+    private static void TestBookmarks(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "bookmarks");
+
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+
+        var before = vm.Bookmarks.Count;
+        vm.AddBookmarkCommand.Execute(null);
+        var afterFirstAdd = vm.Bookmarks.Count;
+        vm.AddBookmarkCommand.Execute(null);
+        var afterSecondAdd = vm.Bookmarks.Count;
+
+        Assert(afterFirstAdd == before + 1, "AddBookmark should add current folder.");
+        Assert(afterSecondAdd == afterFirstAdd, "AddBookmark should ignore duplicates.");
     }
 
     private static string CreateCleanSubdir(string root, string name)

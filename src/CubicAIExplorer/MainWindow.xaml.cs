@@ -42,6 +42,14 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BookmarkList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel.SelectedBookmark is { } bookmark)
+        {
+            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+        }
+    }
+
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (ViewModel.ActiveTab?.FileList.SelectedItem is { } item)

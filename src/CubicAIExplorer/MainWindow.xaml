@@ -14,6 +14,7 @@
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding NewTabCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
+        <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
         <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CopyCommand}" />
         <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CutCommand}" />
         <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.PasteCommand}" />
@@ -120,6 +121,27 @@
 
             <!-- Folder Tree Panel -->
             <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="Bookmarks" FontWeight="SemiBold"
+                           Padding="8,4" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+                    <Button Content="+ Add Current"
+                            Command="{Binding AddBookmarkCommand}"
+                            Padding="6,2"
+                            Margin="0,0,4,0" />
+                    <Button Content="- Remove"
+                            Command="{Binding RemoveBookmarkCommand}"
+                            CommandParameter="{Binding SelectedBookmark}"
+                            Padding="6,2" />
+                </DockPanel>
+                <ListBox x:Name="BookmarkList"
+                         DockPanel.Dock="Top"
+                         Height="120"
+                         Margin="4,0,4,4"
+                         ItemsSource="{Binding Bookmarks}"
+                         SelectedItem="{Binding SelectedBookmark}"
+                         MouseDoubleClick="BookmarkList_MouseDoubleClick"
+                         DisplayMemberPath="Name" />
+
                 <TextBlock DockPanel.Dock="Top" Text="Folders" FontWeight="SemiBold"
                            Padding="8,4" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
                 <TreeView ItemsSource="{Binding FolderTreeRoots}"

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 
 namespace CubicAIExplorer.ViewModels;
@@ -22,14 +24,28 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _statusText = "Ready";
 
+    [ObservableProperty]
+    private BookmarkItem? _selectedBookmark;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
+    public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
 
     public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
+        LoadDefaultBookmarks();
         LoadDrives();
+    }
+
+    private void LoadDefaultBookmarks()
+    {
+        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        TryAddBookmark(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Downloads"));
     }
 
     private void LoadDrives()
@@ -119,5 +135,49 @@ public partial class MainViewModel : ObservableObject
     public void SelectTreeNode(FolderTreeNodeViewModel node)
     {
         NavigateToPath(node.FullPath);
+    }
+
+    [RelayCommand]
+    private void AddBookmark()
+    {
+        if (ActiveTab == null || string.IsNullOrWhiteSpace(ActiveTab.CurrentPath)) return;
+        TryAddBookmark(ActiveTab.CurrentPath);
+    }
+
+    [RelayCommand]
+    private void RemoveBookmark(BookmarkItem? bookmark)
+    {
+        if (bookmark == null) return;
+        Bookmarks.Remove(bookmark);
+        if (SelectedBookmark == bookmark)
+            SelectedBookmark = null;
+    }
+
+    [RelayCommand]
+    private void NavigateBookmark(BookmarkItem? bookmark)
+    {
+        if (bookmark == null) return;
+        if (_fileSystemService.DirectoryExists(bookmark.Path))
+        {
+            NavigateToPath(bookmark.Path);
+        }
+    }
+
+    private void TryAddBookmark(string path)
+    {
+        if (!_fileSystemService.DirectoryExists(path)) return;
+        if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return;
+
+        var trimmedPath = path.TrimEnd('\\');
+        var name = Path.GetFileName(trimmedPath);
+        if (string.IsNullOrWhiteSpace(name))
+            name = path;
+
+        Bookmarks.Add(new BookmarkItem
+        {
+            Name = name,
+            Path = path,
+            IsFolder = true
+        });
     }
 }
