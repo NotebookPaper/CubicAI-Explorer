@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,6 +13,8 @@ public partial class FileListViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
+    private readonly Stack<UndoOperation> _undoStack = [];
+    private bool _isApplyingUndo;
 
     [ObservableProperty]
     private string _currentPath = string.Empty;
@@ -27,6 +30,10 @@ public partial class FileListViewModel : ObservableObject
 
     [ObservableProperty]
     private int _itemCount;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UndoCommand))]
+    private bool _canUndo;
 
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
@@ -112,10 +119,13 @@ public partial class FileListViewModel : ObservableObject
         var (paths, isCut) = _clipboardService.GetFiles();
         if (paths.Count == 0) return;
 
-        if (TransferFiles(paths, CurrentPath, moveFiles: isCut, "Paste Error"))
+        if (TransferFiles(paths, CurrentPath, moveFiles: isCut, "Paste Error", out var transferResults))
         {
             if (isCut)
+            {
+                RegisterMoveUndo(transferResults);
                 _clipboardService.Clear();
+            }
         }
     }
 
@@ -149,7 +159,10 @@ public partial class FileListViewModel : ObservableObject
 
         try
         {
-            _fileSystemService.CreateFolder(CurrentPath, dialog.FolderName);
+            var createdPath = _fileSystemService.CreateFolder(CurrentPath, dialog.FolderName);
+            PushUndo(
+                "Undo New Folder",
+                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true));
             Refresh();
         }
         catch (Exception ex)
@@ -173,6 +186,34 @@ public partial class FileListViewModel : ObservableObject
     private void SelectAll()
     {
         SelectAllRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+
+        var operation = _undoStack.Pop();
+        UpdateUndoState();
+
+        try
+        {
+            _isApplyingUndo = true;
+            operation.Apply();
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Undo failed: {ex.Message}",
+                "Undo Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isApplyingUndo = false;
+        }
     }
 
     partial void OnShowHiddenFilesChanged(bool value)
@@ -242,7 +283,12 @@ public partial class FileListViewModel : ObservableObject
 
         try
         {
-            _fileSystemService.RenameFile(item.FullPath, newName);
+            var previousPath = item.FullPath;
+            var renamedPath = _fileSystemService.RenameFile(previousPath, newName);
+            var previousName = item.Name;
+            PushUndo(
+                "Undo Rename",
+                () => _fileSystemService.RenameFile(renamedPath, previousName));
             Refresh();
         }
         catch (Exception ex)
@@ -257,13 +303,22 @@ public partial class FileListViewModel : ObservableObject
 
     public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
     {
-        TransferFiles(paths, destinationPath, moveFiles, "Drop Error");
+        if (TransferFiles(paths, destinationPath, moveFiles, "Drop Error", out var transferResults) && moveFiles)
+        {
+            RegisterMoveUndo(transferResults);
+        }
     }
 
     public IReadOnlyList<string> GetSelectedPathsForTransfer() => GetSelectedPaths();
 
-    private bool TransferFiles(IEnumerable<string> sourcePaths, string destinationPath, bool moveFiles, string errorTitle)
+    private bool TransferFiles(
+        IEnumerable<string> sourcePaths,
+        string destinationPath,
+        bool moveFiles,
+        string errorTitle,
+        out IReadOnlyList<FileTransferResult> transferResults)
     {
+        transferResults = [];
         if (string.IsNullOrWhiteSpace(destinationPath) || !_fileSystemService.DirectoryExists(destinationPath))
             return false;
 
@@ -279,11 +334,11 @@ public partial class FileListViewModel : ObservableObject
         {
             if (moveFiles)
             {
-                _fileSystemService.MoveFiles(distinctPaths, destinationPath);
+                transferResults = _fileSystemService.MoveFiles(distinctPaths, destinationPath);
             }
             else
             {
-                _fileSystemService.CopyFiles(distinctPaths, destinationPath);
+                transferResults = _fileSystemService.CopyFiles(distinctPaths, destinationPath);
             }
 
             Refresh();
@@ -299,4 +354,37 @@ public partial class FileListViewModel : ObservableObject
             return false;
         }
     }
+
+    private void RegisterMoveUndo(IReadOnlyList<FileTransferResult> results)
+    {
+        if (_isApplyingUndo || results.Count == 0) return;
+
+        var undoData = results.ToArray();
+        PushUndo(
+            "Undo Move",
+            () =>
+            {
+                foreach (var item in undoData)
+                {
+                    var destinationDir = Path.GetDirectoryName(item.SourcePath);
+                    if (string.IsNullOrWhiteSpace(destinationDir)) continue;
+                    _fileSystemService.MoveFiles([item.DestinationPath], destinationDir);
+                }
+            });
+    }
+
+    private void PushUndo(string description, Action apply)
+    {
+        if (_isApplyingUndo) return;
+
+        _undoStack.Push(new UndoOperation(description, apply));
+        UpdateUndoState();
+    }
+
+    private void UpdateUndoState()
+    {
+        CanUndo = _undoStack.Count > 0;
+    }
+
+    private sealed record UndoOperation(string Description, Action Apply);
 }

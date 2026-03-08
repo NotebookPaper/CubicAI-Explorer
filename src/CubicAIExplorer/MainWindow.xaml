@@ -15,6 +15,7 @@
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
+        <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.UndoCommand}" />
         <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CopyCommand}" />
         <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CutCommand}" />
         <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.PasteCommand}" />
@@ -37,6 +38,9 @@
                 <MenuItem Header="_Close Tab" InputGestureText="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
                 <Separator />
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" InputGestureText="Ctrl+Z" Command="{Binding ActiveTab.FileList.UndoCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"

@@ -15,8 +15,10 @@ internal static class Program
         try
         {
             Run("rename event + rename commit", failures, () => TestRenameFlow(tempRoot));
+            Run("undo rename", failures, () => TestUndoRename(tempRoot));
             Run("multi-select copy command", failures, () => TestMultiSelectCopy(tempRoot));
             Run("drop import copy + move", failures, () => TestDropImport(tempRoot));
+            Run("undo move", failures, () => TestUndoMove(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
@@ -100,6 +102,26 @@ internal static class Program
         Assert(clipboard.Paths.Count == 2, "Copy should include all selected items.");
     }
 
+    private static void TestUndoRename(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "undo_rename");
+        var original = Path.Combine(folder, "before.txt");
+        File.WriteAllText(original, "x");
+
+        vm.LoadDirectory(folder);
+        var item = vm.Items.Single(i => i.Name == "before.txt");
+        vm.RenameItem(item, "after.txt");
+
+        Assert(File.Exists(Path.Combine(folder, "after.txt")), "Rename should create target file.");
+        Assert(vm.CanUndo, "Rename should create undo history.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(File.Exists(original), "Undo rename should restore original name.");
+    }
+
     private static void TestSelectAllEvent(string root)
     {
         var fs = new FileSystemService();
@@ -152,6 +174,29 @@ internal static class Program
         Assert(!string.Equals(first, second, StringComparison.OrdinalIgnoreCase), "Second folder should get collision suffix.");
     }
 
+    private static void TestUndoMove(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "undo_move_src");
+        var targetDir = CreateCleanSubdir(root, "undo_move_dst");
+
+        var source = Path.Combine(sourceDir, "file.txt");
+        File.WriteAllText(source, "m");
+
+        vm.LoadDirectory(targetDir);
+        vm.ImportDroppedFiles([source], targetDir, moveFiles: true);
+
+        var moved = Path.Combine(targetDir, "file.txt");
+        Assert(File.Exists(moved), "Move should place file in destination.");
+        Assert(!File.Exists(source), "Move should remove original.");
+        Assert(vm.CanUndo, "Move should create undo history.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(File.Exists(source), "Undo move should return file to source.");
+    }
+
     private static void TestShellIconService(string root)
     {
         var svc = new ShellIconService();
@@ -174,6 +219,7 @@ internal static class Program
         var app = File.ReadAllText(appXaml);
 
         Assert(main.Contains("Key=\"F2\""), "F2 keybinding should exist.");
+        Assert(main.Contains("Key=\"Z\""), "Ctrl+Z keybinding should exist.");
         Assert(main.Contains("Ctrl+Shift"), "Ctrl+Shift+N keybinding should exist.");
         Assert(main.Contains("SelectionMode=\"Extended\""), "Extended selection should exist.");
         Assert(main.Contains("AllowDrop=\"True\""), "File list drag/drop should be enabled.");

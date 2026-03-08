@@ -124,10 +124,11 @@ public sealed class FileSystemService : IFileSystemService
         Process.Start(psi);
     }
 
-    public void CopyFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
+    public IReadOnlyList<FileTransferResult> CopyFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
     {
+        var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
-        if (destination == null || !Directory.Exists(destination)) return;
+        if (destination == null || !Directory.Exists(destination)) return results;
 
         foreach (var sourcePath in sourcePaths)
         {
@@ -138,19 +139,24 @@ public sealed class FileSystemService : IFileSystemService
             {
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source), isDirectory: false);
                 File.Copy(source, targetPath, overwrite: false);
+                results.Add(new FileTransferResult(source, targetPath, IsDirectory: false));
             }
             else if (Directory.Exists(source))
             {
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source.TrimEnd('\\')), isDirectory: true);
                 CopyDirectoryRecursive(source, targetPath);
+                results.Add(new FileTransferResult(source, targetPath, IsDirectory: true));
             }
         }
+
+        return results;
     }
 
-    public void MoveFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
+    public IReadOnlyList<FileTransferResult> MoveFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
     {
+        var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
-        if (destination == null || !Directory.Exists(destination)) return;
+        if (destination == null || !Directory.Exists(destination)) return results;
 
         foreach (var sourcePath in sourcePaths)
         {
@@ -161,13 +167,17 @@ public sealed class FileSystemService : IFileSystemService
             {
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source), isDirectory: false);
                 File.Move(source, targetPath);
+                results.Add(new FileTransferResult(source, targetPath, IsDirectory: false));
             }
             else if (Directory.Exists(source))
             {
                 var targetPath = GetUniquePath(destination, Path.GetFileName(source.TrimEnd('\\')), isDirectory: true);
                 MoveDirectory(source, targetPath);
+                results.Add(new FileTransferResult(source, targetPath, IsDirectory: true));
             }
         }
+
+        return results;
     }
 
     public void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false)
