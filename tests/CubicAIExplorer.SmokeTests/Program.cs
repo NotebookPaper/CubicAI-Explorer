@@ -161,20 +161,35 @@ internal static class Program
     {
         var fs = new FileSystemService();
         var clipboard = new FakeClipboardService();
-        var vm = new MainViewModel(fs, clipboard);
         var folder = CreateCleanSubdir(root, "bookmarks");
+        var bookmarkFile = Path.Combine(root, "bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
 
-        vm.NewTabCommand.Execute(null);
-        vm.NavigateToPath(folder);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
 
-        var before = vm.Bookmarks.Count;
-        vm.AddBookmarkCommand.Execute(null);
-        var afterFirstAdd = vm.Bookmarks.Count;
-        vm.AddBookmarkCommand.Execute(null);
-        var afterSecondAdd = vm.Bookmarks.Count;
+            var before = vm.Bookmarks.Count;
+            vm.AddBookmarkCommand.Execute(null);
+            var afterFirstAdd = vm.Bookmarks.Count;
+            vm.AddBookmarkCommand.Execute(null);
+            var afterSecondAdd = vm.Bookmarks.Count;
 
-        Assert(afterFirstAdd == before + 1, "AddBookmark should add current folder.");
-        Assert(afterSecondAdd == afterFirstAdd, "AddBookmark should ignore duplicates.");
+            Assert(afterFirstAdd == before + 1, "AddBookmark should add current folder.");
+            Assert(afterSecondAdd == afterFirstAdd, "AddBookmark should ignore duplicates.");
+            Assert(File.Exists(bookmarkFile), "Bookmark file should be created.");
+
+            var vmReloaded = new MainViewModel(fs, clipboard);
+            Assert(vmReloaded.Bookmarks.Any(b => string.Equals(b.Path, folder, StringComparison.OrdinalIgnoreCase)),
+                "Bookmarks should persist across MainViewModel instances.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
     }
 
     private static string CreateCleanSubdir(string root, string name)
@@ -189,6 +204,9 @@ internal static class Program
     {
         try
         {
+            if (File.Exists(path))
+                File.Delete(path);
+
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }

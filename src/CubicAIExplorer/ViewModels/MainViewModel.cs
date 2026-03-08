@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CubicAIExplorer.Models;
@@ -9,6 +10,11 @@ namespace CubicAIExplorer.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    private static readonly JsonSerializerOptions BookmarkJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
 
@@ -35,17 +41,53 @@ public partial class MainViewModel : ObservableObject
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
-        LoadDefaultBookmarks();
+        LoadBookmarks();
         LoadDrives();
     }
 
-    private void LoadDefaultBookmarks()
+    private static string GetBookmarksPath()
     {
-        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
-        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        var overridePath = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return overridePath;
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "CubicAIExplorer", "bookmarks.json");
+    }
+
+    private void LoadBookmarks()
+    {
+        var bookmarksPath = GetBookmarksPath();
+        try
+        {
+            if (File.Exists(bookmarksPath))
+            {
+                var json = File.ReadAllText(bookmarksPath);
+                var bookmarks = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
+                if (bookmarks is { Count: > 0 })
+                {
+                    foreach (var bookmark in bookmarks)
+                    {
+                        if (string.IsNullOrWhiteSpace(bookmark.Path)) continue;
+                        TryAddBookmark(bookmark.Path, bookmark.Name, save: false);
+                    }
+
+                    if (Bookmarks.Count > 0)
+                        return;
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to defaults if persisted bookmarks are unavailable or invalid.
+        }
+
+        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), save: false);
+        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), save: false);
         TryAddBookmark(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Downloads"));
+            "Downloads"), save: false);
+        SaveBookmarks();
     }
 
     private void LoadDrives()
@@ -151,6 +193,7 @@ public partial class MainViewModel : ObservableObject
         Bookmarks.Remove(bookmark);
         if (SelectedBookmark == bookmark)
             SelectedBookmark = null;
+        SaveBookmarks();
     }
 
     [RelayCommand]
@@ -163,13 +206,15 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void TryAddBookmark(string path)
+    private void TryAddBookmark(string path, string? displayName = null, bool save = true)
     {
         if (!_fileSystemService.DirectoryExists(path)) return;
         if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return;
 
         var trimmedPath = path.TrimEnd('\\');
-        var name = Path.GetFileName(trimmedPath);
+        var name = string.IsNullOrWhiteSpace(displayName)
+            ? Path.GetFileName(trimmedPath)
+            : displayName;
         if (string.IsNullOrWhiteSpace(name))
             name = path;
 
@@ -179,5 +224,31 @@ public partial class MainViewModel : ObservableObject
             Path = path,
             IsFolder = true
         });
+
+        if (save)
+            SaveBookmarks();
     }
+
+    private void SaveBookmarks()
+    {
+        try
+        {
+            var bookmarksPath = GetBookmarksPath();
+            var directory = Path.GetDirectoryName(bookmarksPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+
+            var payload = Bookmarks
+                .Select(static b => new BookmarkRecord(b.Name, b.Path))
+                .ToList();
+
+            File.WriteAllText(bookmarksPath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
+        }
+        catch
+        {
+            // Persistence failures should not interrupt core app behavior.
+        }
+    }
+
+    private sealed record BookmarkRecord(string Name, string Path);
 }
