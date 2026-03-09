@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.ViewModels;
 using CubicAIExplorer.Views;
@@ -15,14 +16,21 @@ public partial class MainWindow : Window
 
     private GridViewColumnHeader? _lastHeaderClicked;
     private ListSortDirection _lastDirection = ListSortDirection.Ascending;
+    private GridViewColumnHeader? _lastRightHeaderClicked;
+    private ListSortDirection _lastRightDirection = ListSortDirection.Ascending;
     private MainViewModel? _boundViewModel;
     private FileListViewModel? _boundFileListViewModel;
+    private FileListViewModel? _boundRightFileListViewModel;
     private FileSystemItem? _inlineRenameItem;
+    private FileListViewModel? _inlineRenameFileListViewModel;
+    private ListView? _inlineRenameListView;
     private Point _dragStartPoint;
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
+    private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
+    private static readonly Brush InactivePaneBrush = new SolidColorBrush(Color.FromRgb(0x9F, 0xB7, 0xD6));
 
     public MainWindow()
     {
@@ -52,12 +60,12 @@ public partial class MainWindow : Window
 
         // Enter: open selected item (only when file list has focus)
         if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None
-            && FileListView.IsKeyboardFocusWithin)
+            && (FileListView.IsKeyboardFocusWithin || RightPaneListView.IsKeyboardFocusWithin))
         {
-            var item = ViewModel.ActiveTab?.FileList.SelectedItem;
+            var item = ViewModel.CurrentPaneFileList?.SelectedItem;
             if (item != null)
             {
-                ViewModel.ActiveTab!.FileList.OpenItemCommand.Execute(item);
+                ViewModel.CurrentPaneFileList!.OpenItemCommand.Execute(item);
                 e.Handled = true;
             }
         }
@@ -134,11 +142,8 @@ public partial class MainWindow : Window
         _suppressAutoComplete = false;
         AddressAutoCompletePopup.IsOpen = false;
 
-        if (ViewModel.ActiveTab != null)
-        {
-            ViewModel.ActiveTab.NavigateTo(path);
-            SwitchToBreadcrumbMode();
-        }
+        ViewModel.NavigateCurrentPaneToPath(path);
+        SwitchToBreadcrumbMode();
     }
 
     private void AddressBar_LostFocus(object sender, RoutedEventArgs e)
@@ -168,7 +173,7 @@ public partial class MainWindow : Window
     {
         if (sender is System.Windows.Controls.Button btn && btn.Tag is string path)
         {
-            ViewModel.NavigateToPath(path);
+            ViewModel.NavigateCurrentPaneToPath(path);
         }
     }
 
@@ -186,12 +191,43 @@ public partial class MainWindow : Window
         BreadcrumbBar.Visibility = Visibility.Visible;
     }
 
+    private void SwitchToRightPaneAddressEditMode()
+    {
+        ViewModel.ActivateRightPane();
+        RightPaneAddressDisplay.Visibility = Visibility.Collapsed;
+        RightPaneStatusBlock.Visibility = Visibility.Collapsed;
+        RightPaneAddressEditorPanel.Visibility = Visibility.Visible;
+        RightPaneAddressBox.Focus();
+        RightPaneAddressBox.SelectAll();
+    }
+
+    private void ExitRightPaneAddressEditMode()
+    {
+        RightPaneAddressEditorPanel.Visibility = Visibility.Collapsed;
+        RightPaneAddressDisplay.Visibility = Visibility.Visible;
+        RightPaneStatusBlock.Visibility = Visibility.Visible;
+    }
+
+    private void CommitRightPaneAddressEdit()
+    {
+        ViewModel.ActivateRightPane();
+        ViewModel.NavigateCurrentPaneToPath(ViewModel.RightPaneAddressText);
+        ExitRightPaneAddressEditMode();
+        RightPaneListView.Focus();
+    }
+
+    private void CancelRightPaneAddressEdit()
+    {
+        ViewModel.RightPaneAddressText = ViewModel.RightPaneTab?.CurrentPath ?? string.Empty;
+        ExitRightPaneAddressEditMode();
+    }
+
     private void RecentFolders_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (sender is System.Windows.Controls.ListBox lb
             && lb.SelectedItem is Models.RecentFolderItem recent)
         {
-            ViewModel.NavigateToPath(recent.FullPath);
+            ViewModel.NavigateCurrentPaneToPath(recent.FullPath);
             lb.SelectedItem = null; // Reset selection so clicking the same item again works
         }
     }
@@ -200,14 +236,58 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter)
         {
-            ViewModel.ActiveTab?.FileList.ExecuteSearchCommand.Execute(null);
+            ViewModel.ExecuteSearchCommand.Execute(null);
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            ViewModel.ActiveTab?.FileList.CloseSearchCommand.Execute(null);
+            ViewModel.CloseSearchCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    private void RightPaneHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (RightPaneAddressEditorPanel.Visibility == Visibility.Visible)
+            return;
+
+        ViewModel.ActivateRightPane();
+        if (e.ClickCount >= 2)
+        {
+            SwitchToRightPaneAddressEditMode();
+        }
+        else
+        {
+            RightPaneListView.Focus();
+        }
+        e.Handled = true;
+    }
+
+    private void RightPaneAddressBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            CommitRightPaneAddressEdit();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelRightPaneAddressEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void RightPaneAddressBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (RightPaneAddressEditorPanel.IsKeyboardFocusWithin)
+            return;
+
+        CancelRightPaneAddressEdit();
+    }
+
+    private void RightPaneAddressGo_Click(object sender, RoutedEventArgs e)
+    {
+        CommitRightPaneAddressEdit();
     }
 
     private void TreeViewItem_Selected(object sender, RoutedEventArgs e)
@@ -237,6 +317,7 @@ public partial class MainWindow : Window
 
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        ViewModel.ActivateLeftPane();
         if (ViewModel.ActiveTab?.FileList.SelectedItem is { } item)
         {
             ViewModel.ActiveTab.FileList.OpenItemCommand.Execute(item);
@@ -245,6 +326,7 @@ public partial class MainWindow : Window
 
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        ViewModel.ActivateLeftPane();
         _dragStartPoint = e.GetPosition(FileListView);
     }
 
@@ -306,12 +388,26 @@ public partial class MainWindow : Window
 
     private void FileListHeader_Click(object sender, RoutedEventArgs e)
     {
+        SortListViewColumn(FileListView, e, ref _lastHeaderClicked, ref _lastDirection);
+    }
+
+    private void RightPaneHeader_Click(object sender, RoutedEventArgs e)
+    {
+        SortListViewColumn(RightPaneListView, e, ref _lastRightHeaderClicked, ref _lastRightDirection);
+    }
+
+    private void SortListViewColumn(
+        ListView listView,
+        RoutedEventArgs e,
+        ref GridViewColumnHeader? lastHeaderClicked,
+        ref ListSortDirection lastDirection)
+    {
         if (e.OriginalSource is not GridViewColumnHeader header) return;
         if (header.Role == GridViewColumnHeaderRole.Padding) return;
 
-        var direction = header != _lastHeaderClicked
+        var direction = header != lastHeaderClicked
             ? ListSortDirection.Ascending
-            : _lastDirection == ListSortDirection.Ascending
+            : lastDirection == ListSortDirection.Ascending
                 ? ListSortDirection.Descending
                 : ListSortDirection.Ascending;
 
@@ -327,7 +423,7 @@ public partial class MainWindow : Window
             _ => null
         };
 
-        if (sortBy != null && sender is ListView listView)
+        if (sortBy != null)
         {
             var view = System.Windows.Data.CollectionViewSource.GetDefaultView(listView.ItemsSource);
             if (view != null)
@@ -337,7 +433,7 @@ public partial class MainWindow : Window
             }
 
             // Update sort arrows on all headers
-            if (FileListView.View is GridView gridView)
+            if (listView.View is GridView gridView)
             {
                 foreach (var col in gridView.Columns)
                 {
@@ -350,12 +446,13 @@ public partial class MainWindow : Window
             header.Content = headerText + arrow;
         }
 
-        _lastHeaderClicked = header;
-        _lastDirection = direction;
+        lastHeaderClicked = header;
+        lastDirection = direction;
     }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        ViewModel.ActivateLeftPane();
         var fileListViewModel = ViewModel.ActiveTab?.FileList;
         if (fileListViewModel == null) return;
 
@@ -369,8 +466,14 @@ public partial class MainWindow : Window
         ViewModel.UpdatePreview();
     }
 
+    private void FileList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        ViewModel.ActivateLeftPane();
+    }
+
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        ViewModel.ActivateLeftPane();
         var fileListViewModel = ViewModel.ActiveTab?.FileList;
         if (fileListViewModel == null) return;
 
@@ -398,22 +501,48 @@ public partial class MainWindow : Window
         OpenInExplorerMenuItem.Visibility = Visibility.Visible;
     }
 
+    private void RightPane_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        ViewModel.ActivateRightPane();
+        var fileListViewModel = ViewModel.RightPaneTab?.FileList;
+        if (fileListViewModel == null) return;
+
+        var originalSource = e.OriginalSource as DependencyObject;
+        var clickedItem = FindVisualParent<ListViewItem>(originalSource);
+        var hasSelection = clickedItem != null
+            && (fileListViewModel.SelectedItems.Count > 0 || fileListViewModel.SelectedItem != null);
+
+        var itemVisibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        var emptyVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
+
+        RightOpenMenuItem.Visibility = itemVisibility;
+        RightItemSeparator1.Visibility = itemVisibility;
+        RightCutMenuItem.Visibility = itemVisibility;
+        RightCopyMenuItem.Visibility = itemVisibility;
+        RightItemSeparator2.Visibility = itemVisibility;
+        RightDeleteMenuItem.Visibility = itemVisibility;
+        RightRenameMenuItem.Visibility = itemVisibility;
+
+        RightNewFolderMenuItem.Visibility = emptyVisibility;
+        RightRefreshMenuItem.Visibility = emptyVisibility;
+        RightPasteMenuItem.Visibility = Visibility.Visible;
+        RightPropertiesSeparator.Visibility = Visibility.Visible;
+        RightPropertiesMenuItem.Visibility = itemVisibility;
+        RightOpenInExplorerMenuItem.Visibility = Visibility.Visible;
+    }
+
     private void ViewMode_Details_Click(object sender, RoutedEventArgs e) => SetViewMode("Details");
     private void ViewMode_List_Click(object sender, RoutedEventArgs e) => SetViewMode("List");
     private void ViewMode_Tiles_Click(object sender, RoutedEventArgs e) => SetViewMode("Tiles");
 
     private void ClearFilter_Click(object sender, RoutedEventArgs e)
     {
-        var fileList = ViewModel.ActiveTab?.FileList;
-        if (fileList != null)
-            fileList.FilterText = string.Empty;
+        ViewModel.CurrentFilterText = string.Empty;
     }
 
     private void SetViewMode(string mode)
     {
-        var fileList = ViewModel.ActiveTab?.FileList;
-        if (fileList != null)
-            fileList.ViewMode = mode;
+        ViewModel.CurrentViewMode = mode;
     }
 
     private void FolderTree_DragOver(object sender, DragEventArgs e)
@@ -461,7 +590,7 @@ public partial class MainWindow : Window
 
     private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        var path = ViewModel.ActiveTab?.CurrentPath;
+        var path = ViewModel.CurrentPanePath;
         if (!string.IsNullOrWhiteSpace(path))
         {
             var psi = new System.Diagnostics.ProcessStartInfo
@@ -528,6 +657,8 @@ public partial class MainWindow : Window
             _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
+            HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
+            UpdatePaneHighlight();
         }
     }
 
@@ -536,6 +667,16 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.ActiveTab))
         {
             HookFileListViewModel(_boundViewModel?.ActiveTab?.FileList);
+        }
+        else if (e.PropertyName == nameof(MainViewModel.RightPaneTab))
+        {
+            HookRightFileListViewModel(_boundViewModel?.RightPaneTab?.FileList);
+        }
+
+        if (e.PropertyName == nameof(MainViewModel.IsRightPaneActive)
+            || e.PropertyName == nameof(MainViewModel.IsDualPaneMode))
+        {
+            UpdatePaneHighlight();
         }
     }
 
@@ -560,23 +701,68 @@ public partial class MainWindow : Window
             _boundFileListViewModel.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
             // Only apply non-default view modes; Details is already set in XAML
             if (_boundFileListViewModel.ViewMode != "Details")
-                ApplyViewMode(_boundFileListViewModel.ViewMode);
+                ApplyViewMode(FileListView, _boundFileListViewModel.ViewMode);
+        }
+    }
+
+    private void HookRightFileListViewModel(FileListViewModel? fileListViewModel)
+    {
+        if (_boundRightFileListViewModel != null)
+        {
+            _boundRightFileListViewModel.SelectAllRequested -= FileListViewModel_SelectAllRequested;
+            _boundRightFileListViewModel.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
+            _boundRightFileListViewModel.ViewModeChanged -= FileListViewModel_ViewModeChanged;
+            _boundRightFileListViewModel.PropertiesRequested -= FileListViewModel_PropertiesRequested;
+            _boundRightFileListViewModel.SearchPanelOpened -= FileListViewModel_SearchPanelOpened;
+        }
+
+        _boundRightFileListViewModel = fileListViewModel;
+        if (_boundRightFileListViewModel != null)
+        {
+            _boundRightFileListViewModel.SelectAllRequested += FileListViewModel_SelectAllRequested;
+            _boundRightFileListViewModel.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
+            _boundRightFileListViewModel.ViewModeChanged += FileListViewModel_ViewModeChanged;
+            _boundRightFileListViewModel.PropertiesRequested += FileListViewModel_PropertiesRequested;
+            _boundRightFileListViewModel.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
+            if (_boundRightFileListViewModel.ViewMode != "Details")
+                ApplyViewMode(RightPaneListView, _boundRightFileListViewModel.ViewMode);
         }
     }
 
     private void FileListViewModel_SelectAllRequested(object? sender, EventArgs e)
     {
-        FileListView.SelectAll();
+        if (sender == _boundRightFileListViewModel)
+        {
+            RightPaneListView.SelectAll();
+        }
+        else
+        {
+            FileListView.SelectAll();
+        }
     }
 
     private void FileListViewModel_InlineRenameRequested(object? sender, FileSystemItem item)
     {
-        BeginInlineRename(item);
+        if (sender == _boundRightFileListViewModel)
+        {
+            BeginInlineRename(item, RightPaneListView, _boundRightFileListViewModel);
+        }
+        else
+        {
+            BeginInlineRename(item, FileListView, _boundFileListViewModel);
+        }
     }
 
     private void FileListViewModel_ViewModeChanged(object? sender, string mode)
     {
-        ApplyViewMode(mode);
+        if (sender == _boundRightFileListViewModel)
+        {
+            ApplyViewMode(RightPaneListView, mode);
+        }
+        else
+        {
+            ApplyViewMode(FileListView, mode);
+        }
     }
 
     private void FileListViewModel_PropertiesRequested(object? sender, FileSystemItem item)
@@ -594,52 +780,52 @@ public partial class MainWindow : Window
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private void ApplyViewMode(string mode)
+    private void ApplyViewMode(ListView listView, string mode)
     {
         switch (mode)
         {
             case "Details":
-                FileListView.View = CreateDetailsGridView();
-                FileListView.ItemTemplate = null;
-                FileListView.ItemsPanel = null;
+                listView.View = CreateDetailsGridView(listView == RightPaneListView);
+                listView.ItemTemplate = null;
+                listView.ItemsPanel = null;
                 break;
             case "List":
-                FileListView.View = null;
-                FileListView.ItemTemplate = (DataTemplate)FindResource("ListViewItemTemplate");
-                FileListView.ItemsPanel = null;
+                listView.View = null;
+                listView.ItemTemplate = (DataTemplate)FindResource("ListViewItemTemplate");
+                listView.ItemsPanel = null;
                 break;
             case "Tiles":
-                FileListView.View = null;
-                FileListView.ItemTemplate = (DataTemplate)FindResource("TileViewItemTemplate");
-                FileListView.ItemsPanel = (ItemsPanelTemplate)FindResource("TileItemsPanelTemplate");
+                listView.View = null;
+                listView.ItemTemplate = (DataTemplate)FindResource("TileViewItemTemplate");
+                listView.ItemsPanel = (ItemsPanelTemplate)FindResource("TileItemsPanelTemplate");
                 break;
         }
     }
 
-    private GridView CreateDetailsGridView()
+    private GridView CreateDetailsGridView(bool compact)
     {
         var gridView = new GridView();
 
-        var nameColumn = new GridViewColumn { Header = "Name", Width = 350 };
+        var nameColumn = new GridViewColumn { Header = "Name", Width = compact ? 250 : 350 };
         nameColumn.CellTemplate = (DataTemplate)FindResource("DetailsNameCellTemplate");
         gridView.Columns.Add(nameColumn);
 
         gridView.Columns.Add(new GridViewColumn
         {
             Header = "Size",
-            Width = 100,
+            Width = compact ? 80 : 100,
             DisplayMemberBinding = new System.Windows.Data.Binding("DisplaySize")
         });
         gridView.Columns.Add(new GridViewColumn
         {
             Header = "Type",
-            Width = 120,
+            Width = compact ? 100 : 120,
             DisplayMemberBinding = new System.Windows.Data.Binding("TypeDescription")
         });
         gridView.Columns.Add(new GridViewColumn
         {
             Header = "Date Modified",
-            Width = 160,
+            Width = compact ? 140 : 160,
             DisplayMemberBinding = new System.Windows.Data.Binding("DateModified")
             {
                 StringFormat = "{0:yyyy-MM-dd HH:mm}"
@@ -649,27 +835,30 @@ public partial class MainWindow : Window
         return gridView;
     }
 
-    private void BeginInlineRename(FileSystemItem item)
+    private void BeginInlineRename(FileSystemItem item, ListView listView, FileListViewModel? fileListViewModel)
     {
-        if (item == null) return;
+        if (item == null || fileListViewModel == null) return;
 
-        FileListView.ScrollIntoView(item);
-        FileListView.UpdateLayout();
+        listView.ScrollIntoView(item);
+        listView.UpdateLayout();
 
-        var container = FileListView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
+        var container = listView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
         if (container == null) return;
 
         var nameTextBlock = FindVisualChildren<TextBlock>(container)
             .FirstOrDefault(tb => tb.Name == "FileNameTextBlock");
         if (nameTextBlock == null) return;
 
-        var point = nameTextBlock.TranslatePoint(new Point(0, 0), FileListView);
+        var point = nameTextBlock.TranslatePoint(new Point(0, 0), listView);
+        InlineRenamePopup.PlacementTarget = listView;
         InlineRenamePopup.HorizontalOffset = Math.Max(0, point.X - 2);
         InlineRenamePopup.VerticalOffset = Math.Max(0, point.Y - 1);
         InlineRenameTextBox.Width = Math.Max(180, nameTextBlock.ActualWidth + 18);
         InlineRenameTextBox.Text = item.Name;
         InlineRenamePopup.IsOpen = true;
         _inlineRenameItem = item;
+        _inlineRenameFileListViewModel = fileListViewModel;
+        _inlineRenameListView = listView;
 
         InlineRenameTextBox.Focus();
         SelectRenameText(item.Name);
@@ -700,7 +889,7 @@ public partial class MainWindow : Window
     private void CommitInlineRename()
     {
         var item = _inlineRenameItem;
-        var fileList = _boundViewModel?.ActiveTab?.FileList;
+        var fileList = _inlineRenameFileListViewModel;
         if (item != null && fileList != null)
         {
             var newName = InlineRenameTextBox.Text.Trim();
@@ -722,6 +911,8 @@ public partial class MainWindow : Window
     {
         InlineRenamePopup.IsOpen = false;
         _inlineRenameItem = null;
+        _inlineRenameFileListViewModel = null;
+        _inlineRenameListView = null;
     }
 
     private void SelectRenameText(string fileName)
@@ -782,6 +973,7 @@ public partial class MainWindow : Window
         var enabled = _boundViewModel?.IsDualPaneMode == true;
         DualPaneSplitterCol.Width = enabled ? GridLength.Auto : new GridLength(0);
         DualPaneCol.Width = enabled ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        UpdatePaneHighlight();
     }
 
     private void ViewModel_PreviewModeChanged(object? sender, EventArgs e)
@@ -793,6 +985,7 @@ public partial class MainWindow : Window
 
     private void RightPane_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        ViewModel.ActivateRightPane();
         if (ViewModel.RightPaneTab?.FileList.SelectedItem is { } item)
         {
             ViewModel.RightPaneTab.FileList.OpenItemCommand.Execute(item);
@@ -801,6 +994,7 @@ public partial class MainWindow : Window
 
     private void RightPane_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        ViewModel.ActivateRightPane();
         var fileList = ViewModel.RightPaneTab?.FileList;
         if (fileList == null) return;
 
@@ -809,10 +1003,19 @@ public partial class MainWindow : Window
         {
             fileList.SelectedItems.Add(selected);
         }
+
+        fileList.UpdateSelectionStatus();
+        ViewModel.UpdatePreview();
+    }
+
+    private void RightPane_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        ViewModel.ActivateRightPane();
     }
 
     private void RightPane_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        ViewModel.ActivateRightPane();
         _rightPaneDragStartPoint = e.GetPosition(RightPaneListView);
     }
 
@@ -860,6 +1063,25 @@ public partial class MainWindow : Window
         var moveFiles = ShouldMove(e);
         fileList.ImportDroppedFiles(droppedPaths, fileList.CurrentPath, moveFiles);
         e.Handled = true;
+    }
+
+    private void UpdatePaneHighlight()
+    {
+        var rightPaneVisible = _boundViewModel?.IsDualPaneMode == true;
+        var rightActive = _boundViewModel?.IsRightPaneActive == true && rightPaneVisible;
+
+        FileListView.BorderBrush = rightActive ? InactivePaneBrush : ActivePaneBrush;
+        FileListView.BorderThickness = rightActive ? new Thickness(1) : new Thickness(2);
+
+        RightPaneListView.BorderBrush = rightActive ? ActivePaneBrush : InactivePaneBrush;
+        RightPaneListView.BorderThickness = rightPaneVisible
+            ? (rightActive ? new Thickness(2) : new Thickness(1))
+            : new Thickness(1);
+
+        RightPaneHeader.BorderBrush = rightActive ? ActivePaneBrush : InactivePaneBrush;
+        RightPaneHeader.Background = rightActive
+            ? new LinearGradientBrush(Color.FromRgb(0xF0, 0xF6, 0xFF), Color.FromRgb(0xCF, 0xE0, 0xF8), 90)
+            : (Brush)FindResource("ClassicHeaderBrush");
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject

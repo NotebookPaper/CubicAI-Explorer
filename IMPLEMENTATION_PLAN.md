@@ -143,28 +143,33 @@ Tier 1 was fully implemented and then extended. This document now tracks:
 25. Recursive search across subdirectories
 26. Toolbar vector icon assets replacing Unicode glyphs
 27. Address bar autocomplete suggestions
-28. Dual-pane mode (MVP)
+28. Dual-pane mode
 29. Preview panel for text and common image files
-30. Expanded smoke tests (27+ total: dual pane, preview state, address suggestions)
+30. Active-pane routing for commands and navigation in dual-pane mode
+31. Right-pane context menu, sort, rename, select-all, and properties parity
+32. Active-pane filter/search/view-mode routing
+33. Active-pane highlighting and per-pane status presentation
+34. Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
+35. Preview empty/error/size-limit states
+36. Right-pane inline address editing from the pane header
+37. Expanded smoke tests covering dual-pane routing, preview refresh, preview states, and address suggestions
 
 ## Next Planned Features
 
-1. **Dual-pane parity**
-- Add context menu and keyboard command parity in the right pane
-- Establish an active-pane model for navigation and file operations
-- Bring sorting, rename, and status reporting to the right pane
-
-2. **Preview polish**
-- Add explicit empty/error states
+1. **Preview polish**
 - Expand supported previewable formats
-- Avoid synchronous loading of very large files
+- Move preview loading off the UI thread where practical
+- Improve image/text fallback behavior further
 
-3. **Address autocomplete polish**
+2. **Address autocomplete polish**
 - Improve root and partial-drive completion
 - Tighten keyboard navigation and selection behavior
 
-4. **Visual polish**
+3. **Visual polish**
 - Refine pane spacing, borders, and splitter behavior to better match CubicExplorer
+
+4. **Address workflow consistency**
+- Decide whether the left-pane/shared top bar should gain a more explicit inline-edit affordance to better match the right-pane header editor
 
 ## NuGet Packages
 None added. All APIs are in .NET 8 + WPF SDK.
@@ -180,7 +185,8 @@ None added. All APIs are in .NET 8 + WPF SDK.
 8. All files show real Windows icons, not emoji
 9. Multi-select with Ctrl+Click and Shift+Click works
 10. Smoke tests pass:
-   - `dotnet run --project tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj`
+   - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
+   - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
 
 ## Key Design Decisions
 - **Recycle Bin delete** via `Microsoft.VisualBasic.FileIO.FileSystem` — simplest reliable approach, no P/Invoke needed

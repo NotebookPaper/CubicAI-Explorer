@@ -15,23 +15,23 @@
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
-        <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.UndoCommand}" />
-        <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.RedoCommand}" />
-        <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding ActiveTab.FileList.RedoCommand}" />
-        <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CopyCommand}" />
-        <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.CutCommand}" />
-        <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.PasteCommand}" />
-        <KeyBinding Key="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
-        <KeyBinding Key="Delete" Modifiers="Shift" Command="{Binding ActiveTab.FileList.PermanentDeleteCommand}" />
-        <KeyBinding Key="F2" Command="{Binding ActiveTab.FileList.RenameCommand}" />
-        <KeyBinding Key="F5" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
-        <KeyBinding Key="N" Modifiers="Ctrl+Shift" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
-        <KeyBinding Key="A" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.SelectAllCommand}" />
-        <KeyBinding Key="BrowserBack" Command="{Binding ActiveTab.GoBackCommand}" />
-        <KeyBinding Key="BrowserForward" Command="{Binding ActiveTab.GoForwardCommand}" />
+        <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
+        <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
+        <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding RedoCommand}" />
+        <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding CopyCommand}" />
+        <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding CutCommand}" />
+        <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding PasteCommand}" />
+        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
+        <KeyBinding Key="Delete" Modifiers="Shift" Command="{Binding PermanentDeleteCommand}" />
+        <KeyBinding Key="F2" Command="{Binding RenameCommand}" />
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="N" Modifiers="Ctrl+Shift" Command="{Binding NewFolderCommand}" />
+        <KeyBinding Key="A" Modifiers="Ctrl" Command="{Binding SelectAllCommand}" />
+        <KeyBinding Key="BrowserBack" Command="{Binding GoBackCommand}" />
+        <KeyBinding Key="BrowserForward" Command="{Binding GoForwardCommand}" />
         <KeyBinding Key="Back" Command="{Binding NavigateUpCommand}" />
-        <KeyBinding Key="Return" Modifiers="Alt" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
-        <KeyBinding Key="E" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
+        <KeyBinding Key="Return" Modifiers="Alt" Command="{Binding ShowPropertiesCommand}" />
+        <KeyBinding Key="E" Modifiers="Ctrl" Command="{Binding SearchInFolderCommand}" />
         <KeyBinding Key="F6" Command="{Binding ToggleDualPaneCommand}" />
         <KeyBinding Key="F7" Command="{Binding TogglePreviewCommand}" />
     </Window.InputBindings>
@@ -46,10 +46,10 @@
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
             </MenuItem>
             <MenuItem Header="_Edit">
-                <MenuItem Header="{Binding ActiveTab.FileList.UndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding ActiveTab.FileList.UndoCommand}" />
-                <MenuItem Header="{Binding ActiveTab.FileList.RedoDescription}" InputGestureText="Ctrl+Y" Command="{Binding ActiveTab.FileList.RedoCommand}" />
+                <MenuItem Header="{Binding ActiveUndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding UndoCommand}" />
+                <MenuItem Header="{Binding ActiveRedoDescription}" InputGestureText="Ctrl+Y" Command="{Binding RedoCommand}" />
                 <Separator />
-                <MenuItem Header="Clear History" Command="{Binding ActiveTab.FileList.ClearHistoryCommand}" />
+                <MenuItem Header="Clear History" Command="{Binding ClearHistoryCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="_Details" Click="ViewMode_Details_Click" />
@@ -57,7 +57,7 @@
                 <MenuItem Header="_Tiles" Click="ViewMode_Tiles_Click" />
                 <Separator />
                 <MenuItem Header="_Search in Folder..." InputGestureText="Ctrl+E"
-                          Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
+                          Command="{Binding SearchInFolderCommand}" />
                 <Separator />
                 <MenuItem Header="Dual _Pane" InputGestureText="F6" IsCheckable="True"
                           IsChecked="{Binding IsDualPaneMode}"
@@ -67,7 +67,7 @@
                           Command="{Binding TogglePreviewCommand}" />
                 <Separator />
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
-                          IsChecked="{Binding ActiveTab.FileList.ShowHiddenFiles}" />
+                          IsChecked="{Binding CurrentShowHiddenFiles}" />
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About CubicAI Explorer" Click="OnAboutClick" />
@@ -78,10 +78,10 @@
         <ToolBarTray DockPanel.Dock="Top" IsLocked="True">
             <ToolBar Band="0" BandIndex="0">
                 <!-- Navigation -->
-                <Button Command="{Binding ActiveTab.GoBackCommand}" ToolTip="Back (Alt+Left)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding GoBackCommand}" ToolTip="Back (Alt+Left)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconBack}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding ActiveTab.GoForwardCommand}" ToolTip="Forward (Alt+Right)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding GoForwardCommand}" ToolTip="Forward (Alt+Right)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconForward}" Width="16" Height="16" />
                 </Button>
                 <Button Command="{Binding NavigateUpCommand}" ToolTip="Up (Backspace)" Padding="4,2" MinWidth="26">
@@ -89,28 +89,28 @@
                 </Button>
                 <Separator />
                 <!-- File Operations -->
-                <Button Command="{Binding ActiveTab.FileList.CutCommand}" ToolTip="Cut (Ctrl+X)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding CutCommand}" ToolTip="Cut (Ctrl+X)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconCut}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding ActiveTab.FileList.CopyCommand}" ToolTip="Copy (Ctrl+C)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding CopyCommand}" ToolTip="Copy (Ctrl+C)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconCopy}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding ActiveTab.FileList.PasteCommand}" ToolTip="Paste (Ctrl+V)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding PasteCommand}" ToolTip="Paste (Ctrl+V)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconPaste}" Width="16" Height="16" />
                 </Button>
                 <Separator />
-                <Button Command="{Binding ActiveTab.FileList.DeleteCommand}" ToolTip="Delete (Del)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding DeleteCommand}" ToolTip="Delete (Del)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconDelete}" Width="16" Height="16" />
                 </Button>
                 <Separator />
-                <Button Command="{Binding ActiveTab.FileList.UndoCommand}" ToolTip="{Binding ActiveTab.FileList.UndoDescription}" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding UndoCommand}" ToolTip="{Binding ActiveUndoDescription}" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconUndo}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding ActiveTab.FileList.RedoCommand}" ToolTip="{Binding ActiveTab.FileList.RedoDescription}" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding RedoCommand}" ToolTip="{Binding ActiveRedoDescription}" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconRedo}" Width="16" Height="16" />
                 </Button>
                 <Separator />
-                <Button Command="{Binding ActiveTab.FileList.RefreshCommand}" ToolTip="Refresh (F5)" Padding="4,2" MinWidth="26">
+                <Button Command="{Binding RefreshCommand}" ToolTip="Refresh (F5)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconRefresh}" Width="16" Height="16" />
                 </Button>
             </ToolBar>
@@ -239,12 +239,25 @@
         <!-- Status Bar -->
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem MinWidth="140">
-                <TextBlock Text="{Binding StatusText}" />
+                <TextBlock>
+                    <Run Text="{Binding CurrentPaneLabel}" />
+                    <Run Text=": " />
+                    <Run Text="{Binding StatusText}" />
+                </TextBlock>
             </StatusBarItem>
             <Separator />
             <StatusBarItem>
-                <TextBlock Text="{Binding ActiveTab.CurrentPath}" TextTrimming="CharacterEllipsis"
+                <TextBlock Text="{Binding CurrentPanePath}" TextTrimming="CharacterEllipsis"
                            MaxWidth="600" />
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem Visibility="{Binding IsDualPaneMode, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock>
+                    <Run Text="Left: " />
+                    <Run Text="{Binding LeftPaneStatusText}" />
+                    <Run Text=" | Right: " />
+                    <Run Text="{Binding RightPaneStatusText}" />
+                </TextBlock>
             </StatusBarItem>
         </StatusBar>
 
@@ -344,24 +357,24 @@
                             Padding="4,1" Margin="2,0,0,0" ToolTip="Clear filter"
                             Click="ClearFilter_Click" />
                     <TextBox x:Name="FilterTextBox"
-                             Text="{Binding ActiveTab.FileList.FilterText, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding CurrentFilterText, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="4,2" />
                 </DockPanel>
 
                 <!-- Search Bar (Ctrl+E) -->
                 <DockPanel x:Name="SearchBar" Grid.Row="1" Margin="2,2,2,0"
-                           Visibility="{Binding ActiveTab.FileList.IsSearchVisible, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                           Visibility="{Binding CurrentIsSearchVisible, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
                     <Image DockPanel.Dock="Left" Source="{StaticResource IconSearch}"
                            Width="14" Height="14" Margin="4,0,2,0" />
                     <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center"
                                Margin="2,0,4,0" />
                     <Button DockPanel.Dock="Right" Content="&#x2715;" FontSize="10"
                             Padding="4,1" Margin="2,0,0,0" ToolTip="Close search"
-                            Command="{Binding ActiveTab.FileList.CloseSearchCommand}" />
+                            Command="{Binding CloseSearchCommand}" />
                     <Button DockPanel.Dock="Right" Content="Go" Padding="6,1" Margin="2,0,0,0"
-                            Command="{Binding ActiveTab.FileList.ExecuteSearchCommand}" />
+                            Command="{Binding ExecuteSearchCommand}" />
                     <TextBox x:Name="SearchTextBox"
-                             Text="{Binding ActiveTab.FileList.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding CurrentSearchText, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="4,2"
                              KeyDown="SearchTextBox_KeyDown" />
                 </DockPanel>
@@ -369,13 +382,13 @@
                 <!-- Search Results Banner -->
                 <Border Grid.Row="2" Margin="2,2,2,0" Padding="4,2"
                         Background="#FFF8DC" BorderBrush="#DAA520" BorderThickness="1" CornerRadius="2"
-                        Visibility="{Binding ActiveTab.FileList.IsShowingSearchResults, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                        Visibility="{Binding CurrentIsShowingSearchResults, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Content="&#x2715;" FontSize="10"
                                 Padding="4,1" ToolTip="Clear search results"
                                 Background="Transparent" BorderThickness="0"
-                                Command="{Binding ActiveTab.FileList.ClearSearchResultsCommand}" />
-                        <TextBlock Text="{Binding ActiveTab.FileList.SearchResultsText}"
+                                Command="{Binding ClearSearchResultsCommand}" />
+                        <TextBlock Text="{Binding CurrentSearchResultsText}"
                                    VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
@@ -395,11 +408,14 @@
                               Grid.Column="0"
                               ItemsSource="{Binding ActiveTab.FileList.Items}"
                               SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
+                              BorderBrush="{StaticResource ClassicPaneBorderBrush}"
+                              BorderThickness="1"
                               AllowDrop="True"
                               SelectionMode="Extended"
                               VirtualizingStackPanel.IsVirtualizing="True"
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
                               SelectionChanged="FileList_SelectionChanged"
+                              GotKeyboardFocus="FileList_GotKeyboardFocus"
                               PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                               MouseMove="FileList_MouseMove"
                               DragEnter="FileList_DragEnter"
@@ -410,19 +426,19 @@
                               GridViewColumnHeader.Click="FileListHeader_Click">
                         <ListView.ContextMenu>
                             <ContextMenu>
-                                <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
+                                <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
                                 <Separator x:Name="ItemSeparator1" />
-                                <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
-                                <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
-                                <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
+                                <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding CutCommand}" />
+                                <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding CopyCommand}" />
+                                <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding PasteCommand}" />
                                 <Separator x:Name="ItemSeparator2" />
-                                <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
-                                <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
-                                <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
-                                <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
+                                <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
+                                <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
+                                <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
+                                <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
-                                <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
+                                <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
                             </ContextMenu>
                         </ListView.ContextMenu>
                         <ListView.View>
@@ -463,27 +479,88 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <Border Grid.Row="0" Background="{StaticResource ClassicHeaderBrush}"
+                        <Border x:Name="RightPaneHeader" Grid.Row="0" Background="{StaticResource ClassicHeaderBrush}"
                                 BorderBrush="{StaticResource ClassicPaneBorderBrush}" BorderThickness="0,0,0,1"
-                                Padding="4,2">
-                            <TextBlock Text="{Binding RightPaneAddressText}" TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center" />
+                                Padding="4,2"
+                                MouseLeftButtonDown="RightPaneHeader_MouseLeftButtonDown">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Right Pane"
+                                           FontWeight="SemiBold" Margin="0,0,8,0"
+                                           VerticalAlignment="Center" />
+                                <Grid Grid.Column="1">
+                                    <TextBlock x:Name="RightPaneAddressDisplay"
+                                               Text="{Binding RightPaneAddressText}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <DockPanel x:Name="RightPaneAddressEditorPanel"
+                                               Visibility="Collapsed">
+                                        <Button DockPanel.Dock="Right"
+                                                ToolTip="Go"
+                                                Padding="4,2"
+                                                MinWidth="24"
+                                                Margin="4,0,0,0"
+                                                Click="RightPaneAddressGo_Click">
+                                            <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                                        </Button>
+                                        <TextBox x:Name="RightPaneAddressBox"
+                                                 Text="{Binding RightPaneAddressText, UpdateSourceTrigger=PropertyChanged}"
+                                                 KeyDown="RightPaneAddressBox_KeyDown"
+                                                 LostKeyboardFocus="RightPaneAddressBox_LostFocus"
+                                                 VerticalContentAlignment="Center"
+                                                 Padding="4,1" />
+                                    </DockPanel>
+                                </Grid>
+                                <TextBlock x:Name="RightPaneStatusBlock"
+                                           Grid.Column="2"
+                                           Text="{Binding RightPaneStatusText}"
+                                           Foreground="#5A6F89"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="10" />
+                            </Grid>
                         </Border>
                         <ListView x:Name="RightPaneListView"
                                   Grid.Row="1"
                                   ItemsSource="{Binding RightPaneTab.FileList.Items}"
                                   SelectedItem="{Binding RightPaneTab.FileList.SelectedItem}"
+                                  BorderBrush="{StaticResource ClassicPaneBorderBrush}"
+                                  BorderThickness="1"
                                   AllowDrop="True"
                                   SelectionMode="Extended"
                                   VirtualizingStackPanel.IsVirtualizing="True"
                                   VirtualizingStackPanel.VirtualizationMode="Recycling"
                                   SelectionChanged="RightPane_SelectionChanged"
+                                  GotKeyboardFocus="RightPane_GotKeyboardFocus"
                                   PreviewMouseLeftButtonDown="RightPane_PreviewMouseLeftButtonDown"
                                   MouseMove="RightPane_MouseMove"
                                   DragEnter="RightPane_DragEnter"
                                   DragOver="RightPane_DragOver"
                                   Drop="RightPane_Drop"
-                                  MouseDoubleClick="RightPane_MouseDoubleClick">
+                                  MouseDoubleClick="RightPane_MouseDoubleClick"
+                                  ContextMenuOpening="RightPane_ContextMenuOpening"
+                                  GridViewColumnHeader.Click="RightPaneHeader_Click">
+                            <ListView.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem x:Name="RightOpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
+                                    <Separator x:Name="RightItemSeparator1" />
+                                    <MenuItem x:Name="RightCutMenuItem" Header="Cut" Command="{Binding CutCommand}" />
+                                    <MenuItem x:Name="RightCopyMenuItem" Header="Copy" Command="{Binding CopyCommand}" />
+                                    <MenuItem x:Name="RightPasteMenuItem" Header="Paste" Command="{Binding PasteCommand}" />
+                                    <Separator x:Name="RightItemSeparator2" />
+                                    <MenuItem x:Name="RightDeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
+                                    <MenuItem x:Name="RightRenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
+                                    <MenuItem x:Name="RightNewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
+                                    <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
+                                    <Separator x:Name="RightPropertiesSeparator" />
+                                    <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
+                                    <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
+                                </ContextMenu>
+                            </ListView.ContextMenu>
                             <ListView.View>
                                 <GridView>
                                     <GridViewColumn Header="Name" Width="250"
@@ -529,6 +606,11 @@
                                          BorderThickness="0" Background="Transparent"
                                          Padding="8,4" />
                             </ScrollViewer>
+                            <TextBlock Text="{Binding PreviewStatusText}"
+                                       Margin="8"
+                                       Foreground="#5A6F89"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding HasPreviewStatus, Converter={StaticResource BoolToVisibility}}" />
                         </DockPanel>
                     </Border>
                 </Grid>

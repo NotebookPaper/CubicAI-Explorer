@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
 > **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + post-Tier-1 enhancements through dual-pane/preview/address-autocomplete MVP. Current uncommitted batch builds and smoke tests pass.
+> **Status:** Tier 1 complete + dual-pane parity/polish is well beyond MVP. Current uncommitted batch builds cleanly and the smoke suite passes.
 
 ---
 
@@ -11,7 +11,7 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 **Solution:** `CubicAIExplorer.sln`  
 **Build:** `dotnet build CubicAIExplorer.sln`  
 **Run:** `dotnet run --project src/CubicAIExplorer/CubicAIExplorer.csproj`  
-**Smoke tests:** `dotnet run --project tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj`
+**Smoke tests:** `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal` then run `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
 
 ## Current Implemented State
 
@@ -22,87 +22,95 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Context menu, keyboard shortcuts, multi-select
 - Inline rename (F2)
 
-### Additional features completed
-- Bookmarks panel (add/remove/navigate)
-- Bookmark persistence to `%AppData%\\CubicAIExplorer\\bookmarks.json`
+### Post-Tier-1 work now complete
+- Bookmarks panel with persistence to `%AppData%\\CubicAIExplorer\\bookmarks.json`
 - File list drag/drop copy/move
-- Undo/redo history:
-  - undo/redo rename
-  - undo/redo copy
-  - undo/redo move
-  - undo new folder
-  - in-session undo for permanent delete via staging folder
+- Undo/redo history for rename/copy/move/new-folder/permanent-delete
 - Clear History command
-- Same-folder move guard (no-op to avoid accidental duplicate renames)
-- Classic Cubic/XP-inspired visual theme pass
-- Bookmark single-click navigation (selection change triggers navigation)
+- Same-folder move guard
+- Classic Cubic/XP-inspired theme pass
 - Full toolbar with Cut/Copy/Paste/Delete/Undo/Redo/Refresh buttons
-- View mode switching (Details/List/Tiles) via View menu
-- Selection count displayed in status bar ("25 items | 3 selected")
-- Search/filter bar (Ctrl+F) to filter files by name in current directory
-- File properties dialog (Alt+Enter or context menu → Properties)
-- Drag/drop files onto folder tree nodes (copy/move)
-- Sort indicator arrows (▲/▼) on column headers
-- Tab context menu: Duplicate Tab, Close Tab, Close Other Tabs
-- Status bar shows total size of selected files
-- Open in Explorer from context menu
-- Enter key opens selected item when file list is focused
-- Window size/position persisted to `%AppData%\CubicAIExplorer\window.json`
+- View mode switching (Details/List/Tiles)
+- Search/filter bar with recursive search
+- File properties dialog
+- Drag/drop files to folder tree nodes
+- Sort indicator arrows on column headers
+- Tab context menu (Duplicate, Close, Close Other Tabs)
+- Status bar selection count and total selected size
+- Open in Explorer
+- Enter key opens selected item
+- Window size/position persistence
 - Breadcrumb-style address bar
 - Recent folders panel
-- Recursive search in current folder tree
-- Toolbar vector icons replacing Unicode toolbar glyphs
+- Toolbar vector icons replacing Unicode glyphs
 - Address bar autocomplete suggestions
-- Dual-pane mode (MVP)
-- Preview panel for text and common image files
+- Dual-pane mode with active-pane routing
+- Preview panel for text/common image files plus empty/error/size-limit states
 
-## Uncommitted Changes
-There is an uncommitted batch across 4 modified files plus untracked `.claude/` workspace metadata.
-These changes build cleanly, and the smoke-test suite passes end-to-end.
-**The next session should commit the app/test changes before starting a new feature slice.**
+### Dual-pane parity already implemented
+- Active-pane model for commands and navigation
+- Right-pane context menu parity
+- Right-pane sorting, inline rename, select-all, properties routing
+- Shared filter/search/view-mode controls routed to the active pane
+- Active-pane status labels and visual highlighting
+- Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
+- Right-pane header single-click activation and inline address editing
+
+## Current Uncommitted Batch
+There is an uncommitted batch across 4 tracked files plus untracked workspace/build artifacts.
 
 Modified files:
-- `src/CubicAIExplorer/MainWindow.xaml` — dual-pane layout, preview panel, address autocomplete popup, F6/F7 bindings
-- `src/CubicAIExplorer/MainWindow.xaml.cs` — autocomplete interactions, preview refresh hook, dual-pane/preview column toggles, right-pane drag/drop handlers
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — dual-pane state, preview state, address suggestions
-- `tests/CubicAIExplorer.SmokeTests/Program.cs` — smoke coverage for dual-pane toggle, preview state, address suggestions
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
-## Recent Commits (latest first)
-- `00c0217` feat: add redo/history controls and classic cubic theming
-- `a2c4916` feat: support undo for permanent delete via staging
-- `1032c0f` feat: extend undo with copy rollback and action label
-- `4fd06ac` feat: add basic undo history for rename and move
-- `73a357c` feat: add file list drag-and-drop copy/move
-- `77396c7` feat: persist bookmarks to appdata json
-- `2523401` feat: add bookmarks mvp with UI and commands
-- `f6e5967` feat: add inline rename and tier1 smoke tests
+Untracked:
+- `.claude/`
+- `src/CubicAIExplorer/obj_verify/`
+- `tests/CubicAIExplorer.SmokeTests/obj_verify/`
+
+This batch is verified and is a reasonable commit point.
+
+## Verification
+Verified on **2026-03-09**:
+- `dotnet build CubicAIExplorer.sln`
+- `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
+- `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
+
+Current smoke coverage includes:
+- dual-pane toggle
+- active pane command routing
+- active pane UI command routing
+- active pane view/search routing
+- active pane status labels
+- current pane navigation routing
+- current pane navigation sources
+- preview properties
+- preview refresh on tab switch
+- preview status states
+- address suggestions
+- XAML wiring checks
 
 ## Priority Next Work
-1. Complete dual-pane parity:
-   - context menu and keyboard command parity in the right pane
-   - active-pane focus model for copy/cut/paste/delete/navigation
-   - sorting, inline rename, and selection-status parity
-2. Expand preview support:
-   - empty/error states
-   - more file-type coverage
-   - avoid loading very large files synchronously
-3. Polish address autocomplete:
-   - richer keyboard navigation
-   - better completion for roots and partial drive paths
-4. Commit the current batch, then choose the next UX polish slice
+1. Expand preview support.
+   Next likely value: more file types, async loading, and better image/text fallbacks.
+2. Improve address autocomplete.
+   The obvious gaps are root-drive completion, keyboard selection polish, and clearer completion behavior.
+3. Consider whether the left pane should also get a clearer inline address-edit affordance to match the new right-pane workflow.
+4. Commit the current batch before starting another feature slice.
 
 ## Known Gotchas
-- **View mode bug (fixed):** `ApplyViewMode("Details")` must NOT be called during tab initialization — it replaces the XAML-defined GridView and breaks item rendering. The fix: only call `ApplyViewMode` when the mode is not "Details" (the XAML default). See `HookFileListViewModel` in `MainWindow.xaml.cs`.
-- **DockPanel LastChildFill:** Don't use DockPanel to wrap the file list + Popup — the Popup steals fill space. Use a Grid with `Auto`/`*` rows instead.
-- **`{x:Null}` keybindings:** WPF KeyBinding requires a non-null Command. Never use `Command="{x:Null}"` — it silently breaks the window.
-- **DataType on keyed DataTemplates:** Don't add `DataType="{x:Type ...}"` to keyed DataTemplates in App.xaml — it can interfere with implicit template resolution.
+- **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.
+- **View mode bug (fixed):** `ApplyViewMode("Details")` must not run during tab initialization, or it replaces the XAML-defined `GridView` and breaks rendering.
+- **DockPanel LastChildFill:** wrapping a file list and popup in a `DockPanel` causes layout issues. Use a `Grid` with explicit rows.
+- **KeyBinding null commands:** WPF `KeyBinding` requires a non-null command.
+- **Keyed DataTemplate + DataType:** avoid combining them in `App.xaml`.
+- **Right-pane header double-click:** `Border` does not support a `MouseDoubleClick` XAML event. Handle double-click via `MouseLeftButtonDown` and `ClickCount`.
 
 ## Notes
-- Verified on 2026-03-09:
-  - `dotnet build CubicAIExplorer.sln`
-  - `dotnet run --project tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj`
 - No new NuGet packages unless explicitly approved.
 - Keep all file paths sanitized through `FileSystemService`.
-- Root markdown files (`CLAUDE.md`, `CONTINUE.md`, `IMPLEMENTATION_PLAN.md`) should be updated when status changes.
+- Root markdown files (`CLAUDE.md`, `CONTINUE.md`, `IMPLEMENTATION_PLAN.md`) should stay in sync with the actual repo state.
 
 ---

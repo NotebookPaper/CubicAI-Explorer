@@ -42,8 +42,15 @@ internal static class Program
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
+            Run("active pane command routing", failures, () => TestActivePaneCommandRouting(tempRoot));
+            Run("active pane ui command routing", failures, () => TestActivePaneUiCommandRouting(tempRoot));
+            Run("active pane view search routing", failures, () => TestActivePaneViewSearchRouting(tempRoot));
+            Run("active pane status labels", failures, () => TestActivePaneStatusLabels(tempRoot));
+            Run("current pane navigation routing", failures, () => TestCurrentPaneNavigationRouting(tempRoot));
+            Run("current pane navigation sources", failures, () => TestCurrentPaneNavigationSources(tempRoot));
             Run("preview properties", failures, () => TestPreviewProperties(tempRoot));
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
+            Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
@@ -668,6 +675,206 @@ internal static class Program
         Assert(eventCount == 2, "DualPaneModeChanged should fire when disabling dual pane mode.");
     }
 
+    private static void TestActivePaneCommandRouting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "active_left");
+        var rightFolder = CreateCleanSubdir(root, "active_right");
+        var rightSubFolder = CreateCleanSubdir(rightFolder, "sub");
+        var rightFile = Path.Combine(rightFolder, "right.txt");
+        var leftFile = Path.Combine(leftFolder, "left.txt");
+        File.WriteAllText(rightFile, "right");
+        File.WriteAllText(leftFile, "left");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        var rightItem = vm.RightPaneTab.FileList.Items.Single(i => i.Name == "right.txt");
+        vm.RightPaneTab.FileList.SelectedItem = rightItem;
+        vm.RightPaneTab.FileList.SelectedItems.Clear();
+        vm.RightPaneTab.FileList.SelectedItems.Add(rightItem);
+
+        vm.CopyCommand.Execute(null);
+        Assert(clipboard.Paths.Count == 1 && clipboard.Paths[0] == rightFile,
+            "Copy should target the active right pane selection.");
+
+        clipboard.SetFiles([leftFile], isCut: false);
+        vm.PasteCommand.Execute(null);
+        Assert(File.Exists(Path.Combine(rightFolder, "left.txt")),
+            "Paste should target the active right pane directory.");
+
+        vm.RightPaneTab.NavigateTo(rightSubFolder);
+        vm.NavigateUpCommand.Execute(null);
+        Assert(vm.RightPaneTab.CurrentPath == rightFolder,
+            "NavigateUp should target the active right pane tab.");
+        Assert(vm.CurrentPanePath == rightFolder,
+            "CurrentPanePath should reflect the active pane path.");
+    }
+
+    private static void TestActivePaneUiCommandRouting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "ui_left");
+        var rightFolder = CreateCleanSubdir(root, "ui_right");
+        File.WriteAllText(Path.Combine(rightFolder, "rename.txt"), "rename");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        var item = vm.RightPaneTab.FileList.Items.Single(i => i.Name == "rename.txt");
+        vm.RightPaneTab.FileList.SelectedItem = item;
+        vm.RightPaneTab.FileList.SelectedItems.Clear();
+        vm.RightPaneTab.FileList.SelectedItems.Add(item);
+
+        var renameRequested = false;
+        var selectAllRequested = false;
+        var propertiesRequested = false;
+        vm.RightPaneTab.FileList.InlineRenameRequested += (_, requestedItem) =>
+            renameRequested = requestedItem.Name == "rename.txt";
+        vm.RightPaneTab.FileList.SelectAllRequested += (_, _) => selectAllRequested = true;
+        vm.RightPaneTab.FileList.PropertiesRequested += (_, requestedItem) =>
+            propertiesRequested = requestedItem.Name == "rename.txt";
+
+        vm.RenameCommand.Execute(null);
+        vm.SelectAllCommand.Execute(null);
+        vm.ShowPropertiesCommand.Execute(null);
+
+        Assert(renameRequested, "Rename should target the active right pane.");
+        Assert(selectAllRequested, "SelectAll should target the active right pane.");
+        Assert(propertiesRequested, "Properties should target the active right pane.");
+    }
+
+    private static void TestActivePaneViewSearchRouting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "view_left");
+        var rightFolder = CreateCleanSubdir(root, "view_right");
+        File.WriteAllText(Path.Combine(leftFolder, "left.txt"), "left");
+        File.WriteAllText(Path.Combine(rightFolder, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(rightFolder, "beta.log"), "b");
+        CreateCleanSubdir(rightFolder, "search-hit");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        vm.CurrentFilterText = "alpha";
+        Assert(vm.RightPaneTab.FileList.FilterText == "alpha", "Filter text should target the active right pane.");
+        Assert(vm.RightPaneTab.FileList.Items.Count == 1, "Right pane filter should narrow right pane items.");
+
+        vm.CurrentViewMode = "Tiles";
+        Assert(vm.RightPaneTab.FileList.ViewMode == "Tiles", "View mode should target the active right pane.");
+
+        vm.SearchInFolderCommand.Execute(null);
+        Assert(vm.RightPaneTab.FileList.IsSearchVisible, "Search should open for the active right pane.");
+
+        vm.CurrentSearchText = "search";
+        vm.ExecuteSearchCommand.Execute(null);
+        Assert(vm.RightPaneTab.FileList.IsShowingSearchResults, "Search results should be shown in the active right pane.");
+        Assert(vm.RightPaneTab.FileList.Items.Any(i => i.Name == "search-hit"), "Right pane search should search the right pane tree.");
+
+        vm.ClearSearchResultsCommand.Execute(null);
+        Assert(!vm.RightPaneTab.FileList.IsShowingSearchResults, "Clearing search should target the active right pane.");
+        Assert(vm.CurrentViewMode == "Tiles", "Current view mode should reflect the active pane.");
+    }
+
+    private static void TestActivePaneStatusLabels(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "status_left");
+        var rightFolder = CreateCleanSubdir(root, "status_right");
+        File.WriteAllText(Path.Combine(leftFolder, "left.txt"), "left");
+        File.WriteAllText(Path.Combine(rightFolder, "right.txt"), "right");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+
+        Assert(vm.CurrentPaneLabel == "Left Pane", "Left pane should be the default active pane label.");
+        Assert(vm.LeftPaneStatusText.Contains("items"), "Left pane status should track left pane file list state.");
+
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        Assert(vm.CurrentPaneLabel == "Right Pane", "Current pane label should switch with right pane activation.");
+        Assert(vm.RightPaneStatusText.Contains("items"), "Right pane status should track right pane file list state.");
+    }
+
+    private static void TestCurrentPaneNavigationRouting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "nav_left");
+        var rightFolder = CreateCleanSubdir(root, "nav_right");
+        var targetFolder = CreateCleanSubdir(root, "nav_target");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        vm.NavigateCurrentPaneToPath(targetFolder);
+
+        Assert(vm.RightPaneTab.CurrentPath == targetFolder, "Current-pane navigation should target the active right pane.");
+        Assert(vm.ActiveTab!.CurrentPath == leftFolder, "Current-pane navigation should not move the left pane.");
+    }
+
+    private static void TestCurrentPaneNavigationSources(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var leftFolder = CreateCleanSubdir(root, "nav_source_left");
+        var rightFolder = CreateCleanSubdir(root, "nav_source_right");
+        var treeTarget = CreateCleanSubdir(root, "nav_tree_target");
+        var bookmarkTarget = CreateCleanSubdir(root, "nav_bookmark_target");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(leftFolder);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.RightPaneTab!.NavigateTo(rightFolder);
+        vm.ActivateRightPane();
+
+        var treeNode = new FolderTreeNodeViewModel(fs)
+        {
+            Name = Path.GetFileName(treeTarget),
+            FullPath = treeTarget
+        };
+
+        vm.SelectTreeNode(treeNode);
+        Assert(vm.RightPaneTab.CurrentPath == treeTarget, "Tree-node navigation should target the active right pane.");
+        Assert(vm.ActiveTab!.CurrentPath == leftFolder, "Tree-node navigation should not move the left pane.");
+
+        var bookmark = new BookmarkItem
+        {
+            Name = "Bookmark Target",
+            Path = bookmarkTarget,
+            IsFolder = true
+        };
+
+        vm.NavigateBookmarkCommand.Execute(bookmark);
+        Assert(vm.RightPaneTab.CurrentPath == bookmarkTarget, "Bookmark navigation should target the active right pane.");
+        Assert(vm.ActiveTab.CurrentPath == leftFolder, "Bookmark navigation should still leave the left pane unchanged.");
+    }
+
     private static void TestPreviewProperties(string root)
     {
         var fs = new FileSystemService();
@@ -699,6 +906,33 @@ internal static class Program
 
         Assert(!vm.IsPreviewVisible, "Second toggle should disable preview mode.");
         Assert(previewEvents == 2, "PreviewModeChanged should fire when disabling preview mode.");
+    }
+
+    private static void TestPreviewStatusStates(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "preview_states");
+        var unsupportedFile = Path.Combine(folder, "archive.bin");
+        var largeTextFile = Path.Combine(folder, "large.txt");
+        File.WriteAllBytes(unsupportedFile, [1, 2, 3, 4]);
+        File.WriteAllText(largeTextFile, new string('a', 1024 * 1024 + 32));
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+        vm.TogglePreviewCommand.Execute(null);
+
+        Assert(vm.HasPreviewStatus, "Preview should show a status message when nothing is selected.");
+        Assert(vm.PreviewStatusText.Contains("Select"), "Empty preview should prompt for a selection.");
+
+        var unsupportedItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "archive.bin");
+        vm.ActiveTab.FileList.SelectedItem = unsupportedItem;
+        Assert(vm.PreviewStatusText.Contains("No preview available"), "Unsupported files should show a preview status.");
+
+        var largeTextItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "large.txt");
+        vm.ActiveTab.FileList.SelectedItem = largeTextItem;
+        Assert(vm.PreviewStatusText.Contains("1 MB"), "Large text files should show the preview size limit message.");
     }
 
     private static void TestAddressSuggestions(string root)
@@ -796,6 +1030,24 @@ internal static class Program
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
+        Assert(main.Contains("Command=\"{Binding CopyCommand}\""), "Copy bindings should route through the main view model.");
+        Assert(main.Contains("Command=\"{Binding GoBackCommand}\""), "Back bindings should route through the main view model.");
+        Assert(main.Contains("Command=\"{Binding RenameCommand}\""), "Rename bindings should route through the main view model.");
+        Assert(main.Contains("Command=\"{Binding SelectAllCommand}\""), "Select-all bindings should route through the main view model.");
+        Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
+        Assert(main.Contains("CurrentFilterText"), "Filter bar should bind to the current active pane.");
+        Assert(main.Contains("CurrentSearchText"), "Search bar should bind to the current active pane.");
+        Assert(main.Contains("CurrentIsSearchVisible"), "Search visibility should bind to the current active pane.");
+        Assert(main.Contains("CurrentPaneLabel"), "Status bar should include the current pane label.");
+        Assert(main.Contains("RightPaneHeader_MouseLeftButtonDown"), "Right pane header activation should be wired.");
+        Assert(main.Contains("RightPaneAddressBox"), "Right pane should expose an inline address editor.");
+        Assert(main.Contains("RightPaneAddressGo_Click"), "Right pane address editor should wire its go action.");
+        Assert(main.Contains("RightPaneStatusText"), "Right pane header/status text should be bound.");
+        Assert(main.Contains("PreviewStatusText"), "Preview panel should bind a fallback status message.");
+        Assert(main.Contains("CurrentPanePath"), "Status bar should reflect the current active pane path.");
+        Assert(main.Contains("ContextMenuOpening=\"RightPane_ContextMenuOpening\""), "Right pane context menu handler should be wired.");
+        Assert(main.Contains("GridViewColumnHeader.Click=\"RightPaneHeader_Click\""), "Right pane sort handler should be wired.");
+        Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");
         Assert(main.Contains("ToggleDualPaneCommand"), "Dual pane menu should invoke the dual pane command.");
         Assert(main.Contains("TogglePreviewCommand"), "Preview menu should invoke the preview command.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");

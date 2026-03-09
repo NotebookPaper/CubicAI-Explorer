@@ -35,6 +35,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private BookmarkItem? _selectedBookmark;
 
+    [ObservableProperty]
+    private bool _isRightPaneActive;
+
     // Dual pane
     [ObservableProperty]
     private bool _isDualPaneMode;
@@ -67,6 +70,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasPreviewImage;
 
+    [ObservableProperty]
+    private string _previewStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasPreviewStatus;
+
     // Address autocomplete
     [ObservableProperty]
     private bool _isAddressSuggestionsOpen;
@@ -77,6 +86,54 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<string> AddressSuggestions { get; } = [];
+    public TabViewModel? CurrentPaneTab => IsRightPaneActive && IsDualPaneMode ? _rightPaneTab : ActiveTab;
+    public FileListViewModel? CurrentPaneFileList => CurrentPaneTab?.FileList;
+    public string CurrentPanePath => CurrentPaneTab?.CurrentPath ?? string.Empty;
+    public bool IsLeftPaneActive => !IsRightPaneActive;
+    public string CurrentPaneLabel => IsRightPaneActive && IsDualPaneMode ? "Right Pane" : "Left Pane";
+    public string LeftPaneStatusText => ActiveTab?.FileList.StatusText ?? "Ready";
+    public string RightPaneStatusText => _rightPaneTab?.FileList.StatusText ?? "Ready";
+    public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
+    public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
+    public string CurrentFilterText
+    {
+        get => CurrentPaneFileList?.FilterText ?? string.Empty;
+        set
+        {
+            if (CurrentPaneFileList != null && CurrentPaneFileList.FilterText != value)
+                CurrentPaneFileList.FilterText = value;
+        }
+    }
+    public bool CurrentIsSearchVisible => CurrentPaneFileList?.IsSearchVisible == true;
+    public string CurrentSearchText
+    {
+        get => CurrentPaneFileList?.SearchText ?? string.Empty;
+        set
+        {
+            if (CurrentPaneFileList != null && CurrentPaneFileList.SearchText != value)
+                CurrentPaneFileList.SearchText = value;
+        }
+    }
+    public bool CurrentIsShowingSearchResults => CurrentPaneFileList?.IsShowingSearchResults == true;
+    public string CurrentSearchResultsText => CurrentPaneFileList?.SearchResultsText ?? string.Empty;
+    public string CurrentViewMode
+    {
+        get => CurrentPaneFileList?.ViewMode ?? "Details";
+        set
+        {
+            if (CurrentPaneFileList != null && CurrentPaneFileList.ViewMode != value)
+                CurrentPaneFileList.ViewMode = value;
+        }
+    }
+    public bool CurrentShowHiddenFiles
+    {
+        get => CurrentPaneFileList?.ShowHiddenFiles == true;
+        set
+        {
+            if (CurrentPaneFileList != null && CurrentPaneFileList.ShowHiddenFiles != value)
+                CurrentPaneFileList.ShowHiddenFiles = value;
+        }
+    }
 
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
@@ -92,6 +149,14 @@ public partial class MainViewModel : ObservableObject
         LoadDrives();
     }
 
+    public void ActivateLeftPane() => IsRightPaneActive = false;
+
+    public void ActivateRightPane()
+    {
+        if (IsDualPaneMode && _rightPaneTab != null)
+            IsRightPaneActive = true;
+    }
+
     private void AttachTab(TabViewModel tab)
     {
         tab.PropertyChanged += OnTabPropertyChanged;
@@ -105,17 +170,16 @@ public partial class MainViewModel : ObservableObject
 
         if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == ActiveTab)
         {
-            AddressBarText = tab.CurrentPath;
-            StatusText = tab.FileList.StatusText;
-            UpdateBreadcrumbs(tab.CurrentPath);
             AddToRecentFolders(tab.CurrentPath);
-            UpdatePreview();
         }
 
         if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == _rightPaneTab)
         {
             RightPaneAddressText = tab.CurrentPath;
         }
+
+        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == CurrentPaneTab)
+            RefreshCurrentPaneState();
     }
 
     private void OnFileListPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -123,17 +187,75 @@ public partial class MainViewModel : ObservableObject
         if (sender is not FileListViewModel fileList)
             return;
 
-        if (e.PropertyName == nameof(FileListViewModel.StatusText) && ActiveTab?.FileList == fileList)
+        if (e.PropertyName == nameof(FileListViewModel.StatusText) && CurrentPaneFileList == fileList)
         {
             StatusText = fileList.StatusText;
+            OnPropertyChanged(nameof(ActiveUndoDescription));
+            OnPropertyChanged(nameof(ActiveRedoDescription));
         }
+
+        if (ActiveTab?.FileList == fileList)
+            OnPropertyChanged(nameof(LeftPaneStatusText));
+        if (_rightPaneTab?.FileList == fileList)
+            OnPropertyChanged(nameof(RightPaneStatusText));
 
         if ((e.PropertyName == nameof(FileListViewModel.SelectedItem)
                 || e.PropertyName == nameof(FileListViewModel.CurrentPath))
-            && ActiveTab?.FileList == fileList)
+            && CurrentPaneFileList == fileList)
         {
             UpdatePreview();
         }
+
+        if ((e.PropertyName == nameof(FileListViewModel.UndoDescription)
+                || e.PropertyName == nameof(FileListViewModel.RedoDescription))
+            && CurrentPaneFileList == fileList)
+        {
+            OnPropertyChanged(nameof(ActiveUndoDescription));
+            OnPropertyChanged(nameof(ActiveRedoDescription));
+        }
+
+        if (CurrentPaneFileList == fileList)
+        {
+            if (e.PropertyName == nameof(FileListViewModel.FilterText))
+                OnPropertyChanged(nameof(CurrentFilterText));
+            else if (e.PropertyName == nameof(FileListViewModel.IsSearchVisible))
+                OnPropertyChanged(nameof(CurrentIsSearchVisible));
+            else if (e.PropertyName == nameof(FileListViewModel.SearchText))
+                OnPropertyChanged(nameof(CurrentSearchText));
+            else if (e.PropertyName == nameof(FileListViewModel.IsShowingSearchResults))
+                OnPropertyChanged(nameof(CurrentIsShowingSearchResults));
+            else if (e.PropertyName == nameof(FileListViewModel.SearchResultsText))
+                OnPropertyChanged(nameof(CurrentSearchResultsText));
+            else if (e.PropertyName == nameof(FileListViewModel.ViewMode))
+                OnPropertyChanged(nameof(CurrentViewMode));
+            else if (e.PropertyName == nameof(FileListViewModel.ShowHiddenFiles))
+                OnPropertyChanged(nameof(CurrentShowHiddenFiles));
+        }
+    }
+
+    private void RefreshCurrentPaneState()
+    {
+        var currentPaneTab = CurrentPaneTab;
+        AddressBarText = currentPaneTab?.CurrentPath ?? string.Empty;
+        StatusText = currentPaneTab?.FileList.StatusText ?? "Ready";
+        UpdateBreadcrumbs(currentPaneTab?.CurrentPath ?? string.Empty);
+        UpdatePreview();
+        OnPropertyChanged(nameof(CurrentPaneTab));
+        OnPropertyChanged(nameof(CurrentPaneFileList));
+        OnPropertyChanged(nameof(CurrentPanePath));
+        OnPropertyChanged(nameof(IsLeftPaneActive));
+        OnPropertyChanged(nameof(CurrentPaneLabel));
+        OnPropertyChanged(nameof(LeftPaneStatusText));
+        OnPropertyChanged(nameof(RightPaneStatusText));
+        OnPropertyChanged(nameof(ActiveUndoDescription));
+        OnPropertyChanged(nameof(ActiveRedoDescription));
+        OnPropertyChanged(nameof(CurrentFilterText));
+        OnPropertyChanged(nameof(CurrentIsSearchVisible));
+        OnPropertyChanged(nameof(CurrentSearchText));
+        OnPropertyChanged(nameof(CurrentIsShowingSearchResults));
+        OnPropertyChanged(nameof(CurrentSearchResultsText));
+        OnPropertyChanged(nameof(CurrentViewMode));
+        OnPropertyChanged(nameof(CurrentShowHiddenFiles));
     }
 
     private static string GetBookmarksPath()
@@ -225,22 +347,146 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToAddress()
     {
-        if (ActiveTab == null || string.IsNullOrWhiteSpace(AddressBarText)) return;
+        var targetTab = CurrentPaneTab;
+        if (targetTab == null || string.IsNullOrWhiteSpace(AddressBarText)) return;
         if (_fileSystemService.DirectoryExists(AddressBarText))
         {
-            ActiveTab.NavigateTo(AddressBarText);
+            targetTab.NavigateTo(AddressBarText);
         }
     }
 
     [RelayCommand]
     private void NavigateUp()
     {
-        if (ActiveTab == null) return;
-        var parent = _fileSystemService.GetParentPath(ActiveTab.CurrentPath);
-        if (parent != ActiveTab.CurrentPath)
+        var targetTab = CurrentPaneTab;
+        if (targetTab == null) return;
+        var parent = _fileSystemService.GetParentPath(targetTab.CurrentPath);
+        if (parent != targetTab.CurrentPath)
         {
-            ActiveTab.NavigateTo(parent);
+            targetTab.NavigateTo(parent);
         }
+    }
+
+    [RelayCommand]
+    private void GoBack()
+    {
+        CurrentPaneTab?.GoBackCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void GoForward()
+    {
+        CurrentPaneTab?.GoForwardCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Copy()
+    {
+        CurrentPaneFileList?.CopyCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Cut()
+    {
+        CurrentPaneFileList?.CutCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Paste()
+    {
+        CurrentPaneFileList?.PasteCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void OpenSelectedItem()
+    {
+        var item = CurrentPaneFileList?.SelectedItem;
+        if (item != null)
+            CurrentPaneFileList!.OpenItemCommand.Execute(item);
+    }
+
+    [RelayCommand]
+    private void Delete()
+    {
+        CurrentPaneFileList?.DeleteCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void PermanentDelete()
+    {
+        CurrentPaneFileList?.PermanentDeleteCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Refresh()
+    {
+        CurrentPaneFileList?.RefreshCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void NewFolder()
+    {
+        CurrentPaneFileList?.NewFolderCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Rename()
+    {
+        CurrentPaneFileList?.RenameCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        CurrentPaneFileList?.SelectAllCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void ShowProperties()
+    {
+        CurrentPaneFileList?.ShowPropertiesCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void SearchInFolder()
+    {
+        CurrentPaneFileList?.SearchInFolderCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void ExecuteSearch()
+    {
+        CurrentPaneFileList?.ExecuteSearchCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void CloseSearch()
+    {
+        CurrentPaneFileList?.CloseSearchCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void ClearSearchResults()
+    {
+        CurrentPaneFileList?.ClearSearchResultsCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Undo()
+    {
+        CurrentPaneFileList?.UndoCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void Redo()
+    {
+        CurrentPaneFileList?.RedoCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void ClearHistory()
+    {
+        CurrentPaneFileList?.ClearHistoryCommand.Execute(null);
     }
 
     public void DuplicateTab(TabViewModel sourceTab)
@@ -265,20 +511,39 @@ public partial class MainViewModel : ObservableObject
         ActiveTab!.NavigateTo(path);
     }
 
+    public void NavigateCurrentPaneToPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        if (CurrentPaneTab == null)
+        {
+            if (ActiveTab == null)
+                NewTab();
+        }
+
+        CurrentPaneTab?.NavigateTo(path);
+    }
+
     partial void OnActiveTabChanged(TabViewModel? value)
     {
-        if (value != null)
+        RefreshCurrentPaneState();
+    }
+
+    partial void OnIsRightPaneActiveChanged(bool value)
+    {
+        if (value && (!IsDualPaneMode || _rightPaneTab == null))
         {
-            AddressBarText = value.CurrentPath;
-            StatusText = value.FileList.StatusText;
-            UpdateBreadcrumbs(value.CurrentPath);
-            UpdatePreview();
+            IsRightPaneActive = false;
+            return;
         }
+
+        RefreshCurrentPaneState();
     }
 
     public void SelectTreeNode(FolderTreeNodeViewModel node)
     {
-        NavigateToPath(node.FullPath);
+        NavigateCurrentPaneToPath(node.FullPath);
     }
 
     private void UpdateBreadcrumbs(string path)
@@ -370,7 +635,7 @@ public partial class MainViewModel : ObservableObject
         if (bookmark == null) return;
         if (_fileSystemService.DirectoryExists(bookmark.Path))
         {
-            NavigateToPath(bookmark.Path);
+            NavigateCurrentPaneToPath(bookmark.Path);
         }
     }
 
@@ -435,7 +700,12 @@ public partial class MainViewModel : ObservableObject
             if (ActiveTab != null && !string.IsNullOrWhiteSpace(ActiveTab.CurrentPath))
                 _rightPaneTab.NavigateTo(ActiveTab.CurrentPath);
         }
+        else if (!IsDualPaneMode)
+        {
+            IsRightPaneActive = false;
+        }
 
+        RefreshCurrentPaneState();
         DualPaneModeChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -458,17 +728,26 @@ public partial class MainViewModel : ObservableObject
         HasPreviewText = false;
         PreviewImageSource = null;
         HasPreviewImage = false;
+        PreviewStatusText = string.Empty;
+        HasPreviewStatus = false;
 
         if (!IsPreviewVisible) return;
 
-        var item = ActiveTab?.FileList.SelectedItem;
-        if (item == null) return;
+        var item = CurrentPaneFileList?.SelectedItem;
+        if (item == null)
+        {
+            PreviewStatusText = "Select a file or folder to preview.";
+            HasPreviewStatus = true;
+            return;
+        }
 
         PreviewFileName = item.Name;
 
         if (item.ItemType == FileSystemItemType.Directory)
         {
             PreviewFileInfo = "File folder";
+            PreviewStatusText = "Folder preview is not available.";
+            HasPreviewStatus = true;
             return;
         }
 
@@ -493,7 +772,8 @@ public partial class MainViewModel : ObservableObject
             }
             catch
             {
-                // Image loading can fail for corrupt files.
+                PreviewStatusText = "Image preview unavailable.";
+                HasPreviewStatus = true;
             }
         }
         // Text preview
@@ -501,14 +781,27 @@ public partial class MainViewModel : ObservableObject
         {
             try
             {
+                if (item.Size > 1024 * 1024)
+                {
+                    PreviewStatusText = "Text preview is limited to files up to 1 MB.";
+                    HasPreviewStatus = true;
+                    return;
+                }
+
                 var lines = File.ReadLines(item.FullPath).Take(100);
                 PreviewText = string.Join("\n", lines);
                 HasPreviewText = true;
             }
             catch
             {
-                // File may be locked or inaccessible.
+                PreviewStatusText = "Text preview unavailable.";
+                HasPreviewStatus = true;
             }
+        }
+        else
+        {
+            PreviewStatusText = "No preview available for this file type.";
+            HasPreviewStatus = true;
         }
     }
 
