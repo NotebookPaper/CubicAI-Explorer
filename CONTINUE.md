@@ -45,7 +45,8 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Toolbar vector icons replacing Unicode glyphs
 - Address bar autocomplete suggestions
 - Dual-pane mode with active-pane routing
-- Preview panel for text/common image files plus empty/error/size-limit states
+- Preview panel for text/images with async loading, folder preview, and file metadata fallback
+- Address bar autocomplete with drive-root completion and debounced async suggestions
 
 ### Dual-pane parity already implemented
 - Active-pane model for commands and navigation
@@ -54,7 +55,7 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Shared filter/search/view-mode controls routed to the active pane
 - Active-pane status labels and visual highlighting
 - Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
-- Right-pane header single-click activation and inline address editing
+- Right-pane header single-click activation and inline address editing with autocomplete
 
 ### Recent refactor (4442153)
 - Fixed event listener leak: closed tabs now properly unsubscribed via `DetachTab()`
@@ -95,15 +96,14 @@ Current smoke coverage includes:
 - XAML wiring checks
 
 ## Priority Next Work
-1. **Expand preview support.**
-   Next likely value: more file types (PDF metadata, audio/video info), async loading for large files, and better image/text fallbacks.
-2. **Improve address autocomplete.**
-   Gaps: root-drive completion (typing just a letter), keyboard selection polish, clearer completion behavior.
-3. **Async I/O for hot paths.**
-   `/simplify` review identified synchronous file I/O on the UI thread in `UpdatePreview` (reads file content), `UpdateAddressSuggestions` (queries filesystem per keystroke), and `SaveRecentFolders` (writes JSON on every navigation). These should be made async or debounced.
-4. **Consider eliminating proxy properties.**
+1. **Consider eliminating proxy properties.**
    MainViewModel has ~15 `Current*` proxy properties that forward to `CurrentPaneFileList`. XAML could bind directly to `CurrentPaneFileList.FilterText` etc., eliminating manual `OnPropertyChanged` propagation.
-5. Consider whether the left pane should get an inline address-edit affordance to match the right-pane workflow.
+2. **Expand preview to more file types.**
+   PDF metadata, audio/video info, or rich text rendering would add value but may require new NuGet packages.
+3. **Keyboard accessibility polish.**
+   Tab order, focus management, and keyboard-only navigation through all panels.
+4. **Settings/preferences UI.**
+   Persist user preferences (default view mode, show hidden files, startup folder, etc.).
 
 ## Known Gotchas
 - **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.

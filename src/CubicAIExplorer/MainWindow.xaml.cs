@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private Point _dragStartPoint;
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
+    private bool _suppressRightPaneAutoComplete;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
     private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
@@ -220,6 +221,7 @@ public partial class MainWindow : Window
 
     private void ExitRightPaneAddressEditMode()
     {
+        RightPaneAutoCompletePopup.IsOpen = false;
         RightPaneAddressEditorPanel.Visibility = Visibility.Collapsed;
         RightPaneAddressDisplay.Visibility = Visibility.Visible;
         RightPaneStatusBlock.Visibility = Visibility.Visible;
@@ -227,6 +229,7 @@ public partial class MainWindow : Window
 
     private void CommitRightPaneAddressEdit()
     {
+        RightPaneAutoCompletePopup.IsOpen = false;
         ViewModel.ActivateRightPane();
         ViewModel.NavigateCurrentPaneToPath(ViewModel.RightPaneAddressText);
         ExitRightPaneAddressEditMode();
@@ -284,19 +287,91 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter)
         {
-            CommitRightPaneAddressEdit();
+            if (RightPaneAutoCompletePopup.IsOpen && RightPaneAutoCompleteList.SelectedItem is string selected)
+            {
+                AcceptRightPaneAutoCompleteSuggestion(selected);
+            }
+            else
+            {
+                CommitRightPaneAddressEdit();
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            CancelRightPaneAddressEdit();
+            if (RightPaneAutoCompletePopup.IsOpen)
+            {
+                RightPaneAutoCompletePopup.IsOpen = false;
+            }
+            else
+            {
+                CancelRightPaneAddressEdit();
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down && RightPaneAutoCompletePopup.IsOpen)
+        {
+            RightPaneAutoCompleteList.SelectedIndex = Math.Min(
+                RightPaneAutoCompleteList.SelectedIndex + 1,
+                RightPaneAutoCompleteList.Items.Count - 1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Up && RightPaneAutoCompletePopup.IsOpen)
+        {
+            RightPaneAutoCompleteList.SelectedIndex = Math.Max(
+                RightPaneAutoCompleteList.SelectedIndex - 1, 0);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab && RightPaneAutoCompletePopup.IsOpen
+            && RightPaneAutoCompleteList.SelectedItem is string tabSelected)
+        {
+            // Tab fills the path and continues drilling
+            var path = tabSelected.TrimEnd('\\') + "\\";
+            _suppressRightPaneAutoComplete = true;
+            ViewModel.RightPaneAddressText = path;
+            RightPaneAddressBox.CaretIndex = path.Length;
+            _suppressRightPaneAutoComplete = false;
+            ViewModel.UpdateRightPaneAddressSuggestions();
+            RightPaneAutoCompletePopup.IsOpen = ViewModel.IsRightPaneSuggestionsOpen;
             e.Handled = true;
         }
     }
 
+    private void RightPaneAddressBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressRightPaneAutoComplete) return;
+        ViewModel.UpdateRightPaneAddressSuggestions();
+        RightPaneAutoCompletePopup.IsOpen = ViewModel.IsRightPaneSuggestionsOpen;
+        if (RightPaneAutoCompletePopup.IsOpen && RightPaneAutoCompleteList.Items.Count > 0)
+            RightPaneAutoCompleteList.SelectedIndex = 0;
+    }
+
+    private void RightPaneAutoComplete_Select(object sender, MouseButtonEventArgs e)
+    {
+        if (RightPaneAutoCompleteList.SelectedItem is string path)
+        {
+            AcceptRightPaneAutoCompleteSuggestion(path);
+        }
+    }
+
+    private void AcceptRightPaneAutoCompleteSuggestion(string path)
+    {
+        _suppressRightPaneAutoComplete = true;
+        ViewModel.RightPaneAddressText = path;
+        RightPaneAddressBox.CaretIndex = path.Length;
+        _suppressRightPaneAutoComplete = false;
+        RightPaneAutoCompletePopup.IsOpen = false;
+
+        ViewModel.ActivateRightPane();
+        ViewModel.NavigateCurrentPaneToPath(path);
+        ExitRightPaneAddressEditMode();
+        RightPaneListView.Focus();
+    }
+
     private void RightPaneAddressBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (RightPaneAddressEditorPanel.IsKeyboardFocusWithin)
+        if (RightPaneAddressEditorPanel.IsKeyboardFocusWithin
+            || RightPaneAutoCompletePopup.IsMouseOver)
             return;
 
         CancelRightPaneAddressEdit();

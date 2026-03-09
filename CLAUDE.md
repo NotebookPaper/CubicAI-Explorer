@@ -129,9 +129,9 @@ The app has a working UI with:
 - Window size/position persisted across sessions
 - Quick access recent folders
 - Recursive search within folders
-- Address bar autocomplete suggestions
-- Dual-pane mode (MVP)
-- Preview panel for text and common image files
+- Address bar autocomplete with drive-root completion and debounced async suggestions
+- Dual-pane mode with right-pane autocomplete
+- Preview panel with async loading, folder preview, and file metadata fallback
 
 ## Reference Material
 

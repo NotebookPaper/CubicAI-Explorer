@@ -952,6 +952,7 @@ internal static class Program
         };
 
         vm.UpdateAddressSuggestions();
+        WaitFor(() => vm.AddressSuggestions.Count > 0);
 
         Assert(vm.IsAddressSuggestionsOpen, "Matching folders should open address suggestions.");
         Assert(vm.AddressSuggestions.Count == 1, "Suggestions should be filtered by the typed prefix.");
@@ -959,6 +960,7 @@ internal static class Program
 
         vm.AddressBarText = Path.Combine(folder, "zzz");
         vm.UpdateAddressSuggestions();
+        WaitFor(() => !vm.IsAddressSuggestionsOpen, 500);
 
         Assert(!vm.IsAddressSuggestionsOpen, "Non-matching prefixes should close address suggestions.");
         Assert(vm.AddressSuggestions.Count == 0, "Non-matching prefixes should clear suggestions.");

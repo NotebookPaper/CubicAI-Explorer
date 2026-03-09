@@ -507,12 +507,29 @@
                                                 Click="RightPaneAddressGo_Click">
                                             <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
                                         </Button>
-                                        <TextBox x:Name="RightPaneAddressBox"
-                                                 Text="{Binding RightPaneAddressText, UpdateSourceTrigger=PropertyChanged}"
-                                                 KeyDown="RightPaneAddressBox_KeyDown"
-                                                 LostKeyboardFocus="RightPaneAddressBox_LostFocus"
-                                                 VerticalContentAlignment="Center"
-                                                 Padding="4,1" />
+                                        <Grid>
+                                            <TextBox x:Name="RightPaneAddressBox"
+                                                     Text="{Binding RightPaneAddressText, UpdateSourceTrigger=PropertyChanged}"
+                                                     KeyDown="RightPaneAddressBox_KeyDown"
+                                                     LostKeyboardFocus="RightPaneAddressBox_LostFocus"
+                                                     TextChanged="RightPaneAddressBox_TextChanged"
+                                                     VerticalContentAlignment="Center"
+                                                     Padding="4,1" />
+                                            <Popup x:Name="RightPaneAutoCompletePopup"
+                                                   PlacementTarget="{Binding ElementName=RightPaneAddressBox}"
+                                                   Placement="Bottom"
+                                                   StaysOpen="False"
+                                                   AllowsTransparency="True"
+                                                   Width="{Binding ActualWidth, ElementName=RightPaneAddressBox}">
+                                                <Border BorderBrush="#999999" BorderThickness="1" Background="White"
+                                                        MaxHeight="250">
+                                                    <ListBox x:Name="RightPaneAutoCompleteList"
+                                                             ItemsSource="{Binding RightPaneAddressSuggestions}"
+                                                             MaxHeight="240"
+                                                             PreviewMouseLeftButtonUp="RightPaneAutoComplete_Select" />
+                                                </Border>
+                                            </Popup>
+                                        </Grid>
                                     </DockPanel>
                                 </Grid>
                                 <TextBlock x:Name="RightPaneStatusBlock"

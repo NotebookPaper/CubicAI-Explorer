@@ -80,12 +80,16 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isAddressSuggestionsOpen;
 
+    [ObservableProperty]
+    private bool _isRightPaneSuggestionsOpen;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<string> AddressSuggestions { get; } = [];
+    public ObservableCollection<string> RightPaneAddressSuggestions { get; } = [];
     public TabViewModel? CurrentPaneTab => IsRightPaneActive && IsDualPaneMode ? _rightPaneTab : ActiveTab;
     public FileListViewModel? CurrentPaneFileList => CurrentPaneTab?.FileList;
     public string CurrentPanePath => CurrentPaneTab?.CurrentPath ?? string.Empty;
@@ -911,13 +915,30 @@ public partial class MainViewModel : ObservableObject
 
     // --- Address Autocomplete ---
 
+    private CancellationTokenSource? _suggestionCts;
+    private CancellationTokenSource? _rightPaneSuggestionCts;
+
     public void UpdateAddressSuggestions()
     {
-        AddressSuggestions.Clear();
-        var text = AddressBarText;
+        _suggestionCts?.Cancel();
+        UpdateSuggestionsCore(AddressBarText, AddressSuggestions,
+            open => IsAddressSuggestionsOpen = open, ref _suggestionCts);
+    }
+
+    public void UpdateRightPaneAddressSuggestions()
+    {
+        _rightPaneSuggestionCts?.Cancel();
+        UpdateSuggestionsCore(RightPaneAddressText, RightPaneAddressSuggestions,
+            open => IsRightPaneSuggestionsOpen = open, ref _rightPaneSuggestionCts);
+    }
+
+    private void UpdateSuggestionsCore(string text, ObservableCollection<string> suggestions,
+        Action<bool> setOpen, ref CancellationTokenSource? cts)
+    {
+        suggestions.Clear();
         if (string.IsNullOrWhiteSpace(text))
         {
-            IsAddressSuggestionsOpen = false;
+            setOpen(false);
             return;
         }
 
@@ -928,20 +949,32 @@ public partial class MainViewModel : ObservableObject
             foreach (var drive in DriveInfo.GetDrives())
             {
                 if (drive.IsReady && char.ToUpperInvariant(drive.Name[0]) == driveLetter)
-                    AddressSuggestions.Add(drive.RootDirectory.FullName);
+                    suggestions.Add(drive.RootDirectory.FullName);
             }
             if (text.Length == 1)
             {
-                // Also show other drives that start with nearby letters
                 foreach (var drive in DriveInfo.GetDrives())
                 {
                     if (drive.IsReady && char.ToUpperInvariant(drive.Name[0]) != driveLetter)
-                        AddressSuggestions.Add(drive.RootDirectory.FullName);
+                        suggestions.Add(drive.RootDirectory.FullName);
                 }
             }
-            IsAddressSuggestionsOpen = AddressSuggestions.Count > 0;
+            setOpen(suggestions.Count > 0);
             return;
         }
+
+        // Debounced async lookup for directory suggestions
+        var newCts = new CancellationTokenSource();
+        cts = newCts;
+        LoadSuggestionsAsync(text, suggestions, setOpen, newCts.Token);
+    }
+
+    private async void LoadSuggestionsAsync(string text, ObservableCollection<string> suggestions,
+        Action<bool> setOpen, CancellationToken token)
+    {
+        // Debounce: wait 100ms before querying the filesystem
+        await Task.Delay(100, token).ConfigureAwait(false);
+        if (token.IsCancellationRequested) return;
 
         string parentDir;
         string prefix;
@@ -957,29 +990,34 @@ public partial class MainViewModel : ObservableObject
             prefix = Path.GetFileName(text);
         }
 
-        if (!_fileSystemService.DirectoryExists(parentDir))
-        {
-            IsAddressSuggestionsOpen = false;
-            return;
-        }
-
+        List<string>? results = null;
         try
         {
-            var dirs = _fileSystemService.GetSubDirectories(parentDir)
-                .Where(d => string.IsNullOrEmpty(prefix)
-                    || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .Take(15)
-                .Select(d => d.FullPath);
+            results = await Task.Run(() =>
+            {
+                if (!_fileSystemService.DirectoryExists(parentDir))
+                    return null;
 
-            foreach (var dir in dirs)
-                AddressSuggestions.Add(dir);
-
-            IsAddressSuggestionsOpen = AddressSuggestions.Count > 0;
+                return _fileSystemService.GetSubDirectories(parentDir)
+                    .Where(d => string.IsNullOrEmpty(prefix)
+                        || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .Take(15)
+                    .Select(d => d.FullPath)
+                    .ToList();
+            }, token);
         }
-        catch
+        catch (OperationCanceledException) { return; }
+        catch { /* filesystem error — ignore */ }
+
+        if (token.IsCancellationRequested) return;
+
+        suggestions.Clear();
+        if (results is { Count: > 0 })
         {
-            IsAddressSuggestionsOpen = false;
+            foreach (var dir in results)
+                suggestions.Add(dir);
         }
+        setOpen(suggestions.Count > 0);
     }
 
     // --- Recent Folders Persistence ---
@@ -1014,17 +1052,18 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void SaveRecentFolders()
+    private async void SaveRecentFolders()
     {
         try
         {
-            var path = GetRecentFoldersPath();
-            var dir = Path.GetDirectoryName(path);
+            var filePath = GetRecentFoldersPath();
+            var dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrWhiteSpace(dir))
                 Directory.CreateDirectory(dir);
 
             var payload = RecentFolders.Select(static r => r.FullPath).ToList();
-            File.WriteAllText(path, JsonSerializer.Serialize(payload));
+            var json = JsonSerializer.Serialize(payload);
+            await File.WriteAllTextAsync(filePath, json);
         }
         catch
         {
