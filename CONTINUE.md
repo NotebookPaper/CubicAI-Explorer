@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
 > **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + dual-pane parity/polish is well beyond MVP. Current uncommitted batch builds cleanly and the smoke suite passes.
+> **Status:** Tier 1 complete + dual-pane parity/polish is well beyond MVP. Latest tracked work is committed on `origin/master` and the smoke suite passes.
 
 ---
 
@@ -56,21 +56,13 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
 - Right-pane header single-click activation and inline address editing
 
-## Current Uncommitted Batch
-There is an uncommitted batch across 4 tracked files plus untracked workspace/build artifacts.
+## Current Worktree State
+Tracked files are committed through `02deb1c` on `origin/master`.
 
-Modified files:
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
-Untracked:
+Untracked local-only paths still present:
 - `.claude/`
 - `src/CubicAIExplorer/obj_verify/`
 - `tests/CubicAIExplorer.SmokeTests/obj_verify/`
-
-This batch is verified and is a reasonable commit point.
 
 ## Verification
 Verified on **2026-03-09**:
