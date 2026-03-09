@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CubicAIExplorer.Models;
@@ -33,11 +35,51 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private BookmarkItem? _selectedBookmark;
 
+    // Dual pane
+    [ObservableProperty]
+    private bool _isDualPaneMode;
+
+    [ObservableProperty]
+    private string _rightPaneAddressText = string.Empty;
+
+    private TabViewModel? _rightPaneTab;
+    public TabViewModel? RightPaneTab => _rightPaneTab;
+
+    // Preview
+    [ObservableProperty]
+    private bool _isPreviewVisible;
+
+    [ObservableProperty]
+    private string _previewFileName = string.Empty;
+
+    [ObservableProperty]
+    private string _previewFileInfo = string.Empty;
+
+    [ObservableProperty]
+    private string _previewText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasPreviewText;
+
+    [ObservableProperty]
+    private ImageSource? _previewImageSource;
+
+    [ObservableProperty]
+    private bool _hasPreviewImage;
+
+    // Address autocomplete
+    [ObservableProperty]
+    private bool _isAddressSuggestionsOpen;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
+    public ObservableCollection<string> AddressSuggestions { get; } = [];
+
+    public event EventHandler? DualPaneModeChanged;
+    public event EventHandler? PreviewModeChanged;
 
     private const int MaxRecentFolders = 15;
 
@@ -48,6 +90,50 @@ public partial class MainViewModel : ObservableObject
         LoadBookmarks();
         LoadRecentFolders();
         LoadDrives();
+    }
+
+    private void AttachTab(TabViewModel tab)
+    {
+        tab.PropertyChanged += OnTabPropertyChanged;
+        tab.FileList.PropertyChanged += OnFileListPropertyChanged;
+    }
+
+    private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is not TabViewModel tab)
+            return;
+
+        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == ActiveTab)
+        {
+            AddressBarText = tab.CurrentPath;
+            StatusText = tab.FileList.StatusText;
+            UpdateBreadcrumbs(tab.CurrentPath);
+            AddToRecentFolders(tab.CurrentPath);
+            UpdatePreview();
+        }
+
+        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == _rightPaneTab)
+        {
+            RightPaneAddressText = tab.CurrentPath;
+        }
+    }
+
+    private void OnFileListPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is not FileListViewModel fileList)
+            return;
+
+        if (e.PropertyName == nameof(FileListViewModel.StatusText) && ActiveTab?.FileList == fileList)
+        {
+            StatusText = fileList.StatusText;
+        }
+
+        if ((e.PropertyName == nameof(FileListViewModel.SelectedItem)
+                || e.PropertyName == nameof(FileListViewModel.CurrentPath))
+            && ActiveTab?.FileList == fileList)
+        {
+            UpdatePreview();
+        }
     }
 
     private static string GetBookmarksPath()
@@ -110,24 +196,7 @@ public partial class MainViewModel : ObservableObject
     private void NewTab()
     {
         var tab = new TabViewModel(_fileSystemService, _clipboardService);
-        tab.PropertyChanged += (s, e) =>
-        {
-            if (e.PropertyName == nameof(TabViewModel.CurrentPath) && s == ActiveTab)
-            {
-                var tabVm = (TabViewModel)s!;
-                AddressBarText = tabVm.CurrentPath;
-                StatusText = tabVm.FileList.StatusText;
-                UpdateBreadcrumbs(tabVm.CurrentPath);
-                AddToRecentFolders(tabVm.CurrentPath);
-            }
-        };
-        tab.FileList.PropertyChanged += (s, e) =>
-        {
-            if (e.PropertyName == nameof(FileListViewModel.StatusText) && tab == ActiveTab)
-            {
-                StatusText = tab.FileList.StatusText;
-            }
-        };
+        AttachTab(tab);
         Tabs.Add(tab);
         ActiveTab = tab;
 
@@ -203,6 +272,7 @@ public partial class MainViewModel : ObservableObject
             AddressBarText = value.CurrentPath;
             StatusText = value.FileList.StatusText;
             UpdateBreadcrumbs(value.CurrentPath);
+            UpdatePreview();
         }
     }
 
@@ -349,6 +419,157 @@ public partial class MainViewModel : ObservableObject
     }
 
     private sealed record BookmarkRecord(string Name, string Path);
+
+    // --- Dual Pane ---
+
+    [RelayCommand]
+    private void ToggleDualPane()
+    {
+        IsDualPaneMode = !IsDualPaneMode;
+        if (IsDualPaneMode && _rightPaneTab == null)
+        {
+            _rightPaneTab = new TabViewModel(_fileSystemService, _clipboardService);
+            AttachTab(_rightPaneTab);
+            OnPropertyChanged(nameof(RightPaneTab));
+
+            if (ActiveTab != null && !string.IsNullOrWhiteSpace(ActiveTab.CurrentPath))
+                _rightPaneTab.NavigateTo(ActiveTab.CurrentPath);
+        }
+
+        DualPaneModeChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // --- Preview ---
+
+    [RelayCommand]
+    private void TogglePreview()
+    {
+        IsPreviewVisible = !IsPreviewVisible;
+        PreviewModeChanged?.Invoke(this, EventArgs.Empty);
+        if (IsPreviewVisible)
+            UpdatePreview();
+    }
+
+    public void UpdatePreview()
+    {
+        PreviewFileName = string.Empty;
+        PreviewFileInfo = string.Empty;
+        PreviewText = string.Empty;
+        HasPreviewText = false;
+        PreviewImageSource = null;
+        HasPreviewImage = false;
+
+        if (!IsPreviewVisible) return;
+
+        var item = ActiveTab?.FileList.SelectedItem;
+        if (item == null) return;
+
+        PreviewFileName = item.Name;
+
+        if (item.ItemType == FileSystemItemType.Directory)
+        {
+            PreviewFileInfo = "File folder";
+            return;
+        }
+
+        PreviewFileInfo = $"{item.TypeDescription}\n{item.DisplaySize}";
+
+        var ext = item.Extension.ToLowerInvariant();
+
+        // Image preview
+        if (ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".ico")
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(item.FullPath);
+                bitmap.DecodePixelWidth = 280;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                PreviewImageSource = bitmap;
+                HasPreviewImage = true;
+            }
+            catch
+            {
+                // Image loading can fail for corrupt files.
+            }
+        }
+        // Text preview
+        else if (IsTextExtension(ext))
+        {
+            try
+            {
+                var lines = File.ReadLines(item.FullPath).Take(100);
+                PreviewText = string.Join("\n", lines);
+                HasPreviewText = true;
+            }
+            catch
+            {
+                // File may be locked or inaccessible.
+            }
+        }
+    }
+
+    private static bool IsTextExtension(string ext) => ext is
+        ".txt" or ".cs" or ".xml" or ".json" or ".md" or ".log" or
+        ".ini" or ".cfg" or ".yaml" or ".yml" or ".html" or ".htm" or
+        ".css" or ".js" or ".ts" or ".py" or ".bat" or ".cmd" or ".ps1" or
+        ".xaml" or ".csproj" or ".sln" or ".gitignore" or ".editorconfig" or
+        ".csv" or ".tsv" or ".sql" or ".sh" or ".toml" or ".env" or ".h" or
+        ".c" or ".cpp" or ".java" or ".go" or ".rs" or ".rb" or ".php";
+
+    // --- Address Autocomplete ---
+
+    public void UpdateAddressSuggestions()
+    {
+        AddressSuggestions.Clear();
+        var text = AddressBarText;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            IsAddressSuggestionsOpen = false;
+            return;
+        }
+
+        string parentDir;
+        string prefix;
+
+        if (text.EndsWith('\\') || text.EndsWith('/'))
+        {
+            parentDir = text;
+            prefix = string.Empty;
+        }
+        else
+        {
+            parentDir = Path.GetDirectoryName(text) ?? string.Empty;
+            prefix = Path.GetFileName(text);
+        }
+
+        if (!_fileSystemService.DirectoryExists(parentDir))
+        {
+            IsAddressSuggestionsOpen = false;
+            return;
+        }
+
+        try
+        {
+            var dirs = _fileSystemService.GetSubDirectories(parentDir)
+                .Where(d => string.IsNullOrEmpty(prefix)
+                    || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Take(15)
+                .Select(d => d.FullPath);
+
+            foreach (var dir in dirs)
+                AddressSuggestions.Add(dir);
+
+            IsAddressSuggestionsOpen = AddressSuggestions.Count > 0;
+        }
+        catch
+        {
+            IsAddressSuggestionsOpen = false;
+        }
+    }
 
     // --- Recent Folders Persistence ---
 

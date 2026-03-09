@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
-> **Last updated:** 2026-03-08
-> **Status:** Tier 1 complete + 22 post-Tier-1 enhancements. Uncommitted batch ready (visually verified working).
+> **Last updated:** 2026-03-09
+> **Status:** Tier 1 complete + post-Tier-1 enhancements through dual-pane/preview/address-autocomplete MVP. Current uncommitted batch builds and smoke tests pass.
 
 ---
 
@@ -48,23 +48,24 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Open in Explorer from context menu
 - Enter key opens selected item when file list is focused
 - Window size/position persisted to `%AppData%\CubicAIExplorer\window.json`
+- Breadcrumb-style address bar
+- Recent folders panel
+- Recursive search in current folder tree
+- Toolbar vector icons replacing Unicode toolbar glyphs
+- Address bar autocomplete suggestions
+- Dual-pane mode (MVP)
+- Preview panel for text and common image files
 
 ## Uncommitted Changes
-There is a large batch of uncommitted work across 7 modified files + 2 new files.
-These changes build cleanly (0 errors, 0 warnings), all 24 smoke tests pass, and the UI has been **visually verified working** by the user.
-**The next session should commit these changes before starting new work.**
+There is an uncommitted batch across 4 modified files plus untracked `.claude/` workspace metadata.
+These changes build cleanly, and the smoke-test suite passes end-to-end.
+**The next session should commit the app/test changes before starting a new feature slice.**
 
 Modified files:
-- `src/CubicAIExplorer/App.xaml` — keyed DataTemplates for view modes, WrapPanel template
-- `src/CubicAIExplorer/App.xaml.cs` — window bounds persistence (save/restore)
-- `src/CubicAIExplorer/MainWindow.xaml` — toolbar buttons, filter bar, tab context menu, tree drop, context menu additions
-- `src/CubicAIExplorer/MainWindow.xaml.cs` — view mode switching, filter, properties, tree drop, tab context menu, sort arrows, Enter/Ctrl+F keys, Open in Explorer
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs` — filter, view mode, properties event, selection size status
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — DuplicateTab, CloseOtherTabs, StatusText sync
-- `tests/CubicAIExplorer.SmokeTests/Program.cs` — 5 new tests (filter, properties, duplicate tab, close others, selection size)
-
-New files:
-- `src/CubicAIExplorer/Views/PropertiesDialog.xaml` + `.cs` — file properties dialog
+- `src/CubicAIExplorer/MainWindow.xaml` — dual-pane layout, preview panel, address autocomplete popup, F6/F7 bindings
+- `src/CubicAIExplorer/MainWindow.xaml.cs` — autocomplete interactions, preview refresh hook, dual-pane/preview column toggles, right-pane drag/drop handlers
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — dual-pane state, preview state, address suggestions
+- `tests/CubicAIExplorer.SmokeTests/Program.cs` — smoke coverage for dual-pane toggle, preview state, address suggestions
 
 ## Recent Commits (latest first)
 - `00c0217` feat: add redo/history controls and classic cubic theming
@@ -77,12 +78,18 @@ New files:
 - `f6e5967` feat: add inline rename and tier1 smoke tests
 
 ## Priority Next Work
-1. Increase visual fidelity to original CubicExplorer:
-   - classic toolbar icon assets (replace Unicode symbols with 16x16 bitmap icons)
-   - pane/tab spacing and border polish
-2. Breadcrumb-style address bar (clickable path segments)
-3. File search across subdirectories (recursive search)
-4. Quick access / recent folders panel
+1. Complete dual-pane parity:
+   - context menu and keyboard command parity in the right pane
+   - active-pane focus model for copy/cut/paste/delete/navigation
+   - sorting, inline rename, and selection-status parity
+2. Expand preview support:
+   - empty/error states
+   - more file-type coverage
+   - avoid loading very large files synchronously
+3. Polish address autocomplete:
+   - richer keyboard navigation
+   - better completion for roots and partial drive paths
+4. Commit the current batch, then choose the next UX polish slice
 
 ## Known Gotchas
 - **View mode bug (fixed):** `ApplyViewMode("Details")` must NOT be called during tab initialization — it replaces the XAML-defined GridView and breaks item rendering. The fix: only call `ApplyViewMode` when the mode is not "Details" (the XAML default). See `HookFileListViewModel` in `MainWindow.xaml.cs`.
@@ -91,6 +98,9 @@ New files:
 - **DataType on keyed DataTemplates:** Don't add `DataType="{x:Type ...}"` to keyed DataTemplates in App.xaml — it can interfere with implicit template resolution.
 
 ## Notes
+- Verified on 2026-03-09:
+  - `dotnet build CubicAIExplorer.sln`
+  - `dotnet run --project tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj`
 - No new NuGet packages unless explicitly approved.
 - Keep all file paths sanitized through `FileSystemService`.
 - Root markdown files (`CLAUDE.md`, `CONTINUE.md`, `IMPLEMENTATION_PLAN.md`) should be updated when status changes.

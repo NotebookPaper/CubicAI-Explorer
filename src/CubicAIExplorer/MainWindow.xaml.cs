@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private FileListViewModel? _boundFileListViewModel;
     private FileSystemItem? _inlineRenameItem;
     private Point _dragStartPoint;
+    private Point _rightPaneDragStartPoint;
+    private bool _suppressAutoComplete;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
 
@@ -65,19 +67,84 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter)
         {
-            ViewModel.NavigateToAddressCommand.Execute(null);
-            SwitchToBreadcrumbMode();
+            if (AddressAutoCompletePopup.IsOpen && AutoCompleteList.SelectedItem is string selected)
+            {
+                AcceptAutoCompleteSuggestion(selected);
+            }
+            else
+            {
+                AddressAutoCompletePopup.IsOpen = false;
+                ViewModel.NavigateToAddressCommand.Execute(null);
+                SwitchToBreadcrumbMode();
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            SwitchToBreadcrumbMode();
+            if (AddressAutoCompletePopup.IsOpen)
+            {
+                AddressAutoCompletePopup.IsOpen = false;
+            }
+            else
+            {
+                SwitchToBreadcrumbMode();
+            }
             e.Handled = true;
+        }
+        else if (e.Key == Key.Down && AddressAutoCompletePopup.IsOpen)
+        {
+            AutoCompleteList.SelectedIndex = Math.Min(
+                AutoCompleteList.SelectedIndex + 1,
+                AutoCompleteList.Items.Count - 1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Up && AddressAutoCompletePopup.IsOpen)
+        {
+            AutoCompleteList.SelectedIndex = Math.Max(AutoCompleteList.SelectedIndex - 1, 0);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab && AddressAutoCompletePopup.IsOpen
+            && AutoCompleteList.SelectedItem is string tabSelected)
+        {
+            AcceptAutoCompleteSuggestion(tabSelected);
+            e.Handled = true;
+        }
+    }
+
+    private void AddressBar_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressAutoComplete) return;
+        ViewModel.UpdateAddressSuggestions();
+        AddressAutoCompletePopup.IsOpen = ViewModel.IsAddressSuggestionsOpen;
+    }
+
+    private void AutoComplete_Select(object sender, MouseButtonEventArgs e)
+    {
+        if (AutoCompleteList.SelectedItem is string path)
+        {
+            AcceptAutoCompleteSuggestion(path);
+        }
+    }
+
+    private void AcceptAutoCompleteSuggestion(string path)
+    {
+        _suppressAutoComplete = true;
+        ViewModel.AddressBarText = path;
+        AddressBar.CaretIndex = path.Length;
+        _suppressAutoComplete = false;
+        AddressAutoCompletePopup.IsOpen = false;
+
+        if (ViewModel.ActiveTab != null)
+        {
+            ViewModel.ActiveTab.NavigateTo(path);
+            SwitchToBreadcrumbMode();
         }
     }
 
     private void AddressBar_LostFocus(object sender, RoutedEventArgs e)
     {
+        if (AddressAutoCompletePopup.IsMouseOver) return;
+        AddressAutoCompletePopup.IsOpen = false;
         SwitchToBreadcrumbMode();
     }
 
@@ -299,6 +366,7 @@ public partial class MainWindow : Window
         }
 
         fileListViewModel.UpdateSelectionStatus();
+        ViewModel.UpdatePreview();
     }
 
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -449,12 +517,16 @@ public partial class MainWindow : Window
         if (_boundViewModel != null)
         {
             _boundViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            _boundViewModel.DualPaneModeChanged -= ViewModel_DualPaneModeChanged;
+            _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
         }
 
         _boundViewModel = e.NewValue as MainViewModel;
         if (_boundViewModel != null)
         {
             _boundViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
+            _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
         }
     }
@@ -701,6 +773,93 @@ public partial class MainWindow : Window
             FileSystemItemType.Drive => targetItem.FullPath,
             _ => null
         };
+    }
+
+    // --- Dual Pane ---
+
+    private void ViewModel_DualPaneModeChanged(object? sender, EventArgs e)
+    {
+        var enabled = _boundViewModel?.IsDualPaneMode == true;
+        DualPaneSplitterCol.Width = enabled ? GridLength.Auto : new GridLength(0);
+        DualPaneCol.Width = enabled ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+    }
+
+    private void ViewModel_PreviewModeChanged(object? sender, EventArgs e)
+    {
+        var enabled = _boundViewModel?.IsPreviewVisible == true;
+        PreviewSplitterCol.Width = enabled ? GridLength.Auto : new GridLength(0);
+        PreviewCol.Width = enabled ? new GridLength(280) : new GridLength(0);
+    }
+
+    private void RightPane_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel.RightPaneTab?.FileList.SelectedItem is { } item)
+        {
+            ViewModel.RightPaneTab.FileList.OpenItemCommand.Execute(item);
+        }
+    }
+
+    private void RightPane_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var fileList = ViewModel.RightPaneTab?.FileList;
+        if (fileList == null) return;
+
+        fileList.SelectedItems.Clear();
+        foreach (var selected in RightPaneListView.SelectedItems.OfType<FileSystemItem>())
+        {
+            fileList.SelectedItems.Add(selected);
+        }
+    }
+
+    private void RightPane_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _rightPaneDragStartPoint = e.GetPosition(RightPaneListView);
+    }
+
+    private void RightPane_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var delta = e.GetPosition(RightPaneListView) - _rightPaneDragStartPoint;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        var fileList = ViewModel.RightPaneTab?.FileList;
+        if (fileList == null) return;
+
+        var paths = fileList.GetSelectedPathsForTransfer();
+        if (paths.Count == 0) return;
+
+        var dropList = new System.Collections.Specialized.StringCollection();
+        dropList.AddRange(paths.ToArray());
+
+        var data = new DataObject();
+        data.SetFileDropList(dropList);
+        data.SetData(InternalDragFormat, true);
+
+        DragDrop.DoDragDrop(RightPaneListView, data, DragDropEffects.Copy | DragDropEffects.Move);
+    }
+
+    private void RightPane_DragEnter(object sender, DragEventArgs e) => UpdateDragEffects(e);
+
+    private void RightPane_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateDragEffects(e);
+        e.Handled = true;
+    }
+
+    private void RightPane_Drop(object sender, DragEventArgs e)
+    {
+        var fileList = ViewModel.RightPaneTab?.FileList;
+        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+        var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
+        if (droppedPaths == null || droppedPaths.Length == 0) return;
+
+        var moveFiles = ShouldMove(e);
+        fileList.ImportDroppedFiles(droppedPaths, fileList.CurrentPath, moveFiles);
+        e.Handled = true;
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject

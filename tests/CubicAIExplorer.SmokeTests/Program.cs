@@ -41,6 +41,10 @@ internal static class Program
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
+            Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
+            Run("preview properties", failures, () => TestPreviewProperties(tempRoot));
+            Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
+            Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
         finally
@@ -636,6 +640,122 @@ internal static class Program
         Assert(!vm.IsSearchVisible, "CloseSearch should hide search bar.");
     }
 
+    private static void TestDualPaneToggle(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "dual_pane");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+
+        var eventCount = 0;
+        vm.DualPaneModeChanged += (_, _) => eventCount++;
+
+        vm.ToggleDualPaneCommand.Execute(null);
+
+        Assert(vm.IsDualPaneMode, "ToggleDualPane should enable dual pane mode.");
+        var rightPaneTab = vm.RightPaneTab;
+        Assert(rightPaneTab != null, "Dual pane mode should create a right pane tab.");
+        Assert(rightPaneTab!.CurrentPath == folder, "Right pane should initialize to the active tab path.");
+        Assert(vm.RightPaneAddressText == folder, "Right pane address text should reflect the right pane path.");
+        Assert(eventCount == 1, "DualPaneModeChanged should fire when enabling dual pane mode.");
+
+        vm.ToggleDualPaneCommand.Execute(null);
+
+        Assert(!vm.IsDualPaneMode, "Second toggle should disable dual pane mode.");
+        Assert(eventCount == 2, "DualPaneModeChanged should fire when disabling dual pane mode.");
+    }
+
+    private static void TestPreviewProperties(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "preview");
+        var textFile = Path.Combine(folder, "preview.txt");
+        File.WriteAllLines(textFile, ["line one", "line two"]);
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+
+        var previewEvents = 0;
+        vm.PreviewModeChanged += (_, _) => previewEvents++;
+
+        var item = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "preview.txt");
+        vm.ActiveTab.FileList.SelectedItem = item;
+        vm.TogglePreviewCommand.Execute(null);
+
+        Assert(vm.IsPreviewVisible, "TogglePreview should enable preview mode.");
+        Assert(previewEvents == 1, "PreviewModeChanged should fire when enabling preview mode.");
+        Assert(vm.PreviewFileName == "preview.txt", "Preview should expose the selected file name.");
+        Assert(vm.PreviewFileInfo.Contains("txt", StringComparison.OrdinalIgnoreCase), "Preview should include file type information.");
+        Assert(vm.HasPreviewText, "Text files should produce text preview content.");
+        Assert(!vm.HasPreviewImage, "Text files should not produce image preview content.");
+        Assert(vm.PreviewText.Contains("line one"), "Preview should include file contents.");
+
+        vm.TogglePreviewCommand.Execute(null);
+
+        Assert(!vm.IsPreviewVisible, "Second toggle should disable preview mode.");
+        Assert(previewEvents == 2, "PreviewModeChanged should fire when disabling preview mode.");
+    }
+
+    private static void TestAddressSuggestions(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "autocomplete");
+        var alpha = CreateCleanSubdir(folder, "alpha");
+        CreateCleanSubdir(folder, "beta");
+
+        var vm = new MainViewModel(fs, clipboard)
+        {
+            AddressBarText = Path.Combine(folder, "al")
+        };
+
+        vm.UpdateAddressSuggestions();
+
+        Assert(vm.IsAddressSuggestionsOpen, "Matching folders should open address suggestions.");
+        Assert(vm.AddressSuggestions.Count == 1, "Suggestions should be filtered by the typed prefix.");
+        Assert(vm.AddressSuggestions[0] == alpha, "Suggestions should contain the matching folder path.");
+
+        vm.AddressBarText = Path.Combine(folder, "zzz");
+        vm.UpdateAddressSuggestions();
+
+        Assert(!vm.IsAddressSuggestionsOpen, "Non-matching prefixes should close address suggestions.");
+        Assert(vm.AddressSuggestions.Count == 0, "Non-matching prefixes should clear suggestions.");
+    }
+
+    private static void TestPreviewRefreshOnTabSwitch(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder1 = CreateCleanSubdir(root, "preview_tab_1");
+        var folder2 = CreateCleanSubdir(root, "preview_tab_2");
+        File.WriteAllText(Path.Combine(folder1, "one.txt"), "from first tab");
+        File.WriteAllText(Path.Combine(folder2, "two.txt"), "from second tab");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder1);
+        var firstTab = vm.ActiveTab!;
+        firstTab.FileList.SelectedItem = firstTab.FileList.Items.Single(i => i.Name == "one.txt");
+
+        vm.TogglePreviewCommand.Execute(null);
+        Assert(vm.PreviewFileName == "one.txt", "Preview should reflect the first tab selection.");
+
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder2);
+        var secondTab = vm.ActiveTab!;
+        secondTab.FileList.SelectedItem = secondTab.FileList.Items.Single(i => i.Name == "two.txt");
+
+        Assert(vm.PreviewFileName == "two.txt", "Preview should refresh when the active tab changes.");
+
+        vm.ActiveTab = firstTab;
+        Assert(vm.PreviewFileName == "one.txt", "Preview should refresh when switching back to another tab.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -676,6 +796,8 @@ internal static class Program
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
+        Assert(main.Contains("ToggleDualPaneCommand"), "Dual pane menu should invoke the dual pane command.");
+        Assert(main.Contains("TogglePreviewCommand"), "Preview menu should invoke the preview command.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");
         Assert(!main.Contains("&#x25C0;"), "Unicode arrow symbols should be replaced with vector icons.");

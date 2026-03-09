@@ -32,6 +32,8 @@
         <KeyBinding Key="Back" Command="{Binding NavigateUpCommand}" />
         <KeyBinding Key="Return" Modifiers="Alt" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
         <KeyBinding Key="E" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
+        <KeyBinding Key="F6" Command="{Binding ToggleDualPaneCommand}" />
+        <KeyBinding Key="F7" Command="{Binding TogglePreviewCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -56,6 +58,13 @@
                 <Separator />
                 <MenuItem Header="_Search in Folder..." InputGestureText="Ctrl+E"
                           Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
+                <Separator />
+                <MenuItem Header="Dual _Pane" InputGestureText="F6" IsCheckable="True"
+                          IsChecked="{Binding IsDualPaneMode}"
+                          Command="{Binding ToggleDualPaneCommand}" />
+                <MenuItem Header="_Preview Panel" InputGestureText="F7" IsCheckable="True"
+                          IsChecked="{Binding IsPreviewVisible}"
+                          Command="{Binding TogglePreviewCommand}" />
                 <Separator />
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
                           IsChecked="{Binding ActiveTab.FileList.ShowHiddenFiles}" />
@@ -161,11 +170,28 @@
                             Click="AddressBarGo_Click">
                         <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
                     </Button>
-                    <TextBox x:Name="AddressBar"
-                             Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
-                             KeyDown="AddressBar_KeyDown"
-                             LostKeyboardFocus="AddressBar_LostFocus"
-                             VerticalContentAlignment="Center" Padding="4,2" />
+                    <Grid>
+                        <TextBox x:Name="AddressBar"
+                                 Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
+                                 KeyDown="AddressBar_KeyDown"
+                                 LostKeyboardFocus="AddressBar_LostFocus"
+                                 TextChanged="AddressBar_TextChanged"
+                                 VerticalContentAlignment="Center" Padding="4,2" />
+                        <Popup x:Name="AddressAutoCompletePopup"
+                               PlacementTarget="{Binding ElementName=AddressBar}"
+                               Placement="Bottom"
+                               StaysOpen="False"
+                               AllowsTransparency="True"
+                               Width="{Binding ActualWidth, ElementName=AddressBar}">
+                            <Border BorderBrush="#999999" BorderThickness="1" Background="White"
+                                    MaxHeight="250">
+                                <ListBox x:Name="AutoCompleteList"
+                                         ItemsSource="{Binding AddressSuggestions}"
+                                         MaxHeight="240"
+                                         PreviewMouseLeftButtonUp="AutoComplete_Select" />
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </DockPanel>
             </Grid>
         </Border>
@@ -354,67 +380,158 @@
                     </DockPanel>
                 </Border>
 
-                <ListView x:Name="FileListView"
-                          Grid.Row="3"
-                          ItemsSource="{Binding ActiveTab.FileList.Items}"
-                          SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
-                          AllowDrop="True"
-                          SelectionMode="Extended"
-                          VirtualizingStackPanel.IsVirtualizing="True"
-                          VirtualizingStackPanel.VirtualizationMode="Recycling"
-                          SelectionChanged="FileList_SelectionChanged"
-                          PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
-                          MouseMove="FileList_MouseMove"
-                          DragEnter="FileList_DragEnter"
-                          DragOver="FileList_DragOver"
-                          Drop="FileList_Drop"
-                          MouseDoubleClick="FileList_MouseDoubleClick"
-                          ContextMenuOpening="FileList_ContextMenuOpening"
-                          GridViewColumnHeader.Click="FileListHeader_Click">
-                    <ListView.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
-                            <Separator x:Name="ItemSeparator1" />
-                            <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
-                            <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
-                            <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
-                            <Separator x:Name="ItemSeparator2" />
-                            <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
-                            <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
-                            <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
-                            <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
-                            <Separator x:Name="PropertiesSeparator" />
-                            <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
-                            <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
-                        </ContextMenu>
-                    </ListView.ContextMenu>
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Name" Width="350"
-                                            CellTemplate="{StaticResource DetailsNameCellTemplate}" />
-                            <GridViewColumn Header="Size" Width="100"
-                                            DisplayMemberBinding="{Binding DisplaySize}" />
-                            <GridViewColumn Header="Type" Width="120"
-                                            DisplayMemberBinding="{Binding TypeDescription}" />
-                            <GridViewColumn Header="Date Modified" Width="160"
-                                            DisplayMemberBinding="{Binding DateModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                <!-- Main file area: Left pane | Splitter | Right pane | Splitter | Preview -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="DualPaneSplitterCol" Width="0" />
+                        <ColumnDefinition x:Name="DualPaneCol" Width="0" />
+                        <ColumnDefinition x:Name="PreviewSplitterCol" Width="0" />
+                        <ColumnDefinition x:Name="PreviewCol" Width="0" />
+                    </Grid.ColumnDefinitions>
 
-                <Popup x:Name="InlineRenamePopup"
-                       Grid.Row="3"
-                       PlacementTarget="{Binding ElementName=FileListView}"
-                       Placement="Relative"
-                       StaysOpen="False"
-                       AllowsTransparency="True">
-                    <Border BorderBrush="#999999" BorderThickness="1" Background="White" Padding="1">
-                        <TextBox x:Name="InlineRenameTextBox"
-                                 MinWidth="220"
-                                 KeyDown="InlineRenameTextBox_KeyDown"
-                                 LostKeyboardFocus="InlineRenameTextBox_LostKeyboardFocus" />
+                    <!-- Left Pane (main file list) -->
+                    <ListView x:Name="FileListView"
+                              Grid.Column="0"
+                              ItemsSource="{Binding ActiveTab.FileList.Items}"
+                              SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
+                              AllowDrop="True"
+                              SelectionMode="Extended"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              SelectionChanged="FileList_SelectionChanged"
+                              PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
+                              MouseMove="FileList_MouseMove"
+                              DragEnter="FileList_DragEnter"
+                              DragOver="FileList_DragOver"
+                              Drop="FileList_Drop"
+                              MouseDoubleClick="FileList_MouseDoubleClick"
+                              ContextMenuOpening="FileList_ContextMenuOpening"
+                              GridViewColumnHeader.Click="FileListHeader_Click">
+                        <ListView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
+                                <Separator x:Name="ItemSeparator1" />
+                                <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
+                                <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
+                                <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
+                                <Separator x:Name="ItemSeparator2" />
+                                <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
+                                <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
+                                <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
+                                <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
+                                <Separator x:Name="PropertiesSeparator" />
+                                <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
+                                <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
+                            </ContextMenu>
+                        </ListView.ContextMenu>
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Name" Width="350"
+                                                CellTemplate="{StaticResource DetailsNameCellTemplate}" />
+                                <GridViewColumn Header="Size" Width="100"
+                                                DisplayMemberBinding="{Binding DisplaySize}" />
+                                <GridViewColumn Header="Type" Width="120"
+                                                DisplayMemberBinding="{Binding TypeDescription}" />
+                                <GridViewColumn Header="Date Modified" Width="160"
+                                                DisplayMemberBinding="{Binding DateModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+
+                    <Popup x:Name="InlineRenamePopup"
+                           Grid.Column="0"
+                           PlacementTarget="{Binding ElementName=FileListView}"
+                           Placement="Relative"
+                           StaysOpen="False"
+                           AllowsTransparency="True">
+                        <Border BorderBrush="#999999" BorderThickness="1" Background="White" Padding="1">
+                            <TextBox x:Name="InlineRenameTextBox"
+                                     MinWidth="220"
+                                     KeyDown="InlineRenameTextBox_KeyDown"
+                                     LostKeyboardFocus="InlineRenameTextBox_LostKeyboardFocus" />
+                        </Border>
+                    </Popup>
+
+                    <!-- Dual Pane Splitter -->
+                    <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center"
+                                  VerticalAlignment="Stretch" Background="#96B3D8" />
+
+                    <!-- Right Pane (dual pane mode) -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="{StaticResource ClassicHeaderBrush}"
+                                BorderBrush="{StaticResource ClassicPaneBorderBrush}" BorderThickness="0,0,0,1"
+                                Padding="4,2">
+                            <TextBlock Text="{Binding RightPaneAddressText}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <ListView x:Name="RightPaneListView"
+                                  Grid.Row="1"
+                                  ItemsSource="{Binding RightPaneTab.FileList.Items}"
+                                  SelectedItem="{Binding RightPaneTab.FileList.SelectedItem}"
+                                  AllowDrop="True"
+                                  SelectionMode="Extended"
+                                  VirtualizingStackPanel.IsVirtualizing="True"
+                                  VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                  SelectionChanged="RightPane_SelectionChanged"
+                                  PreviewMouseLeftButtonDown="RightPane_PreviewMouseLeftButtonDown"
+                                  MouseMove="RightPane_MouseMove"
+                                  DragEnter="RightPane_DragEnter"
+                                  DragOver="RightPane_DragOver"
+                                  Drop="RightPane_Drop"
+                                  MouseDoubleClick="RightPane_MouseDoubleClick">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Name" Width="250"
+                                                    CellTemplate="{StaticResource DetailsNameCellTemplate}" />
+                                    <GridViewColumn Header="Size" Width="80"
+                                                    DisplayMemberBinding="{Binding DisplaySize}" />
+                                    <GridViewColumn Header="Type" Width="100"
+                                                    DisplayMemberBinding="{Binding TypeDescription}" />
+                                    <GridViewColumn Header="Date Modified" Width="140"
+                                                    DisplayMemberBinding="{Binding DateModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Grid>
+
+                    <!-- Preview Splitter -->
+                    <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Center"
+                                  VerticalAlignment="Stretch" Background="#96B3D8" />
+
+                    <!-- Preview Panel -->
+                    <Border Grid.Column="4" Style="{StaticResource ClassicPaneSurfaceStyle}" Margin="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding PreviewFileName}"
+                                       FontWeight="SemiBold" Padding="8,6,8,2"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding PreviewFileInfo}"
+                                       Foreground="Gray" Padding="8,0,8,4" FontSize="10" />
+                            <Border DockPanel.Dock="Top" BorderBrush="{StaticResource ClassicPaneBorderBrush}"
+                                    BorderThickness="0,1,0,0" Margin="0,0,0,0" />
+                            <!-- Image preview -->
+                            <Image DockPanel.Dock="Top"
+                                   Source="{Binding PreviewImageSource}"
+                                   Stretch="Uniform" MaxHeight="400"
+                                   Margin="4" RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding HasPreviewImage, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- Text preview -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          Visibility="{Binding HasPreviewText, Converter={StaticResource BoolToVisibility}}">
+                                <TextBox Text="{Binding PreviewText, Mode=OneWay}"
+                                         IsReadOnly="True" TextWrapping="Wrap"
+                                         FontFamily="Consolas" FontSize="11"
+                                         BorderThickness="0" Background="Transparent"
+                                         Padding="8,4" />
+                            </ScrollViewer>
+                        </DockPanel>
                     </Border>
-                </Popup>
+                </Grid>
             </Grid>
         </Grid>
     </DockPanel>

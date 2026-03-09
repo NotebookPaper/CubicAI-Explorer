@@ -105,6 +105,7 @@ The app has a working UI with:
 - File list with sorting by name/size/date/type
 - Back/forward/up navigation
 - Address bar navigation
+- Breadcrumb-style address bar
 - File operations (copy, move, delete, permanent delete, rename, new folder)
 - Clipboard interop with Windows Explorer (`CF_HDROP` + `Preferred DropEffect`)
 - Context menu and keyboard shortcuts
@@ -126,6 +127,11 @@ The app has a working UI with:
 - Open in Explorer from context menu
 - Enter key opens selected item
 - Window size/position persisted across sessions
+- Quick access recent folders
+- Recursive search within folders
+- Address bar autocomplete suggestions
+- Dual-pane mode (MVP)
+- Preview panel for text and common image files
 
 ## Reference Material
 

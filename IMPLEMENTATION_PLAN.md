@@ -1,6 +1,6 @@
 # CubicAI Explorer — Implementation Plan
 
-> **Updated:** 2026-03-08  
+> **Updated:** 2026-03-09  
 > **Tier 1 status:** Complete
 
 ## Context
@@ -138,21 +138,33 @@ Tier 1 was fully implemented and then extended. This document now tracks:
 20. Enter key opens selected item
 21. Window size/position persistence (`%AppData%\CubicAIExplorer\window.json`)
 22. Expanded smoke tests (24 total: filter, properties, duplicate tab, close others, size status)
+23. Breadcrumb-style address bar
+24. Recent folders panel
+25. Recursive search across subdirectories
+26. Toolbar vector icon assets replacing Unicode glyphs
+27. Address bar autocomplete suggestions
+28. Dual-pane mode (MVP)
+29. Preview panel for text and common image files
+30. Expanded smoke tests (27+ total: dual pane, preview state, address suggestions)
 
 ## Next Planned Features
 
-1. **Classic iconography fidelity**
-- Replace toolbar Unicode symbols with classic 16x16 bitmap icon assets
-- Match original toolbar spacing and pressed states
+1. **Dual-pane parity**
+- Add context menu and keyboard command parity in the right pane
+- Establish an active-pane model for navigation and file operations
+- Bring sorting, rename, and status reporting to the right pane
 
-2. **Breadcrumb address bar**
-- Clickable path segments for quick parent navigation
+2. **Preview polish**
+- Add explicit empty/error states
+- Expand supported previewable formats
+- Avoid synchronous loading of very large files
 
-3. **Recursive file search**
-- Search across subdirectories with results panel
+3. **Address autocomplete polish**
+- Improve root and partial-drive completion
+- Tighten keyboard navigation and selection behavior
 
-4. **Quick access / recent folders**
-- Track recently visited directories for quick navigation
+4. **Visual polish**
+- Refine pane spacing, borders, and splitter behavior to better match CubicExplorer
 
 ## NuGet Packages
 None added. All APIs are in .NET 8 + WPF SDK.
