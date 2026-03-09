@@ -572,12 +572,14 @@ public partial class MainWindow : Window
 
     private void ClearFilter_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel.CurrentFilterText = string.Empty;
+        if (ViewModel.CurrentPaneFileList != null)
+            ViewModel.CurrentPaneFileList.FilterText = string.Empty;
     }
 
     private void SetViewMode(string mode)
     {
-        ViewModel.CurrentViewMode = mode;
+        if (ViewModel.CurrentPaneFileList != null)
+            ViewModel.CurrentPaneFileList.ViewMode = mode;
     }
 
     private void FolderTree_DragOver(object sender, DragEventArgs e)

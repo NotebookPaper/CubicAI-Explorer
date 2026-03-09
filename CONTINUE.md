@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
 > **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + dual-pane, preview, autocomplete, and preferences UI all implemented. Uncommitted work-in-progress: settings/preferences feature is **code-complete, builds, and now has smoke coverage** but not yet committed. Smoke suite passes.
+> **Status:** Tier 1 complete + dual-pane, preview, autocomplete, and preferences UI all implemented. Settings/preferences feature is committed with smoke coverage. New uncommitted follow-up: active-pane proxy cleanup (direct `CurrentPaneFileList.*` bindings).
 
 ---
 
@@ -62,16 +62,15 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 
 ## Current Worktree State
 
-**Committed on `origin/master`:** `8ad16c9` (async autocomplete + right-pane autocomplete).
+**Committed locally:**
+- `8ad16c9` — async preview, drive-root autocomplete, debounced suggestions, right-pane autocomplete
+- `6445720` — preferences/settings persistence + smoke coverage
 
-**Uncommitted but building + tests passing — settings/preferences feature:**
-- `src/CubicAIExplorer/Models/UserSettings.cs` — NEW: settings model (DefaultViewMode, ShowHiddenFiles, StartupFolder, StartInDualPane, StartWithPreview)
-- `src/CubicAIExplorer/Services/SettingsService.cs` — NEW: load/save `%AppData%\CubicAIExplorer\settings.json` (supports `CUBICAI_SETTINGS_PATH` override for tests)
-- `src/CubicAIExplorer/PreferencesWindow.xaml` + `.cs` — NEW: Preferences dialog with folder browser
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — constructor accepts `SettingsService`/`UserSettings`, `NewTab()` applies settings (view mode, hidden files, startup folder), `OpenPreferencesCommand`, `ApplyAndSaveSettings()`, `CurrentSettings` property
-- `src/CubicAIExplorer/App.xaml.cs` — loads settings via `SettingsService`, passes to `MainViewModel`, applies `StartInDualPane`/`StartWithPreview` on startup
-- `src/CubicAIExplorer/MainWindow.xaml` — Tools > Preferences menu item
-- `src/CubicAIExplorer/MainWindow.xaml.cs` — `ViewModel_OpenPreferencesRequested` handler opens dialog
+**Uncommitted but building + tests passing — proxy cleanup follow-up:**
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — removed `Current*` proxy properties that forwarded to `CurrentPaneFileList`, plus related manual `OnPropertyChanged` forwarding
+- `src/CubicAIExplorer/MainWindow.xaml` — bindings switched to direct `CurrentPaneFileList.*` for filter/search/show-hidden/search-results state
+- `src/CubicAIExplorer/MainWindow.xaml.cs` — filter clear and view mode set now target `CurrentPaneFileList` directly
+- `tests/CubicAIExplorer.SmokeTests/Program.cs` — updated active-pane routing and XAML wiring assertions for direct bindings
 
 Untracked local-only paths:
 - `.claude/`
@@ -84,12 +83,10 @@ Verified on **2026-03-09**:
 - Smoke tests: 41/41 pass (includes settings defaults + round-trip + `NewTab` settings application)
 
 ## Priority Next Work
-1. **Commit the settings/preferences feature** once user is ready.
-2. **Consider eliminating proxy properties.**
-   MainViewModel has ~15 `Current*` proxy properties that forward to `CurrentPaneFileList`. XAML could bind directly to `CurrentPaneFileList.FilterText` etc., eliminating manual `OnPropertyChanged` propagation.
-3. **Expand preview to more file types.**
+1. **Commit proxy cleanup follow-up** (direct `CurrentPaneFileList.*` bindings and removed `Current*` forwarding properties).
+2. **Expand preview to more file types.**
    PDF metadata, audio/video info would add value but may require new NuGet packages.
-4. **Keyboard accessibility polish.**
+3. **Keyboard accessibility polish.**
    Tab order, focus management, and keyboard-only navigation through all panels.
 
 ## Known Gotchas

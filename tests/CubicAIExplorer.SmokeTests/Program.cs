@@ -775,24 +775,24 @@ internal static class Program
         vm.RightPaneTab!.NavigateTo(rightFolder);
         vm.ActivateRightPane();
 
-        vm.CurrentFilterText = "alpha";
+        vm.CurrentPaneFileList!.FilterText = "alpha";
         Assert(vm.RightPaneTab.FileList.FilterText == "alpha", "Filter text should target the active right pane.");
         Assert(vm.RightPaneTab.FileList.Items.Count == 1, "Right pane filter should narrow right pane items.");
 
-        vm.CurrentViewMode = "Tiles";
+        vm.CurrentPaneFileList.ViewMode = "Tiles";
         Assert(vm.RightPaneTab.FileList.ViewMode == "Tiles", "View mode should target the active right pane.");
 
         vm.SearchInFolderCommand.Execute(null);
         Assert(vm.RightPaneTab.FileList.IsSearchVisible, "Search should open for the active right pane.");
 
-        vm.CurrentSearchText = "search";
+        vm.CurrentPaneFileList.SearchText = "search";
         vm.ExecuteSearchCommand.Execute(null);
         Assert(vm.RightPaneTab.FileList.IsShowingSearchResults, "Search results should be shown in the active right pane.");
         Assert(vm.RightPaneTab.FileList.Items.Any(i => i.Name == "search-hit"), "Right pane search should search the right pane tree.");
 
         vm.ClearSearchResultsCommand.Execute(null);
         Assert(!vm.RightPaneTab.FileList.IsShowingSearchResults, "Clearing search should target the active right pane.");
-        Assert(vm.CurrentViewMode == "Tiles", "Current view mode should reflect the active pane.");
+        Assert(vm.CurrentPaneFileList.ViewMode == "Tiles", "Current view mode should reflect the active pane.");
     }
 
     private static void TestActivePaneStatusLabels(string root)
@@ -1114,9 +1114,9 @@ internal static class Program
         Assert(main.Contains("Command=\"{Binding RenameCommand}\""), "Rename bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding SelectAllCommand}\""), "Select-all bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
-        Assert(main.Contains("CurrentFilterText"), "Filter bar should bind to the current active pane.");
-        Assert(main.Contains("CurrentSearchText"), "Search bar should bind to the current active pane.");
-        Assert(main.Contains("CurrentIsSearchVisible"), "Search visibility should bind to the current active pane.");
+        Assert(main.Contains("CurrentPaneFileList.FilterText"), "Filter bar should bind to the current active pane.");
+        Assert(main.Contains("CurrentPaneFileList.SearchText"), "Search bar should bind to the current active pane.");
+        Assert(main.Contains("CurrentPaneFileList.IsSearchVisible"), "Search visibility should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneLabel"), "Status bar should include the current pane label.");
         Assert(main.Contains("RightPaneHeader_MouseLeftButtonDown"), "Right pane header activation should be wired.");
         Assert(main.Contains("RightPaneAddressBox"), "Right pane should expose an inline address editor.");

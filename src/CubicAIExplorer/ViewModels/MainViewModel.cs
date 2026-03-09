@@ -101,45 +101,6 @@ public partial class MainViewModel : ObservableObject
     public string RightPaneStatusText => _rightPaneTab?.FileList.StatusText ?? "Ready";
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
-    public string CurrentFilterText
-    {
-        get => CurrentPaneFileList?.FilterText ?? string.Empty;
-        set
-        {
-            if (CurrentPaneFileList != null && CurrentPaneFileList.FilterText != value)
-                CurrentPaneFileList.FilterText = value;
-        }
-    }
-    public bool CurrentIsSearchVisible => CurrentPaneFileList?.IsSearchVisible == true;
-    public string CurrentSearchText
-    {
-        get => CurrentPaneFileList?.SearchText ?? string.Empty;
-        set
-        {
-            if (CurrentPaneFileList != null && CurrentPaneFileList.SearchText != value)
-                CurrentPaneFileList.SearchText = value;
-        }
-    }
-    public bool CurrentIsShowingSearchResults => CurrentPaneFileList?.IsShowingSearchResults == true;
-    public string CurrentSearchResultsText => CurrentPaneFileList?.SearchResultsText ?? string.Empty;
-    public string CurrentViewMode
-    {
-        get => CurrentPaneFileList?.ViewMode ?? "Details";
-        set
-        {
-            if (CurrentPaneFileList != null && CurrentPaneFileList.ViewMode != value)
-                CurrentPaneFileList.ViewMode = value;
-        }
-    }
-    public bool CurrentShowHiddenFiles
-    {
-        get => CurrentPaneFileList?.ShowHiddenFiles == true;
-        set
-        {
-            if (CurrentPaneFileList != null && CurrentPaneFileList.ShowHiddenFiles != value)
-                CurrentPaneFileList.ShowHiddenFiles = value;
-        }
-    }
 
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
@@ -229,27 +190,6 @@ public partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(ActiveUndoDescription));
                 OnPropertyChanged(nameof(ActiveRedoDescription));
                 break;
-            case nameof(FileListViewModel.FilterText):
-                OnPropertyChanged(nameof(CurrentFilterText));
-                break;
-            case nameof(FileListViewModel.IsSearchVisible):
-                OnPropertyChanged(nameof(CurrentIsSearchVisible));
-                break;
-            case nameof(FileListViewModel.SearchText):
-                OnPropertyChanged(nameof(CurrentSearchText));
-                break;
-            case nameof(FileListViewModel.IsShowingSearchResults):
-                OnPropertyChanged(nameof(CurrentIsShowingSearchResults));
-                break;
-            case nameof(FileListViewModel.SearchResultsText):
-                OnPropertyChanged(nameof(CurrentSearchResultsText));
-                break;
-            case nameof(FileListViewModel.ViewMode):
-                OnPropertyChanged(nameof(CurrentViewMode));
-                break;
-            case nameof(FileListViewModel.ShowHiddenFiles):
-                OnPropertyChanged(nameof(CurrentShowHiddenFiles));
-                break;
         }
     }
 
@@ -269,13 +209,6 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(RightPaneStatusText));
         OnPropertyChanged(nameof(ActiveUndoDescription));
         OnPropertyChanged(nameof(ActiveRedoDescription));
-        OnPropertyChanged(nameof(CurrentFilterText));
-        OnPropertyChanged(nameof(CurrentIsSearchVisible));
-        OnPropertyChanged(nameof(CurrentSearchText));
-        OnPropertyChanged(nameof(CurrentIsShowingSearchResults));
-        OnPropertyChanged(nameof(CurrentSearchResultsText));
-        OnPropertyChanged(nameof(CurrentViewMode));
-        OnPropertyChanged(nameof(CurrentShowHiddenFiles));
     }
 
     private static string GetAppDataPath(string filename)
