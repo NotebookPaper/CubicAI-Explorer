@@ -31,6 +31,14 @@ public partial class MainWindow : Window
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
     private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
     private static readonly Brush InactivePaneBrush = new SolidColorBrush(Color.FromRgb(0x9F, 0xB7, 0xD6));
+    private static readonly Brush ActiveHeaderGradient = CreateFrozenBrush(
+        new LinearGradientBrush(Color.FromRgb(0xF0, 0xF6, 0xFF), Color.FromRgb(0xCF, 0xE0, 0xF8), 90));
+
+    private static Brush CreateFrozenBrush(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
 
     public MainWindow()
     {
@@ -318,10 +326,7 @@ public partial class MainWindow : Window
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ActivateLeftPane();
-        if (ViewModel.ActiveTab?.FileList.SelectedItem is { } item)
-        {
-            ViewModel.ActiveTab.FileList.OpenItemCommand.Execute(item);
-        }
+        OpenSelectedInPane(ViewModel.ActiveTab?.FileList);
     }
 
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -332,30 +337,7 @@ public partial class MainWindow : Window
 
     private void FileList_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed)
-            return;
-
-        var delta = e.GetPosition(FileListView) - _dragStartPoint;
-        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
-        {
-            return;
-        }
-
-        var fileList = ViewModel.ActiveTab?.FileList;
-        if (fileList == null) return;
-
-        var paths = fileList.GetSelectedPathsForTransfer();
-        if (paths.Count == 0) return;
-
-        var dropList = new System.Collections.Specialized.StringCollection();
-        dropList.AddRange(paths.ToArray());
-
-        var data = new DataObject();
-        data.SetFileDropList(dropList);
-        data.SetData(InternalDragFormat, true);
-
-        DragDrop.DoDragDrop(FileListView, data, DragDropEffects.Copy | DragDropEffects.Move);
+        TryInitiateDrag(e, FileListView, _dragStartPoint, ViewModel.ActiveTab?.FileList);
     }
 
     private void FileList_DragEnter(object sender, DragEventArgs e)
@@ -371,19 +353,7 @@ public partial class MainWindow : Window
 
     private void FileList_Drop(object sender, DragEventArgs e)
     {
-        var fileList = ViewModel.ActiveTab?.FileList;
-        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
-            return;
-
-        var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
-        if (droppedPaths == null || droppedPaths.Length == 0)
-            return;
-
-        var destination = ResolveDropDestination(e.OriginalSource as DependencyObject) ?? fileList.CurrentPath;
-        var moveFiles = ShouldMove(e);
-
-        fileList.ImportDroppedFiles(droppedPaths, destination, moveFiles);
-        e.Handled = true;
+        HandleDrop(e, ViewModel.ActiveTab?.FileList);
     }
 
     private void FileListHeader_Click(object sender, RoutedEventArgs e)
@@ -453,17 +423,7 @@ public partial class MainWindow : Window
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         ViewModel.ActivateLeftPane();
-        var fileListViewModel = ViewModel.ActiveTab?.FileList;
-        if (fileListViewModel == null) return;
-
-        fileListViewModel.SelectedItems.Clear();
-        foreach (var selected in FileListView.SelectedItems.OfType<FileSystemItem>())
-        {
-            fileListViewModel.SelectedItems.Add(selected);
-        }
-
-        fileListViewModel.UpdateSelectionStatus();
-        ViewModel.UpdatePreview();
+        SyncSelection(FileListView, ViewModel.ActiveTab?.FileList);
     }
 
     private void FileList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -474,61 +434,52 @@ public partial class MainWindow : Window
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateLeftPane();
-        var fileListViewModel = ViewModel.ActiveTab?.FileList;
-        if (fileListViewModel == null) return;
-
-        var originalSource = e.OriginalSource as DependencyObject;
-        var clickedItem = FindVisualParent<ListViewItem>(originalSource);
-        var hasSelection = clickedItem != null
-            && (fileListViewModel.SelectedItems.Count > 0 || fileListViewModel.SelectedItem != null);
-
-        var itemVisibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
-        var emptyVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
-
-        OpenMenuItem.Visibility = itemVisibility;
-        ItemSeparator1.Visibility = itemVisibility;
-        CutMenuItem.Visibility = itemVisibility;
-        CopyMenuItem.Visibility = itemVisibility;
-        ItemSeparator2.Visibility = itemVisibility;
-        DeleteMenuItem.Visibility = itemVisibility;
-        RenameMenuItem.Visibility = itemVisibility;
-
-        NewFolderMenuItem.Visibility = emptyVisibility;
-        RefreshMenuItem.Visibility = emptyVisibility;
-        PasteMenuItem.Visibility = Visibility.Visible;
-        PropertiesSeparator.Visibility = Visibility.Visible;
-        PropertiesMenuItem.Visibility = itemVisibility;
-        OpenInExplorerMenuItem.Visibility = Visibility.Visible;
+        ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
+            OpenMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
+            DeleteMenuItem, RenameMenuItem, NewFolderMenuItem, RefreshMenuItem,
+            PasteMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
     }
 
     private void RightPane_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateRightPane();
-        var fileListViewModel = ViewModel.RightPaneTab?.FileList;
-        if (fileListViewModel == null) return;
+        ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
+            RightOpenMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
+            RightDeleteMenuItem, RightRenameMenuItem, RightNewFolderMenuItem, RightRefreshMenuItem,
+            RightPasteMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
+    }
+
+    private void ConfigureContextMenu(
+        ContextMenuEventArgs e, FileListViewModel? fileList,
+        FrameworkElement open, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
+        FrameworkElement sep2, FrameworkElement delete, FrameworkElement rename,
+        FrameworkElement newFolder, FrameworkElement refresh, FrameworkElement paste,
+        FrameworkElement propsSep, FrameworkElement props, FrameworkElement openInExplorer)
+    {
+        if (fileList == null) return;
 
         var originalSource = e.OriginalSource as DependencyObject;
         var clickedItem = FindVisualParent<ListViewItem>(originalSource);
         var hasSelection = clickedItem != null
-            && (fileListViewModel.SelectedItems.Count > 0 || fileListViewModel.SelectedItem != null);
+            && (fileList.SelectedItems.Count > 0 || fileList.SelectedItem != null);
 
         var itemVisibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         var emptyVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
 
-        RightOpenMenuItem.Visibility = itemVisibility;
-        RightItemSeparator1.Visibility = itemVisibility;
-        RightCutMenuItem.Visibility = itemVisibility;
-        RightCopyMenuItem.Visibility = itemVisibility;
-        RightItemSeparator2.Visibility = itemVisibility;
-        RightDeleteMenuItem.Visibility = itemVisibility;
-        RightRenameMenuItem.Visibility = itemVisibility;
+        open.Visibility = itemVisibility;
+        sep1.Visibility = itemVisibility;
+        cut.Visibility = itemVisibility;
+        copy.Visibility = itemVisibility;
+        sep2.Visibility = itemVisibility;
+        delete.Visibility = itemVisibility;
+        rename.Visibility = itemVisibility;
 
-        RightNewFolderMenuItem.Visibility = emptyVisibility;
-        RightRefreshMenuItem.Visibility = emptyVisibility;
-        RightPasteMenuItem.Visibility = Visibility.Visible;
-        RightPropertiesSeparator.Visibility = Visibility.Visible;
-        RightPropertiesMenuItem.Visibility = itemVisibility;
-        RightOpenInExplorerMenuItem.Visibility = Visibility.Visible;
+        newFolder.Visibility = emptyVisibility;
+        refresh.Visibility = emptyVisibility;
+        paste.Visibility = Visibility.Visible;
+        propsSep.Visibility = Visibility.Visible;
+        props.Visibility = itemVisibility;
+        openInExplorer.Visibility = Visibility.Visible;
     }
 
     private void ViewMode_Details_Click(object sender, RoutedEventArgs e) => SetViewMode("Details");
@@ -681,51 +632,36 @@ public partial class MainWindow : Window
     }
 
     private void HookFileListViewModel(FileListViewModel? fileListViewModel)
-    {
-        if (_boundFileListViewModel != null)
-        {
-            _boundFileListViewModel.SelectAllRequested -= FileListViewModel_SelectAllRequested;
-            _boundFileListViewModel.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
-            _boundFileListViewModel.ViewModeChanged -= FileListViewModel_ViewModeChanged;
-            _boundFileListViewModel.PropertiesRequested -= FileListViewModel_PropertiesRequested;
-            _boundFileListViewModel.SearchPanelOpened -= FileListViewModel_SearchPanelOpened;
-        }
-
-        _boundFileListViewModel = fileListViewModel;
-        if (_boundFileListViewModel != null)
-        {
-            _boundFileListViewModel.SelectAllRequested += FileListViewModel_SelectAllRequested;
-            _boundFileListViewModel.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
-            _boundFileListViewModel.ViewModeChanged += FileListViewModel_ViewModeChanged;
-            _boundFileListViewModel.PropertiesRequested += FileListViewModel_PropertiesRequested;
-            _boundFileListViewModel.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
-            // Only apply non-default view modes; Details is already set in XAML
-            if (_boundFileListViewModel.ViewMode != "Details")
-                ApplyViewMode(FileListView, _boundFileListViewModel.ViewMode);
-        }
-    }
+        => HookPaneFileListViewModel(ref _boundFileListViewModel, fileListViewModel, FileListView);
 
     private void HookRightFileListViewModel(FileListViewModel? fileListViewModel)
+        => HookPaneFileListViewModel(ref _boundRightFileListViewModel, fileListViewModel, RightPaneListView);
+
+    private void HookPaneFileListViewModel(
+        ref FileListViewModel? boundField,
+        FileListViewModel? newViewModel,
+        ListView targetListView)
     {
-        if (_boundRightFileListViewModel != null)
+        if (boundField != null)
         {
-            _boundRightFileListViewModel.SelectAllRequested -= FileListViewModel_SelectAllRequested;
-            _boundRightFileListViewModel.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
-            _boundRightFileListViewModel.ViewModeChanged -= FileListViewModel_ViewModeChanged;
-            _boundRightFileListViewModel.PropertiesRequested -= FileListViewModel_PropertiesRequested;
-            _boundRightFileListViewModel.SearchPanelOpened -= FileListViewModel_SearchPanelOpened;
+            boundField.SelectAllRequested -= FileListViewModel_SelectAllRequested;
+            boundField.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
+            boundField.ViewModeChanged -= FileListViewModel_ViewModeChanged;
+            boundField.PropertiesRequested -= FileListViewModel_PropertiesRequested;
+            boundField.SearchPanelOpened -= FileListViewModel_SearchPanelOpened;
         }
 
-        _boundRightFileListViewModel = fileListViewModel;
-        if (_boundRightFileListViewModel != null)
+        boundField = newViewModel;
+        if (boundField != null)
         {
-            _boundRightFileListViewModel.SelectAllRequested += FileListViewModel_SelectAllRequested;
-            _boundRightFileListViewModel.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
-            _boundRightFileListViewModel.ViewModeChanged += FileListViewModel_ViewModeChanged;
-            _boundRightFileListViewModel.PropertiesRequested += FileListViewModel_PropertiesRequested;
-            _boundRightFileListViewModel.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
-            if (_boundRightFileListViewModel.ViewMode != "Details")
-                ApplyViewMode(RightPaneListView, _boundRightFileListViewModel.ViewMode);
+            boundField.SelectAllRequested += FileListViewModel_SelectAllRequested;
+            boundField.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
+            boundField.ViewModeChanged += FileListViewModel_ViewModeChanged;
+            boundField.PropertiesRequested += FileListViewModel_PropertiesRequested;
+            boundField.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
+            // Only apply non-default view modes; Details is already set in XAML
+            if (boundField.ViewMode != "Details")
+                ApplyViewMode(targetListView, boundField.ViewMode);
         }
     }
 
@@ -986,26 +922,32 @@ public partial class MainWindow : Window
     private void RightPane_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ActivateRightPane();
-        if (ViewModel.RightPaneTab?.FileList.SelectedItem is { } item)
-        {
-            ViewModel.RightPaneTab.FileList.OpenItemCommand.Execute(item);
-        }
+        OpenSelectedInPane(ViewModel.RightPaneTab?.FileList);
+    }
+
+    private static void OpenSelectedInPane(FileListViewModel? fileList)
+    {
+        if (fileList?.SelectedItem is { } item)
+            fileList.OpenItemCommand.Execute(item);
     }
 
     private void RightPane_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         ViewModel.ActivateRightPane();
-        var fileList = ViewModel.RightPaneTab?.FileList;
+        SyncSelection(RightPaneListView, ViewModel.RightPaneTab?.FileList);
+    }
+
+    private void SyncSelection(ListView listView, FileListViewModel? fileList)
+    {
         if (fileList == null) return;
 
         fileList.SelectedItems.Clear();
-        foreach (var selected in RightPaneListView.SelectedItems.OfType<FileSystemItem>())
+        foreach (var selected in listView.SelectedItems.OfType<FileSystemItem>())
         {
             fileList.SelectedItems.Add(selected);
         }
 
         fileList.UpdateSelectionStatus();
-        ViewModel.UpdatePreview();
     }
 
     private void RightPane_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -1021,14 +963,18 @@ public partial class MainWindow : Window
 
     private void RightPane_MouseMove(object sender, MouseEventArgs e)
     {
+        TryInitiateDrag(e, RightPaneListView, _rightPaneDragStartPoint, ViewModel.RightPaneTab?.FileList);
+    }
+
+    private void TryInitiateDrag(MouseEventArgs e, ListView listView, Point dragStart, FileListViewModel? fileList)
+    {
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
-        var delta = e.GetPosition(RightPaneListView) - _rightPaneDragStartPoint;
+        var delta = e.GetPosition(listView) - dragStart;
         if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
             return;
 
-        var fileList = ViewModel.RightPaneTab?.FileList;
         if (fileList == null) return;
 
         var paths = fileList.GetSelectedPathsForTransfer();
@@ -1041,7 +987,7 @@ public partial class MainWindow : Window
         data.SetFileDropList(dropList);
         data.SetData(InternalDragFormat, true);
 
-        DragDrop.DoDragDrop(RightPaneListView, data, DragDropEffects.Copy | DragDropEffects.Move);
+        DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy | DragDropEffects.Move);
     }
 
     private void RightPane_DragEnter(object sender, DragEventArgs e) => UpdateDragEffects(e);
@@ -1054,14 +1000,22 @@ public partial class MainWindow : Window
 
     private void RightPane_Drop(object sender, DragEventArgs e)
     {
-        var fileList = ViewModel.RightPaneTab?.FileList;
-        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        HandleDrop(e, ViewModel.RightPaneTab?.FileList);
+    }
+
+    private void HandleDrop(DragEventArgs e, FileListViewModel? fileList)
+    {
+        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
+            return;
 
         var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
-        if (droppedPaths == null || droppedPaths.Length == 0) return;
+        if (droppedPaths == null || droppedPaths.Length == 0)
+            return;
 
+        var destination = ResolveDropDestination(e.OriginalSource as DependencyObject) ?? fileList.CurrentPath;
         var moveFiles = ShouldMove(e);
-        fileList.ImportDroppedFiles(droppedPaths, fileList.CurrentPath, moveFiles);
+
+        fileList.ImportDroppedFiles(droppedPaths, destination, moveFiles);
         e.Handled = true;
     }
 
@@ -1080,7 +1034,7 @@ public partial class MainWindow : Window
 
         RightPaneHeader.BorderBrush = rightActive ? ActivePaneBrush : InactivePaneBrush;
         RightPaneHeader.Background = rightActive
-            ? new LinearGradientBrush(Color.FromRgb(0xF0, 0xF6, 0xFF), Color.FromRgb(0xCF, 0xE0, 0xF8), 90)
+            ? ActiveHeaderGradient
             : (Brush)FindResource("ClassicHeaderBrush");
     }
 

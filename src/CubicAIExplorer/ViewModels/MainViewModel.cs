@@ -163,22 +163,27 @@ public partial class MainViewModel : ObservableObject
         tab.FileList.PropertyChanged += OnFileListPropertyChanged;
     }
 
+    private void DetachTab(TabViewModel tab)
+    {
+        tab.PropertyChanged -= OnTabPropertyChanged;
+        tab.FileList.PropertyChanged -= OnFileListPropertyChanged;
+    }
+
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (sender is not TabViewModel tab)
             return;
 
-        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == ActiveTab)
-        {
+        if (e.PropertyName != nameof(TabViewModel.CurrentPath))
+            return;
+
+        if (tab == ActiveTab)
             AddToRecentFolders(tab.CurrentPath);
-        }
 
-        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == _rightPaneTab)
-        {
+        if (tab == _rightPaneTab)
             RightPaneAddressText = tab.CurrentPath;
-        }
 
-        if (e.PropertyName == nameof(TabViewModel.CurrentPath) && tab == CurrentPaneTab)
+        if (tab == CurrentPaneTab)
             RefreshCurrentPaneState();
     }
 
@@ -187,49 +192,52 @@ public partial class MainViewModel : ObservableObject
         if (sender is not FileListViewModel fileList)
             return;
 
-        if (e.PropertyName == nameof(FileListViewModel.StatusText) && CurrentPaneFileList == fileList)
-        {
-            StatusText = fileList.StatusText;
-            OnPropertyChanged(nameof(ActiveUndoDescription));
-            OnPropertyChanged(nameof(ActiveRedoDescription));
-        }
-
         if (ActiveTab?.FileList == fileList)
             OnPropertyChanged(nameof(LeftPaneStatusText));
         if (_rightPaneTab?.FileList == fileList)
             OnPropertyChanged(nameof(RightPaneStatusText));
 
-        if ((e.PropertyName == nameof(FileListViewModel.SelectedItem)
-                || e.PropertyName == nameof(FileListViewModel.CurrentPath))
-            && CurrentPaneFileList == fileList)
-        {
-            UpdatePreview();
-        }
+        var isCurrentPane = CurrentPaneFileList == fileList;
+        if (!isCurrentPane)
+            return;
 
-        if ((e.PropertyName == nameof(FileListViewModel.UndoDescription)
-                || e.PropertyName == nameof(FileListViewModel.RedoDescription))
-            && CurrentPaneFileList == fileList)
+        switch (e.PropertyName)
         {
-            OnPropertyChanged(nameof(ActiveUndoDescription));
-            OnPropertyChanged(nameof(ActiveRedoDescription));
-        }
-
-        if (CurrentPaneFileList == fileList)
-        {
-            if (e.PropertyName == nameof(FileListViewModel.FilterText))
+            case nameof(FileListViewModel.StatusText):
+                StatusText = fileList.StatusText;
+                OnPropertyChanged(nameof(ActiveUndoDescription));
+                OnPropertyChanged(nameof(ActiveRedoDescription));
+                break;
+            case nameof(FileListViewModel.SelectedItem):
+            case nameof(FileListViewModel.CurrentPath):
+                UpdatePreview();
+                break;
+            case nameof(FileListViewModel.UndoDescription):
+            case nameof(FileListViewModel.RedoDescription):
+                OnPropertyChanged(nameof(ActiveUndoDescription));
+                OnPropertyChanged(nameof(ActiveRedoDescription));
+                break;
+            case nameof(FileListViewModel.FilterText):
                 OnPropertyChanged(nameof(CurrentFilterText));
-            else if (e.PropertyName == nameof(FileListViewModel.IsSearchVisible))
+                break;
+            case nameof(FileListViewModel.IsSearchVisible):
                 OnPropertyChanged(nameof(CurrentIsSearchVisible));
-            else if (e.PropertyName == nameof(FileListViewModel.SearchText))
+                break;
+            case nameof(FileListViewModel.SearchText):
                 OnPropertyChanged(nameof(CurrentSearchText));
-            else if (e.PropertyName == nameof(FileListViewModel.IsShowingSearchResults))
+                break;
+            case nameof(FileListViewModel.IsShowingSearchResults):
                 OnPropertyChanged(nameof(CurrentIsShowingSearchResults));
-            else if (e.PropertyName == nameof(FileListViewModel.SearchResultsText))
+                break;
+            case nameof(FileListViewModel.SearchResultsText):
                 OnPropertyChanged(nameof(CurrentSearchResultsText));
-            else if (e.PropertyName == nameof(FileListViewModel.ViewMode))
+                break;
+            case nameof(FileListViewModel.ViewMode):
                 OnPropertyChanged(nameof(CurrentViewMode));
-            else if (e.PropertyName == nameof(FileListViewModel.ShowHiddenFiles))
+                break;
+            case nameof(FileListViewModel.ShowHiddenFiles):
                 OnPropertyChanged(nameof(CurrentShowHiddenFiles));
+                break;
         }
     }
 
@@ -258,14 +266,26 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentShowHiddenFiles));
     }
 
+    private static string GetAppDataPath(string filename)
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "CubicAIExplorer", filename);
+    }
+
+    private static string GetDisplayName(string path)
+    {
+        var trimmed = path.TrimEnd('\\');
+        var name = Path.GetFileName(trimmed);
+        return string.IsNullOrEmpty(name) ? path : name;
+    }
+
     private static string GetBookmarksPath()
     {
         var overridePath = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
             return overridePath;
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "CubicAIExplorer", "bookmarks.json");
+        return GetAppDataPath("bookmarks.json");
     }
 
     private void LoadBookmarks()
@@ -332,6 +352,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (tab == null) return;
         var index = Tabs.IndexOf(tab);
+        DetachTab(tab);
         Tabs.Remove(tab);
 
         if (Tabs.Count == 0)
@@ -500,7 +521,10 @@ public partial class MainViewModel : ObservableObject
     {
         var toClose = Tabs.Where(t => t != keepTab).ToList();
         foreach (var tab in toClose)
+        {
+            DetachTab(tab);
             Tabs.Remove(tab);
+        }
 
         ActiveTab = keepTab;
     }
@@ -595,13 +619,9 @@ public partial class MainViewModel : ObservableObject
             RecentFolders.Remove(existing);
 
         // Add to front
-        var trimmed = path.TrimEnd('\\');
-        var name = Path.GetFileName(trimmed);
-        if (string.IsNullOrEmpty(name)) name = path;
-
         RecentFolders.Insert(0, new RecentFolderItem
         {
-            DisplayName = name,
+            DisplayName = GetDisplayName(path),
             FullPath = path
         });
 
@@ -644,12 +664,9 @@ public partial class MainViewModel : ObservableObject
         if (!_fileSystemService.DirectoryExists(path)) return;
         if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return;
 
-        var trimmedPath = path.TrimEnd('\\');
         var name = string.IsNullOrWhiteSpace(displayName)
-            ? Path.GetFileName(trimmedPath)
+            ? GetDisplayName(path)
             : displayName;
-        if (string.IsNullOrWhiteSpace(name))
-            name = path;
 
         Bookmarks.Add(new BookmarkItem
         {
@@ -866,11 +883,7 @@ public partial class MainViewModel : ObservableObject
 
     // --- Recent Folders Persistence ---
 
-    private static string GetRecentFoldersPath()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "CubicAIExplorer", "recent.json");
-    }
+    private static string GetRecentFoldersPath() => GetAppDataPath("recent.json");
 
     private void LoadRecentFolders()
     {
@@ -886,13 +899,10 @@ public partial class MainViewModel : ObservableObject
             foreach (var folderPath in paths.Take(MaxRecentFolders))
             {
                 if (string.IsNullOrWhiteSpace(folderPath)) continue;
-                var trimmed = folderPath.TrimEnd('\\');
-                var name = Path.GetFileName(trimmed);
-                if (string.IsNullOrEmpty(name)) name = folderPath;
 
                 RecentFolders.Add(new RecentFolderItem
                 {
-                    DisplayName = name,
+                    DisplayName = GetDisplayName(folderPath),
                     FullPath = folderPath
                 });
             }
