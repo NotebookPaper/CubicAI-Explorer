@@ -28,6 +28,19 @@ internal static class Program
             Run("move same folder no-op", failures, () => TestMoveSameFolderNoOp(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
+            Run("redo copy", failures, () => TestRedoCopy(tempRoot));
+            Run("redo move", failures, () => TestRedoMove(tempRoot));
+            Run("view mode property", failures, () => TestViewModeProperty(tempRoot));
+            Run("selection status text", failures, () => TestSelectionStatus(tempRoot));
+            Run("filter text", failures, () => TestFilterText(tempRoot));
+            Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
+            Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
+            Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
+            Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
+            Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
+            Run("recent folders", failures, () => TestRecentFolders(tempRoot));
+            Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
+            Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
         finally
@@ -313,6 +326,316 @@ internal static class Program
         Assert(!File.Exists(Path.Combine(folder, "same (2).txt")), "No renamed duplicate should be created.");
     }
 
+    private static void TestRedoCopy(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "redo_copy_src");
+        var targetDir = CreateCleanSubdir(root, "redo_copy_dst");
+
+        var source = Path.Combine(sourceDir, "file.txt");
+        File.WriteAllText(source, "rc");
+
+        vm.LoadDirectory(targetDir);
+        vm.ImportDroppedFiles([source], targetDir, moveFiles: false);
+
+        var copied = Path.Combine(targetDir, "file.txt");
+        Assert(File.Exists(copied), "Copy should place file.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(!File.Exists(copied), "Undo should remove copy.");
+        Assert(vm.CanRedo, "Redo should be available after undo copy.");
+
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(copied), "Redo copy should recreate the file.");
+    }
+
+    private static void TestRedoMove(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "redo_move_src");
+        var targetDir = CreateCleanSubdir(root, "redo_move_dst");
+
+        var source = Path.Combine(sourceDir, "file.txt");
+        File.WriteAllText(source, "rm");
+
+        vm.LoadDirectory(targetDir);
+        vm.ImportDroppedFiles([source], targetDir, moveFiles: true);
+
+        var moved = Path.Combine(targetDir, "file.txt");
+        Assert(File.Exists(moved), "Move should place file.");
+        Assert(!File.Exists(source), "Move should remove source.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(File.Exists(source), "Undo should return file.");
+        Assert(vm.CanRedo, "Redo should be available after undo move.");
+
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(moved), "Redo move should place file again.");
+        Assert(!File.Exists(source), "Redo move should remove source again.");
+    }
+
+    private static void TestViewModeProperty(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+
+        Assert(vm.ViewMode == "Details", "Default view mode should be Details.");
+
+        string? firedMode = null;
+        vm.ViewModeChanged += (_, mode) => firedMode = mode;
+        vm.ViewMode = "Tiles";
+
+        Assert(vm.ViewMode == "Tiles", "ViewMode should update.");
+        Assert(firedMode == "Tiles", "ViewModeChanged event should fire.");
+    }
+
+    private static void TestSelectionStatus(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "selection_status");
+        File.WriteAllText(Path.Combine(folder, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "b.txt"), "b");
+
+        vm.LoadDirectory(folder);
+        Assert(vm.StatusText == "2 items", "Status should show item count.");
+
+        vm.SelectedItems.Add(vm.Items[0]);
+        vm.UpdateSelectionStatus();
+        Assert(vm.StatusText.Contains("1 selected"), "Status should show selection count.");
+
+        vm.SelectedItems.Add(vm.Items[1]);
+        vm.UpdateSelectionStatus();
+        Assert(vm.StatusText.Contains("2 selected"), "Status should update for multi-select.");
+
+        vm.SelectedItems.Clear();
+        vm.UpdateSelectionStatus();
+        Assert(vm.StatusText == "2 items", "Status should reset when selection cleared.");
+    }
+
+    private static void TestFilterText(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "filter");
+        File.WriteAllText(Path.Combine(folder, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "beta.txt"), "b");
+        File.WriteAllText(Path.Combine(folder, "gamma.log"), "g");
+
+        vm.LoadDirectory(folder);
+        Assert(vm.Items.Count == 3, "Should show all 3 files.");
+
+        vm.FilterText = "alpha";
+        Assert(vm.Items.Count == 1, "Filter should show only matching file.");
+        Assert(vm.Items[0].Name == "alpha.txt", "Filtered item should be alpha.txt.");
+
+        vm.FilterText = ".txt";
+        Assert(vm.Items.Count == 2, "Filter by extension should show 2 files.");
+
+        vm.FilterText = "";
+        Assert(vm.Items.Count == 3, "Clearing filter should show all files.");
+    }
+
+    private static void TestPropertiesCommand(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "properties");
+        File.WriteAllText(Path.Combine(folder, "test.txt"), "hello");
+
+        vm.LoadDirectory(folder);
+        vm.SelectedItems.Add(vm.Items.Single(i => i.Name == "test.txt"));
+
+        FileSystemItem? requested = null;
+        vm.PropertiesRequested += (_, item) => requested = item;
+        vm.ShowPropertiesCommand.Execute(null);
+
+        Assert(requested != null, "Properties command should raise PropertiesRequested event.");
+        Assert(requested!.Name == "test.txt", "Properties should be for selected item.");
+    }
+
+    private static void TestDuplicateTab(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "dup_tab");
+
+        var bookmarkFile = Path.Combine(root, "dup_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.ActiveTab!.NavigateTo(folder);
+
+            var originalTab = vm.ActiveTab;
+            vm.DuplicateTab(originalTab);
+
+            Assert(vm.Tabs.Count == 2, "Duplicate should add a second tab.");
+            Assert(vm.ActiveTab != originalTab, "Active tab should be the new duplicate.");
+            Assert(vm.ActiveTab!.CurrentPath == folder, "Duplicate tab should navigate to same path.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestCloseOtherTabs(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+
+        var bookmarkFile = Path.Combine(root, "close_others_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NewTabCommand.Execute(null);
+            vm.NewTabCommand.Execute(null);
+            Assert(vm.Tabs.Count == 3, "Should have 3 tabs.");
+
+            var keepTab = vm.Tabs[1];
+            vm.CloseOtherTabs(keepTab);
+
+            Assert(vm.Tabs.Count == 1, "Close others should leave 1 tab.");
+            Assert(vm.ActiveTab == keepTab, "Remaining tab should be the kept one.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestSelectionSizeStatus(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "size_status");
+        File.WriteAllText(Path.Combine(folder, "small.txt"), new string('x', 500));
+        File.WriteAllText(Path.Combine(folder, "big.txt"), new string('y', 2000));
+
+        vm.LoadDirectory(folder);
+        vm.SelectedItems.Add(vm.Items.Single(i => i.Name == "small.txt"));
+        vm.SelectedItems.Add(vm.Items.Single(i => i.Name == "big.txt"));
+        vm.UpdateSelectionStatus();
+
+        Assert(vm.StatusText.Contains("2 selected"), "Should show 2 selected.");
+        Assert(vm.StatusText.Contains("B"), "Should show size with B unit.");
+    }
+
+    private static void TestBreadcrumbSegments(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+
+        var bookmarkFile = Path.Combine(root, "breadcrumb_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+
+            var folder = CreateCleanSubdir(root, "bread");
+            var sub = CreateCleanSubdir(folder, "crumb");
+            vm.NavigateToPath(sub);
+
+            Assert(vm.BreadcrumbSegments.Count >= 2, "Breadcrumb should have at least 2 segments.");
+            var last = vm.BreadcrumbSegments[^1];
+            Assert(last.DisplayName == "crumb", "Last breadcrumb segment should be folder name.");
+            Assert(last.FullPath == sub, "Last breadcrumb segment path should match.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestRecentFolders(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+
+        var bookmarkFile = Path.Combine(root, "recent_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+
+            var folder1 = CreateCleanSubdir(root, "recent1");
+            var folder2 = CreateCleanSubdir(root, "recent2");
+            vm.NavigateToPath(folder1);
+            vm.NavigateToPath(folder2);
+
+            Assert(vm.RecentFolders.Count >= 2, "Recent folders should track visited paths.");
+            Assert(vm.RecentFolders[0].FullPath == folder2, "Most recent folder should be first.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestSearchInFolder(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "search_root");
+        var sub = CreateCleanSubdir(folder, "sub");
+        File.WriteAllText(Path.Combine(folder, "match.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "other.log"), "b");
+        File.WriteAllText(Path.Combine(sub, "deep_match.txt"), "c");
+
+        vm.LoadDirectory(folder);
+        Assert(!vm.IsSearchVisible, "Search should not be visible by default.");
+
+        vm.SearchInFolderCommand.Execute(null);
+        Assert(vm.IsSearchVisible, "SearchInFolder should show search bar.");
+
+        vm.SearchText = "match";
+        vm.ExecuteSearchSync();
+
+        Assert(vm.IsShowingSearchResults, "Should be showing search results.");
+        Assert(vm.Items.Count == 2, "Search should find 2 matching items (match.txt + deep_match.txt).");
+        Assert(vm.SearchResultsText.Contains("match"), "Search results text should contain query.");
+    }
+
+    private static void TestSearchCloseAndClear(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "search_clear");
+        File.WriteAllText(Path.Combine(folder, "a.txt"), "a");
+
+        vm.LoadDirectory(folder);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchText = "xyz";
+        vm.ExecuteSearchSync();
+
+        Assert(vm.IsShowingSearchResults, "Should show search results.");
+
+        vm.ClearSearchResultsCommand.Execute(null);
+        Assert(!vm.IsShowingSearchResults, "ClearSearchResults should hide banner.");
+        Assert(vm.Items.Count == 1, "Should reload original directory contents.");
+
+        vm.SearchInFolderCommand.Execute(null);
+        vm.CloseSearchCommand.Execute(null);
+        Assert(!vm.IsSearchVisible, "CloseSearch should hide search bar.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -332,6 +655,30 @@ internal static class Program
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
         Assert(app.Contains("ShellIconConverter"), "ShellIconConverter should be in app resources.");
+        Assert(main.Contains("CutCommand"), "Cut toolbar button should be wired.");
+        Assert(main.Contains("CopyCommand"), "Copy toolbar button should be wired.");
+        Assert(main.Contains("PasteCommand"), "Paste toolbar button should be wired.");
+        Assert(main.Contains("RefreshCommand"), "Refresh toolbar button should be wired.");
+        Assert(main.Contains("UndoCommand"), "Undo toolbar button should be wired.");
+        Assert(main.Contains("RedoCommand"), "Redo toolbar button should be wired.");
+        Assert(app.Contains("DetailsNameCellTemplate"), "Details name cell template should be in resources.");
+        Assert(app.Contains("ListViewItemTemplate"), "List view template should be in resources.");
+        Assert(app.Contains("TileViewItemTemplate"), "Tile view template should be in resources.");
+        Assert(main.Contains("FilterTextBox"), "Filter text box should be in MainWindow.");
+        Assert(main.Contains("PropertiesMenuItem"), "Properties menu item should be in context menu.");
+        Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
+        Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
+        Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");
+        Assert(main.Contains("FolderTree_Drop"), "Folder tree drop handler should be wired.");
+        Assert(main.Contains("AllowDrop=\"True\""), "Drop should be enabled.");
+        Assert(main.Contains("BreadcrumbSegments"), "Breadcrumb segments binding should exist.");
+        Assert(main.Contains("BreadcrumbSegment_Click"), "Breadcrumb click handler should be wired.");
+        Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
+        Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
+        Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
+        Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
+        Assert(app.Contains("IconSearch"), "Search icon resource should exist.");
+        Assert(!main.Contains("&#x25C0;"), "Unicode arrow symbols should be replaced with vector icons.");
     }
 
     private static void TestBookmarks(string root)

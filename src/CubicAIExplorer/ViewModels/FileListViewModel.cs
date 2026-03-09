@@ -47,12 +47,36 @@ public partial class FileListViewModel : ObservableObject
     [ObservableProperty]
     private string _redoDescription = "Redo";
 
+    [ObservableProperty]
+    private string _viewMode = "Details";
+
+    [ObservableProperty]
+    private string _filterText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSearchVisible;
+
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isShowingSearchResults;
+
+    [ObservableProperty]
+    private string _searchResultsText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSearching;
+
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
     public event EventHandler<FileSystemItem>? InlineRenameRequested;
+    public event EventHandler<string>? ViewModeChanged;
+    public event EventHandler<FileSystemItem>? PropertiesRequested;
+    public event EventHandler? SearchPanelOpened;
 
     public FileListViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
@@ -74,13 +98,12 @@ public partial class FileListViewModel : ObservableObject
         Items.Clear();
 
         var items = _fileSystemService.GetDirectoryContents(path, ShowHiddenFiles);
-        foreach (var item in items.OrderByDescending(i => i.ItemType == FileSystemItemType.Directory).ThenBy(i => i.Name))
-        {
-            Items.Add(item);
-        }
+        _allItems = items
+            .OrderByDescending(i => i.ItemType == FileSystemItemType.Directory)
+            .ThenBy(i => i.Name)
+            .ToList();
 
-        ItemCount = Items.Count;
-        StatusText = $"{ItemCount} items";
+        ApplyFilter();
     }
 
     [RelayCommand]
@@ -202,6 +225,14 @@ public partial class FileListViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ShowProperties()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null) return;
+        PropertiesRequested?.Invoke(this, item);
+    }
+
+    [RelayCommand]
     private void Refresh()
     {
         if (!string.IsNullOrWhiteSpace(CurrentPath))
@@ -280,11 +311,205 @@ public partial class FileListViewModel : ObservableObject
         UpdateHistoryState();
     }
 
+    [RelayCommand]
+    private void SearchInFolder()
+    {
+        IsSearchVisible = true;
+        SearchPanelOpened?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private void CloseSearch()
+    {
+        IsSearchVisible = false;
+        SearchText = string.Empty;
+        if (IsShowingSearchResults)
+            ClearSearchResults();
+    }
+
+    [RelayCommand]
+    private async Task ExecuteSearch()
+    {
+        if (string.IsNullOrWhiteSpace(SearchText) || string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        IsSearching = true;
+        var searchTerm = SearchText;
+        var searchPath = CurrentPath;
+
+        try
+        {
+            var results = await Task.Run(() =>
+                SearchFilesRecursive(searchPath, searchTerm, ShowHiddenFiles));
+
+            ApplySearchResults(results, searchTerm);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Search failed: {ex.Message}",
+                "Search Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsSearching = false;
+        }
+    }
+
+    public void ExecuteSearchSync()
+    {
+        if (string.IsNullOrWhiteSpace(SearchText) || string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        var results = SearchFilesRecursive(CurrentPath, SearchText, ShowHiddenFiles);
+        ApplySearchResults(results, SearchText);
+    }
+
+    private void ApplySearchResults(List<FileSystemItem> results, string searchTerm)
+    {
+        Items.Clear();
+        _allItems = results;
+        foreach (var item in results)
+            Items.Add(item);
+
+        ItemCount = Items.Count;
+        IsShowingSearchResults = true;
+        SearchResultsText = $"Search results for \"{searchTerm}\" — {results.Count} item(s) found";
+        UpdateSelectionStatus();
+    }
+
+    [RelayCommand]
+    private void ClearSearchResults()
+    {
+        IsShowingSearchResults = false;
+        SearchResultsText = string.Empty;
+        LoadDirectory(CurrentPath);
+    }
+
+    private List<FileSystemItem> SearchFilesRecursive(string rootPath, string searchTerm, bool showHidden)
+    {
+        var results = new List<FileSystemItem>();
+        var stack = new Stack<string>();
+        stack.Push(rootPath);
+
+        while (stack.Count > 0)
+        {
+            var currentDir = stack.Pop();
+            try
+            {
+                var dirInfo = new DirectoryInfo(currentDir);
+                if (!dirInfo.Exists) continue;
+
+                foreach (var file in dirInfo.EnumerateFiles())
+                {
+                    if (!showHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (file.Attributes.HasFlag(FileAttributes.System)) continue;
+
+                    if (file.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        results.Add(new FileSystemItem
+                        {
+                            Name = file.Name,
+                            FullPath = file.FullName,
+                            ItemType = FileSystemItemType.File,
+                            Size = file.Length,
+                            Extension = file.Extension,
+                            DateModified = file.LastWriteTime,
+                            DateCreated = file.CreationTime,
+                            Attributes = file.Attributes
+                        });
+                    }
+                }
+
+                foreach (var dir in dirInfo.EnumerateDirectories())
+                {
+                    if (!showHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (dir.Attributes.HasFlag(FileAttributes.System)) continue;
+
+                    if (dir.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        results.Add(new FileSystemItem
+                        {
+                            Name = dir.Name,
+                            FullPath = dir.FullName,
+                            ItemType = FileSystemItemType.Directory,
+                            DateModified = dir.LastWriteTime,
+                            DateCreated = dir.CreationTime,
+                            Attributes = dir.Attributes
+                        });
+                    }
+
+                    stack.Push(dir.FullName);
+                }
+            }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+        }
+
+        return results
+            .OrderByDescending(i => i.ItemType == FileSystemItemType.Directory)
+            .ThenBy(i => i.Name)
+            .ToList();
+    }
+
     partial void OnShowHiddenFilesChanged(bool value)
     {
         if (!string.IsNullOrEmpty(CurrentPath))
             LoadDirectory(CurrentPath);
     }
+
+    partial void OnViewModeChanged(string value)
+    {
+        ViewModeChanged?.Invoke(this, value);
+    }
+
+    partial void OnFilterTextChanged(string value)
+    {
+        ApplyFilter();
+    }
+
+    private List<FileSystemItem> _allItems = [];
+
+    private void ApplyFilter()
+    {
+        Items.Clear();
+        var filtered = string.IsNullOrWhiteSpace(FilterText)
+            ? _allItems
+            : _allItems.Where(i => i.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        foreach (var item in filtered)
+            Items.Add(item);
+
+        ItemCount = Items.Count;
+        UpdateSelectionStatus();
+    }
+
+    public void UpdateSelectionStatus()
+    {
+        var selectionCount = SelectedItems.Count;
+        if (selectionCount > 0)
+        {
+            var totalSize = SelectedItems
+                .Where(i => i.ItemType == FileSystemItemType.File)
+                .Sum(i => i.Size);
+            var sizeText = totalSize > 0 ? $" ({FormatSize(totalSize)})" : "";
+            StatusText = $"{ItemCount} items | {selectionCount} selected{sizeText}";
+        }
+        else
+        {
+            StatusText = $"{ItemCount} items";
+        }
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
+    };
 
     private List<string> GetSelectedPaths()
     {

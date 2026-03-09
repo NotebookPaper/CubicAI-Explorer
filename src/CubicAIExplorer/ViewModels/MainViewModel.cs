@@ -36,12 +36,17 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
+    public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
+    public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
+
+    private const int MaxRecentFolders = 15;
 
     public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
         LoadBookmarks();
+        LoadRecentFolders();
         LoadDrives();
     }
 
@@ -109,8 +114,18 @@ public partial class MainViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(TabViewModel.CurrentPath) && s == ActiveTab)
             {
-                AddressBarText = ((TabViewModel)s!).CurrentPath;
-                StatusText = ((TabViewModel)s!).FileList.StatusText;
+                var tabVm = (TabViewModel)s!;
+                AddressBarText = tabVm.CurrentPath;
+                StatusText = tabVm.FileList.StatusText;
+                UpdateBreadcrumbs(tabVm.CurrentPath);
+                AddToRecentFolders(tabVm.CurrentPath);
+            }
+        };
+        tab.FileList.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(FileListViewModel.StatusText) && tab == ActiveTab)
+            {
+                StatusText = tab.FileList.StatusText;
             }
         };
         Tabs.Add(tab);
@@ -159,6 +174,22 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    public void DuplicateTab(TabViewModel sourceTab)
+    {
+        NewTab();
+        if (!string.IsNullOrWhiteSpace(sourceTab.CurrentPath))
+            ActiveTab!.NavigateTo(sourceTab.CurrentPath);
+    }
+
+    public void CloseOtherTabs(TabViewModel keepTab)
+    {
+        var toClose = Tabs.Where(t => t != keepTab).ToList();
+        foreach (var tab in toClose)
+            Tabs.Remove(tab);
+
+        ActiveTab = keepTab;
+    }
+
     public void NavigateToPath(string path)
     {
         if (ActiveTab == null) NewTab();
@@ -171,12 +202,79 @@ public partial class MainViewModel : ObservableObject
         {
             AddressBarText = value.CurrentPath;
             StatusText = value.FileList.StatusText;
+            UpdateBreadcrumbs(value.CurrentPath);
         }
     }
 
     public void SelectTreeNode(FolderTreeNodeViewModel node)
     {
         NavigateToPath(node.FullPath);
+    }
+
+    private void UpdateBreadcrumbs(string path)
+    {
+        BreadcrumbSegments.Clear();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var segments = new List<BreadcrumbSegment>();
+        var current = path.TrimEnd('\\');
+
+        while (!string.IsNullOrEmpty(current))
+        {
+            var name = Path.GetFileName(current);
+            if (string.IsNullOrEmpty(name))
+                name = current; // Drive root like "C:\"
+
+            segments.Add(new BreadcrumbSegment
+            {
+                DisplayName = name,
+                FullPath = current.Length == 2 && current[1] == ':' ? current + "\\" : current
+            });
+
+            var parent = Path.GetDirectoryName(current);
+            if (parent == current) break;
+            current = parent ?? string.Empty;
+        }
+
+        segments.Reverse();
+        for (var i = 0; i < segments.Count; i++)
+        {
+            var seg = segments[i];
+            BreadcrumbSegments.Add(new BreadcrumbSegment
+            {
+                DisplayName = seg.DisplayName,
+                FullPath = seg.FullPath,
+                IsFirst = i == 0
+            });
+        }
+    }
+
+    private void AddToRecentFolders(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        // Remove if already present
+        var existing = RecentFolders.FirstOrDefault(
+            r => string.Equals(r.FullPath, path, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+            RecentFolders.Remove(existing);
+
+        // Add to front
+        var trimmed = path.TrimEnd('\\');
+        var name = Path.GetFileName(trimmed);
+        if (string.IsNullOrEmpty(name)) name = path;
+
+        RecentFolders.Insert(0, new RecentFolderItem
+        {
+            DisplayName = name,
+            FullPath = path
+        });
+
+        // Trim excess
+        while (RecentFolders.Count > MaxRecentFolders)
+            RecentFolders.RemoveAt(RecentFolders.Count - 1);
+
+        SaveRecentFolders();
     }
 
     [RelayCommand]
@@ -251,4 +349,61 @@ public partial class MainViewModel : ObservableObject
     }
 
     private sealed record BookmarkRecord(string Name, string Path);
+
+    // --- Recent Folders Persistence ---
+
+    private static string GetRecentFoldersPath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "CubicAIExplorer", "recent.json");
+    }
+
+    private void LoadRecentFolders()
+    {
+        try
+        {
+            var path = GetRecentFoldersPath();
+            if (!File.Exists(path)) return;
+
+            var json = File.ReadAllText(path);
+            var paths = JsonSerializer.Deserialize<List<string>>(json);
+            if (paths == null) return;
+
+            foreach (var folderPath in paths.Take(MaxRecentFolders))
+            {
+                if (string.IsNullOrWhiteSpace(folderPath)) continue;
+                var trimmed = folderPath.TrimEnd('\\');
+                var name = Path.GetFileName(trimmed);
+                if (string.IsNullOrEmpty(name)) name = folderPath;
+
+                RecentFolders.Add(new RecentFolderItem
+                {
+                    DisplayName = name,
+                    FullPath = folderPath
+                });
+            }
+        }
+        catch
+        {
+            // Non-critical — ignore corrupted recent data.
+        }
+    }
+
+    private void SaveRecentFolders()
+    {
+        try
+        {
+            var path = GetRecentFoldersPath();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var payload = RecentFolders.Select(static r => r.FullPath).ToList();
+            File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        }
+        catch
+        {
+            // Non-critical.
+        }
+    }
 }

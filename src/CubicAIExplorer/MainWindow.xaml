@@ -30,6 +30,8 @@
         <KeyBinding Key="BrowserBack" Command="{Binding ActiveTab.GoBackCommand}" />
         <KeyBinding Key="BrowserForward" Command="{Binding ActiveTab.GoForwardCommand}" />
         <KeyBinding Key="Back" Command="{Binding NavigateUpCommand}" />
+        <KeyBinding Key="Return" Modifiers="Alt" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
+        <KeyBinding Key="E" Modifiers="Ctrl" Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -48,6 +50,13 @@
                 <MenuItem Header="Clear History" Command="{Binding ActiveTab.FileList.ClearHistoryCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
+                <MenuItem Header="_Details" Click="ViewMode_Details_Click" />
+                <MenuItem Header="_List" Click="ViewMode_List_Click" />
+                <MenuItem Header="_Tiles" Click="ViewMode_Tiles_Click" />
+                <Separator />
+                <MenuItem Header="_Search in Folder..." InputGestureText="Ctrl+E"
+                          Command="{Binding ActiveTab.FileList.SearchInFolderCommand}" />
+                <Separator />
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
                           IsChecked="{Binding ActiveTab.FileList.ShowHiddenFiles}" />
             </MenuItem>
@@ -59,26 +68,107 @@
         <!-- Toolbar -->
         <ToolBarTray DockPanel.Dock="Top" IsLocked="True">
             <ToolBar Band="0" BandIndex="0">
-                <Button Command="{Binding ActiveTab.GoBackCommand}" ToolTip="Back" Padding="6,2">
-                    <TextBlock Text="&#x25C0;" FontSize="14" />
+                <!-- Navigation -->
+                <Button Command="{Binding ActiveTab.GoBackCommand}" ToolTip="Back (Alt+Left)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconBack}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding ActiveTab.GoForwardCommand}" ToolTip="Forward" Padding="6,2">
-                    <TextBlock Text="&#x25B6;" FontSize="14" />
+                <Button Command="{Binding ActiveTab.GoForwardCommand}" ToolTip="Forward (Alt+Right)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconForward}" Width="16" Height="16" />
                 </Button>
-                <Button Command="{Binding NavigateUpCommand}" ToolTip="Up" Padding="6,2">
-                    <TextBlock Text="&#x25B2;" FontSize="14" />
+                <Button Command="{Binding NavigateUpCommand}" ToolTip="Up (Backspace)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconUp}" Width="16" Height="16" />
                 </Button>
                 <Separator />
-                <!-- Address Bar -->
-                <TextBox x:Name="AddressBar" Width="500"
-                         Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
-                         KeyDown="AddressBar_KeyDown"
-                         VerticalContentAlignment="Center" Padding="4,2" />
-                <Button Command="{Binding NavigateToAddressCommand}" ToolTip="Go" Padding="6,2">
-                    <TextBlock Text="&#x27A1;" FontSize="14" />
+                <!-- File Operations -->
+                <Button Command="{Binding ActiveTab.FileList.CutCommand}" ToolTip="Cut (Ctrl+X)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconCut}" Width="16" Height="16" />
+                </Button>
+                <Button Command="{Binding ActiveTab.FileList.CopyCommand}" ToolTip="Copy (Ctrl+C)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconCopy}" Width="16" Height="16" />
+                </Button>
+                <Button Command="{Binding ActiveTab.FileList.PasteCommand}" ToolTip="Paste (Ctrl+V)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconPaste}" Width="16" Height="16" />
+                </Button>
+                <Separator />
+                <Button Command="{Binding ActiveTab.FileList.DeleteCommand}" ToolTip="Delete (Del)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconDelete}" Width="16" Height="16" />
+                </Button>
+                <Separator />
+                <Button Command="{Binding ActiveTab.FileList.UndoCommand}" ToolTip="{Binding ActiveTab.FileList.UndoDescription}" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconUndo}" Width="16" Height="16" />
+                </Button>
+                <Button Command="{Binding ActiveTab.FileList.RedoCommand}" ToolTip="{Binding ActiveTab.FileList.RedoDescription}" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconRedo}" Width="16" Height="16" />
+                </Button>
+                <Separator />
+                <Button Command="{Binding ActiveTab.FileList.RefreshCommand}" ToolTip="Refresh (F5)" Padding="4,2" MinWidth="26">
+                    <Image Source="{StaticResource IconRefresh}" Width="16" Height="16" />
                 </Button>
             </ToolBar>
         </ToolBarTray>
+
+        <!-- Address / Breadcrumb Bar -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource ClassicChromeBrush}"
+                BorderBrush="{StaticResource ClassicChromeBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="4,2">
+            <Grid>
+                <!-- Breadcrumb mode -->
+                <DockPanel x:Name="BreadcrumbBar" Visibility="Visible"
+                           MouseLeftButtonDown="BreadcrumbBar_MouseDown">
+                    <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
+                            ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0">
+                        <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                    </Button>
+                    <ItemsControl x:Name="BreadcrumbItems" ItemsSource="{Binding BreadcrumbSegments}"
+                                  VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="\" Foreground="#999999" VerticalAlignment="Center"
+                                               Margin="0,0,0,0" FontSize="11"
+                                               Visibility="{Binding SeparatorVisibility}" />
+                                    <Button Content="{Binding DisplayName}" Tag="{Binding FullPath}"
+                                            Click="BreadcrumbSegment_Click"
+                                            Background="Transparent" BorderThickness="0"
+                                            Padding="3,1" Cursor="Hand"
+                                            FontSize="12">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Foreground" Value="#2255AA" />
+                                                        <Setter Property="Background" Value="#E0EEFF" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+
+                <!-- Edit mode (TextBox) -->
+                <DockPanel x:Name="AddressBarPanel" Visibility="Collapsed">
+                    <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
+                            ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0"
+                            Click="AddressBarGo_Click">
+                        <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                    </Button>
+                    <TextBox x:Name="AddressBar"
+                             Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
+                             KeyDown="AddressBar_KeyDown"
+                             LostKeyboardFocus="AddressBar_LostFocus"
+                             VerticalContentAlignment="Center" Padding="4,2" />
+                </DockPanel>
+            </Grid>
+        </Border>
 
         <!-- Tab Bar -->
         <DockPanel DockPanel.Dock="Top" Background="{StaticResource ClassicChromeBrush}">
@@ -90,6 +180,17 @@
                 <TabControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:TabViewModel}">
                         <DockPanel MinWidth="80" MaxWidth="200">
+                            <DockPanel.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Duplicate Tab" Click="DuplicateTab_Click"
+                                              Tag="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="Close Tab" Click="CloseTab_Click"
+                                              Tag="{Binding}" />
+                                    <MenuItem Header="Close Other Tabs" Click="CloseOtherTabs_Click"
+                                              Tag="{Binding}" />
+                                </ContextMenu>
+                            </DockPanel.ContextMenu>
                             <Button DockPanel.Dock="Right" Content="x" FontSize="10"
                                     Padding="4,0" Margin="4,0,0,0" BorderThickness="0"
                                     Background="Transparent"
@@ -111,12 +212,13 @@
 
         <!-- Status Bar -->
         <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem>
+            <StatusBarItem MinWidth="140">
                 <TextBlock Text="{Binding StatusText}" />
             </StatusBarItem>
             <Separator />
             <StatusBarItem>
-                <TextBlock Text="{Binding ActiveTab.CurrentPath}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding ActiveTab.CurrentPath}" TextTrimming="CharacterEllipsis"
+                           MaxWidth="600" />
             </StatusBarItem>
         </StatusBar>
 
@@ -130,6 +232,19 @@
 
             <!-- Folder Tree Panel -->
             <DockPanel Grid.Column="0">
+                <!-- Recent Folders -->
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource ClassicPaneHeaderTextStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{StaticResource IconClock}" Width="14" Height="14" Margin="0,0,4,0" />
+                        <TextBlock Text="Recent" VerticalAlignment="Center" />
+                    </StackPanel>
+                </TextBlock>
+                <Border DockPanel.Dock="Top" Margin="4,2,4,4" Height="80" Style="{StaticResource ClassicPaneSurfaceStyle}">
+                    <ListBox ItemsSource="{Binding RecentFolders}"
+                             SelectionChanged="RecentFolders_SelectionChanged"
+                             DisplayMemberPath="DisplayName" />
+                </Border>
+
                 <TextBlock DockPanel.Dock="Top" Text="Bookmarks" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
                 <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
                     <Button Content="+ Add Current"
@@ -141,7 +256,7 @@
                             CommandParameter="{Binding SelectedBookmark}"
                             Padding="6,2" />
                 </DockPanel>
-                <Border DockPanel.Dock="Top" Margin="4,0,4,4" Height="120" Style="{StaticResource ClassicPaneSurfaceStyle}">
+                <Border DockPanel.Dock="Top" Margin="4,0,4,4" Height="100" Style="{StaticResource ClassicPaneSurfaceStyle}">
                     <ListBox x:Name="BookmarkList"
                              ItemsSource="{Binding Bookmarks}"
                              SelectedItem="{Binding SelectedBookmark}"
@@ -152,13 +267,17 @@
 
                 <TextBlock DockPanel.Dock="Top" Text="Folders" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
                 <Border Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}">
-                    <TreeView ItemsSource="{Binding FolderTreeRoots}"
+                    <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderTreeRoots}"
                               VirtualizingStackPanel.IsVirtualizing="True"
-                              VirtualizingStackPanel.VirtualizationMode="Recycling">
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              AllowDrop="True"
+                              DragOver="FolderTree_DragOver"
+                              Drop="FolderTree_Drop">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                                 <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                <Setter Property="AllowDrop" Value="True" />
                                 <EventSetter Event="Selected" Handler="TreeViewItem_Selected" />
                             </Style>
                         </TreeView.ItemContainerStyle>
@@ -182,76 +301,121 @@
             <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center"
                           VerticalAlignment="Stretch" Background="#96B3D8" />
 
-            <!-- File List -->
-            <ListView x:Name="FileListView"
-                      Grid.Column="2"
-                      ItemsSource="{Binding ActiveTab.FileList.Items}"
-                      SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
-                      AllowDrop="True"
-                      SelectionMode="Extended"
-                      VirtualizingStackPanel.IsVirtualizing="True"
-                      VirtualizingStackPanel.VirtualizationMode="Recycling"
-                      SelectionChanged="FileList_SelectionChanged"
-                      PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
-                      MouseMove="FileList_MouseMove"
-                      DragEnter="FileList_DragEnter"
-                      DragOver="FileList_DragOver"
-                      Drop="FileList_Drop"
-                      MouseDoubleClick="FileList_MouseDoubleClick"
-                      ContextMenuOpening="FileList_ContextMenuOpening"
-                      GridViewColumnHeader.Click="FileListHeader_Click">
-                <ListView.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
-                        <Separator x:Name="ItemSeparator1" />
-                        <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
-                        <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
-                        <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
-                        <Separator x:Name="ItemSeparator2" />
-                        <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
-                        <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
-                        <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
-                        <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
-                    </ContextMenu>
-                </ListView.ContextMenu>
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="Name" Width="350">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate DataType="{x:Type models:FileSystemItem}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Source="{Binding ., Converter={StaticResource ShellIconConverter}}"
-                                               Width="16"
-                                               Height="16"
-                                               Margin="0,0,6,0" />
-                                        <TextBlock x:Name="FileNameTextBlock" Text="{Binding Name}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                        <GridViewColumn Header="Size" Width="100"
-                                        DisplayMemberBinding="{Binding DisplaySize}" />
-                        <GridViewColumn Header="Type" Width="120"
-                                        DisplayMemberBinding="{Binding TypeDescription}" />
-                        <GridViewColumn Header="Date Modified" Width="160"
-                                        DisplayMemberBinding="{Binding DateModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
-                    </GridView>
-                </ListView.View>
-            </ListView>
+            <!-- File List Panel -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-            <Popup x:Name="InlineRenamePopup"
-                   Grid.Column="2"
-                   PlacementTarget="{Binding ElementName=FileListView}"
-                   Placement="Relative"
-                   StaysOpen="False"
-                   AllowsTransparency="True">
-                <Border BorderBrush="#999999" BorderThickness="1" Background="White" Padding="1">
-                    <TextBox x:Name="InlineRenameTextBox"
-                             MinWidth="220"
-                             KeyDown="InlineRenameTextBox_KeyDown"
-                             LostKeyboardFocus="InlineRenameTextBox_LostKeyboardFocus" />
+                <!-- Filter Bar -->
+                <DockPanel Grid.Row="0" Margin="2,2,2,0">
+                    <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center"
+                               Margin="4,0,4,0" />
+                    <Button DockPanel.Dock="Right" Content="&#x2715;" FontSize="10"
+                            Padding="4,1" Margin="2,0,0,0" ToolTip="Clear filter"
+                            Click="ClearFilter_Click" />
+                    <TextBox x:Name="FilterTextBox"
+                             Text="{Binding ActiveTab.FileList.FilterText, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalContentAlignment="Center" Padding="4,2" />
+                </DockPanel>
+
+                <!-- Search Bar (Ctrl+E) -->
+                <DockPanel x:Name="SearchBar" Grid.Row="1" Margin="2,2,2,0"
+                           Visibility="{Binding ActiveTab.FileList.IsSearchVisible, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                    <Image DockPanel.Dock="Left" Source="{StaticResource IconSearch}"
+                           Width="14" Height="14" Margin="4,0,2,0" />
+                    <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center"
+                               Margin="2,0,4,0" />
+                    <Button DockPanel.Dock="Right" Content="&#x2715;" FontSize="10"
+                            Padding="4,1" Margin="2,0,0,0" ToolTip="Close search"
+                            Command="{Binding ActiveTab.FileList.CloseSearchCommand}" />
+                    <Button DockPanel.Dock="Right" Content="Go" Padding="6,1" Margin="2,0,0,0"
+                            Command="{Binding ActiveTab.FileList.ExecuteSearchCommand}" />
+                    <TextBox x:Name="SearchTextBox"
+                             Text="{Binding ActiveTab.FileList.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalContentAlignment="Center" Padding="4,2"
+                             KeyDown="SearchTextBox_KeyDown" />
+                </DockPanel>
+
+                <!-- Search Results Banner -->
+                <Border Grid.Row="2" Margin="2,2,2,0" Padding="4,2"
+                        Background="#FFF8DC" BorderBrush="#DAA520" BorderThickness="1" CornerRadius="2"
+                        Visibility="{Binding ActiveTab.FileList.IsShowingSearchResults, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="&#x2715;" FontSize="10"
+                                Padding="4,1" ToolTip="Clear search results"
+                                Background="Transparent" BorderThickness="0"
+                                Command="{Binding ActiveTab.FileList.ClearSearchResultsCommand}" />
+                        <TextBlock Text="{Binding ActiveTab.FileList.SearchResultsText}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
                 </Border>
-            </Popup>
+
+                <ListView x:Name="FileListView"
+                          Grid.Row="3"
+                          ItemsSource="{Binding ActiveTab.FileList.Items}"
+                          SelectedItem="{Binding ActiveTab.FileList.SelectedItem}"
+                          AllowDrop="True"
+                          SelectionMode="Extended"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          SelectionChanged="FileList_SelectionChanged"
+                          PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
+                          MouseMove="FileList_MouseMove"
+                          DragEnter="FileList_DragEnter"
+                          DragOver="FileList_DragOver"
+                          Drop="FileList_Drop"
+                          MouseDoubleClick="FileList_MouseDoubleClick"
+                          ContextMenuOpening="FileList_ContextMenuOpening"
+                          GridViewColumnHeader.Click="FileListHeader_Click">
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding ActiveTab.FileList.OpenItemCommand}" CommandParameter="{Binding ActiveTab.FileList.SelectedItem}" />
+                            <Separator x:Name="ItemSeparator1" />
+                            <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding ActiveTab.FileList.CutCommand}" />
+                            <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding ActiveTab.FileList.CopyCommand}" />
+                            <MenuItem x:Name="PasteMenuItem" Header="Paste" Command="{Binding ActiveTab.FileList.PasteCommand}" />
+                            <Separator x:Name="ItemSeparator2" />
+                            <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding ActiveTab.FileList.DeleteCommand}" />
+                            <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding ActiveTab.FileList.RenameCommand}" />
+                            <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding ActiveTab.FileList.NewFolderCommand}" />
+                            <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding ActiveTab.FileList.RefreshCommand}" />
+                            <Separator x:Name="PropertiesSeparator" />
+                            <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
+                            <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ActiveTab.FileList.ShowPropertiesCommand}" />
+                        </ContextMenu>
+                    </ListView.ContextMenu>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Name" Width="350"
+                                            CellTemplate="{StaticResource DetailsNameCellTemplate}" />
+                            <GridViewColumn Header="Size" Width="100"
+                                            DisplayMemberBinding="{Binding DisplaySize}" />
+                            <GridViewColumn Header="Type" Width="120"
+                                            DisplayMemberBinding="{Binding TypeDescription}" />
+                            <GridViewColumn Header="Date Modified" Width="160"
+                                            DisplayMemberBinding="{Binding DateModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+
+                <Popup x:Name="InlineRenamePopup"
+                       Grid.Row="3"
+                       PlacementTarget="{Binding ElementName=FileListView}"
+                       Placement="Relative"
+                       StaysOpen="False"
+                       AllowsTransparency="True">
+                    <Border BorderBrush="#999999" BorderThickness="1" Background="White" Padding="1">
+                        <TextBox x:Name="InlineRenameTextBox"
+                                 MinWidth="220"
+                                 KeyDown="InlineRenameTextBox_KeyDown"
+                                 LostKeyboardFocus="InlineRenameTextBox_LostKeyboardFocus" />
+                    </Border>
+                </Popup>
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>

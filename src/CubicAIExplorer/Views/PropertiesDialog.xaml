@@ -1,0 +1,72 @@
+<Window x:Class="CubicAIExplorer.Views.PropertiesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Properties" Width="360" Height="340"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="110" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Name -->
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" x:Name="FileNameText"
+                   FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+
+        <Separator Grid.Row="1" Grid.ColumnSpan="2" />
+
+        <!-- Type -->
+        <TextBlock Grid.Row="2" Text="Type:" Margin="0,4" />
+        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TypeText" Margin="0,4" />
+
+        <!-- Location -->
+        <TextBlock Grid.Row="3" Text="Location:" Margin="0,4" />
+        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LocationText" Margin="0,4"
+                   TextWrapping="Wrap" />
+
+        <!-- Size -->
+        <TextBlock Grid.Row="4" Text="Size:" Margin="0,4" />
+        <TextBlock Grid.Row="4" Grid.Column="1" x:Name="SizeText" Margin="0,4" />
+
+        <!-- Created -->
+        <TextBlock Grid.Row="5" Text="Created:" Margin="0,4" />
+        <TextBlock Grid.Row="5" Grid.Column="1" x:Name="CreatedText" Margin="0,4" />
+
+        <!-- Modified -->
+        <TextBlock Grid.Row="6" Text="Modified:" Margin="0,4" />
+        <TextBlock Grid.Row="6" Grid.Column="1" x:Name="ModifiedText" Margin="0,4" />
+
+        <!-- Attributes -->
+        <TextBlock Grid.Row="7" Text="Attributes:" Margin="0,4" />
+        <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Margin="0,4">
+            <CheckBox x:Name="ReadOnlyCheck" Content="Read-only" IsEnabled="False" Margin="0,0,12,0" />
+            <CheckBox x:Name="HiddenCheck" Content="Hidden" IsEnabled="False" />
+        </StackPanel>
+
+        <!-- Items (for folders) -->
+        <TextBlock Grid.Row="8" x:Name="ContainsLabel" Text="Contains:" Margin="0,4"
+                   Visibility="Collapsed" />
+        <TextBlock Grid.Row="8" Grid.Column="1" x:Name="ContainsText" Margin="0,4"
+                   Visibility="Collapsed" />
+
+        <!-- OK button -->
+        <Button Grid.Row="10" Grid.ColumnSpan="2" Content="OK" Width="80"
+                HorizontalAlignment="Right" Padding="8,4" IsDefault="True"
+                Click="OK_Click" />
+    </Grid>
+</Window>
