@@ -737,8 +737,13 @@ public partial class MainViewModel : ObservableObject
             UpdatePreview();
     }
 
+    private int _previewGeneration;
+
     public void UpdatePreview()
     {
+        _previewGeneration++;
+        var generation = _previewGeneration;
+
         PreviewFileName = string.Empty;
         PreviewFileInfo = string.Empty;
         PreviewText = string.Empty;
@@ -763,8 +768,7 @@ public partial class MainViewModel : ObservableObject
         if (item.ItemType == FileSystemItemType.Directory)
         {
             PreviewFileInfo = "File folder";
-            PreviewStatusText = "Folder preview is not available.";
-            HasPreviewStatus = true;
+            LoadFolderPreviewAsync(item.FullPath, generation);
             return;
         }
 
@@ -772,63 +776,138 @@ public partial class MainViewModel : ObservableObject
 
         var ext = item.Extension.ToLowerInvariant();
 
-        // Image preview
-        if (ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".ico")
+        if (IsImageExtension(ext))
         {
-            try
-            {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(item.FullPath);
-                bitmap.DecodePixelWidth = 280;
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                PreviewImageSource = bitmap;
-                HasPreviewImage = true;
-            }
-            catch
-            {
-                PreviewStatusText = "Image preview unavailable.";
-                HasPreviewStatus = true;
-            }
+            LoadImagePreviewAsync(item.FullPath, generation);
         }
-        // Text preview
         else if (IsTextExtension(ext))
         {
-            try
+            if (item.Size > 1024 * 1024)
             {
-                if (item.Size > 1024 * 1024)
-                {
-                    PreviewStatusText = "Text preview is limited to files up to 1 MB.";
-                    HasPreviewStatus = true;
-                    return;
-                }
-
-                var lines = File.ReadLines(item.FullPath).Take(100);
-                PreviewText = string.Join("\n", lines);
-                HasPreviewText = true;
-            }
-            catch
-            {
-                PreviewStatusText = "Text preview unavailable.";
+                PreviewStatusText = "Text preview is limited to files up to 1 MB.";
                 HasPreviewStatus = true;
+                return;
             }
+            LoadTextPreviewAsync(item.FullPath, generation);
         }
         else
+        {
+            ShowFileMetadata(item.FullPath);
+        }
+    }
+
+    private async void LoadImagePreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var bitmap = await Task.Run(() =>
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri(path);
+                bmp.DecodePixelWidth = 280;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            });
+            if (_previewGeneration != generation) return;
+            PreviewImageSource = bitmap;
+            HasPreviewImage = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            PreviewStatusText = "Image preview unavailable.";
+            HasPreviewStatus = true;
+        }
+    }
+
+    private async void LoadTextPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var text = await Task.Run(() =>
+            {
+                var lines = File.ReadLines(path).Take(200);
+                return string.Join("\n", lines);
+            });
+            if (_previewGeneration != generation) return;
+            PreviewText = text;
+            HasPreviewText = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            PreviewStatusText = "Text preview unavailable.";
+            HasPreviewStatus = true;
+        }
+    }
+
+    private async void LoadFolderPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var info = await Task.Run(() =>
+            {
+                var di = new DirectoryInfo(path);
+                int files = 0, folders = 0;
+                foreach (var entry in di.EnumerateFileSystemInfos())
+                {
+                    if (entry is DirectoryInfo) folders++;
+                    else files++;
+                }
+                var created = di.CreationTime.ToString("g");
+                var modified = di.LastWriteTime.ToString("g");
+                return (files, folders, created, modified);
+            });
+            if (_previewGeneration != generation) return;
+            var parts = new List<string>();
+            if (info.folders > 0) parts.Add($"{info.folders} folder{(info.folders != 1 ? "s" : "")}");
+            if (info.files > 0) parts.Add($"{info.files} file{(info.files != 1 ? "s" : "")}");
+            var summary = parts.Count > 0 ? string.Join(", ", parts) : "Empty folder";
+            PreviewStatusText = $"{summary}\n\nCreated: {info.created}\nModified: {info.modified}";
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            PreviewStatusText = "Folder preview is not available.";
+            HasPreviewStatus = true;
+        }
+    }
+
+    private void ShowFileMetadata(string path)
+    {
+        try
+        {
+            var fi = new FileInfo(path);
+            PreviewStatusText = $"Created: {fi.CreationTime:g}\nModified: {fi.LastWriteTime:g}\nAccessed: {fi.LastAccessTime:g}";
+            if (fi.IsReadOnly) PreviewStatusText += "\nRead-only";
+            HasPreviewStatus = true;
+        }
+        catch
         {
             PreviewStatusText = "No preview available for this file type.";
             HasPreviewStatus = true;
         }
     }
 
+    private static bool IsImageExtension(string ext) => ext is
+        ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".ico" or
+        ".tiff" or ".tif" or ".webp";
+
     private static bool IsTextExtension(string ext) => ext is
         ".txt" or ".cs" or ".xml" or ".json" or ".md" or ".log" or
         ".ini" or ".cfg" or ".yaml" or ".yml" or ".html" or ".htm" or
-        ".css" or ".js" or ".ts" or ".py" or ".bat" or ".cmd" or ".ps1" or
+        ".css" or ".js" or ".ts" or ".tsx" or ".jsx" or
+        ".py" or ".bat" or ".cmd" or ".ps1" or
         ".xaml" or ".csproj" or ".sln" or ".gitignore" or ".editorconfig" or
         ".csv" or ".tsv" or ".sql" or ".sh" or ".toml" or ".env" or ".h" or
-        ".c" or ".cpp" or ".java" or ".go" or ".rs" or ".rb" or ".php";
+        ".c" or ".cpp" or ".hpp" or ".java" or ".go" or ".rs" or ".rb" or ".php" or
+        ".swift" or ".kt" or ".scala" or ".r" or ".m" or ".mm" or
+        ".dockerfile" or ".makefile" or ".gradle" or ".properties" or
+        ".reg" or ".inf" or ".manifest" or ".targets" or ".props";
 
     // --- Address Autocomplete ---
 
@@ -839,6 +918,28 @@ public partial class MainViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(text))
         {
             IsAddressSuggestionsOpen = false;
+            return;
+        }
+
+        // Drive-root completion: "C" → "C:\", "C:" → "C:\"
+        if (text.Length <= 2 && char.IsLetter(text[0]) && (text.Length == 1 || text[1] == ':'))
+        {
+            var driveLetter = char.ToUpperInvariant(text[0]);
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                if (drive.IsReady && char.ToUpperInvariant(drive.Name[0]) == driveLetter)
+                    AddressSuggestions.Add(drive.RootDirectory.FullName);
+            }
+            if (text.Length == 1)
+            {
+                // Also show other drives that start with nearby letters
+                foreach (var drive in DriveInfo.GetDrives())
+                {
+                    if (drive.IsReady && char.ToUpperInvariant(drive.Name[0]) != driveLetter)
+                        AddressSuggestions.Add(drive.RootDirectory.FullName);
+                }
+            }
+            IsAddressSuggestionsOpen = AddressSuggestions.Count > 0;
             return;
         }
 

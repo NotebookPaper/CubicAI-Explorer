@@ -1,16 +1,16 @@
 # Continuation Instructions for Next Session
 
 > **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + dual-pane parity/polish is well beyond MVP. Latest tracked work is committed on `origin/master` and the smoke suite passes.
+> **Status:** Tier 1 complete + dual-pane parity/polish well beyond MVP. Latest code is committed and pushed on `origin/master`. Smoke suite passes. Recent refactor cleaned up event leaks and code duplication.
 
 ---
 
 You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 
-**Working directory:** `C:\dev\CubicAI_rewrite`  
-**Solution:** `CubicAIExplorer.sln`  
-**Build:** `dotnet build CubicAIExplorer.sln`  
-**Run:** `dotnet run --project src/CubicAIExplorer/CubicAIExplorer.csproj`  
+**Working directory:** `C:\dev\CubicAI_rewrite`
+**Solution:** `CubicAIExplorer.sln`
+**Build:** `dotnet build CubicAIExplorer.sln`
+**Run:** `dotnet run --project src/CubicAIExplorer/CubicAIExplorer.csproj`
 **Smoke tests:** `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal` then run `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
 
 ## Current Implemented State
@@ -56,8 +56,18 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
 - Right-pane header single-click activation and inline address editing
 
+### Recent refactor (4442153)
+- Fixed event listener leak: closed tabs now properly unsubscribed via `DetachTab()`
+- Fixed right-pane drop bug: subfolder drop targeting now works (was always dropping to current dir)
+- Deduplicated left/right pane handlers into shared methods (`SyncSelection`, `TryInitiateDrag`, `HandleDrop`, `OpenSelectedInPane`, `ConfigureContextMenu`, `HookPaneFileListViewModel`)
+- Cached `LinearGradientBrush` as static frozen field
+- Removed duplicate `UpdatePreview` calls on selection change
+- Consolidated `OnFileListPropertyChanged` to use switch + cached `isCurrentPane`
+- Consolidated `OnTabPropertyChanged` to single `CurrentPath` check
+- Extracted `GetAppDataPath()` and `GetDisplayName()` helpers
+
 ## Current Worktree State
-Tracked files are committed through `02deb1c` on `origin/master`.
+Tracked files are committed through `4442153` on `origin/master`.
 
 Untracked local-only paths still present:
 - `.claude/`
@@ -85,12 +95,15 @@ Current smoke coverage includes:
 - XAML wiring checks
 
 ## Priority Next Work
-1. Expand preview support.
-   Next likely value: more file types, async loading, and better image/text fallbacks.
-2. Improve address autocomplete.
-   The obvious gaps are root-drive completion, keyboard selection polish, and clearer completion behavior.
-3. Consider whether the left pane should also get a clearer inline address-edit affordance to match the new right-pane workflow.
-4. Commit the current batch before starting another feature slice.
+1. **Expand preview support.**
+   Next likely value: more file types (PDF metadata, audio/video info), async loading for large files, and better image/text fallbacks.
+2. **Improve address autocomplete.**
+   Gaps: root-drive completion (typing just a letter), keyboard selection polish, clearer completion behavior.
+3. **Async I/O for hot paths.**
+   `/simplify` review identified synchronous file I/O on the UI thread in `UpdatePreview` (reads file content), `UpdateAddressSuggestions` (queries filesystem per keystroke), and `SaveRecentFolders` (writes JSON on every navigation). These should be made async or debounced.
+4. **Consider eliminating proxy properties.**
+   MainViewModel has ~15 `Current*` proxy properties that forward to `CurrentPaneFileList`. XAML could bind directly to `CurrentPaneFileList.FilterText` etc., eliminating manual `OnPropertyChanged` propagation.
+5. Consider whether the left pane should get an inline address-edit affordance to match the right-pane workflow.
 
 ## Known Gotchas
 - **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.
@@ -99,6 +112,7 @@ Current smoke coverage includes:
 - **KeyBinding null commands:** WPF `KeyBinding` requires a non-null command.
 - **Keyed DataTemplate + DataType:** avoid combining them in `App.xaml`.
 - **Right-pane header double-click:** `Border` does not support a `MouseDoubleClick` XAML event. Handle double-click via `MouseLeftButtonDown` and `ClickCount`.
+- **Forwarding commands:** MainViewModel has ~20 `[RelayCommand]` methods that forward to `CurrentPaneFileList?.XCommand.Execute(null)`. These exist because XAML KeyBindings and toolbar buttons bind to MainViewModel. Could be eliminated by binding directly to `CurrentPaneFileList.*` in XAML.
 
 ## Notes
 - No new NuGet packages unless explicitly approved.

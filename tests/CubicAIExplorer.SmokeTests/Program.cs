@@ -898,6 +898,7 @@ internal static class Program
         Assert(previewEvents == 1, "PreviewModeChanged should fire when enabling preview mode.");
         Assert(vm.PreviewFileName == "preview.txt", "Preview should expose the selected file name.");
         Assert(vm.PreviewFileInfo.Contains("txt", StringComparison.OrdinalIgnoreCase), "Preview should include file type information.");
+        WaitFor(() => vm.HasPreviewText);
         Assert(vm.HasPreviewText, "Text files should produce text preview content.");
         Assert(!vm.HasPreviewImage, "Text files should not produce image preview content.");
         Assert(vm.PreviewText.Contains("line one"), "Preview should include file contents.");
@@ -928,7 +929,9 @@ internal static class Program
 
         var unsupportedItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "archive.bin");
         vm.ActiveTab.FileList.SelectedItem = unsupportedItem;
-        Assert(vm.PreviewStatusText.Contains("No preview available"), "Unsupported files should show a preview status.");
+        Assert(vm.HasPreviewStatus, "Unsupported files should show a preview status.");
+        Assert(vm.PreviewStatusText.Contains("Created") || vm.PreviewStatusText.Contains("Modified"),
+            "Unsupported files should show file metadata.");
 
         var largeTextItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "large.txt");
         vm.ActiveTab.FileList.SelectedItem = largeTextItem;
@@ -1118,6 +1121,13 @@ internal static class Program
     {
         if (!condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static void WaitFor(Func<bool> condition, int timeoutMs = 2000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (!condition() && Environment.TickCount64 < deadline)
+            Thread.Sleep(50);
     }
 
     private sealed class FakeClipboardService : IClipboardService

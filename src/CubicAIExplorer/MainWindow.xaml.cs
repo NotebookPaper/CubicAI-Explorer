@@ -122,7 +122,14 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Tab && AddressAutoCompletePopup.IsOpen
             && AutoCompleteList.SelectedItem is string tabSelected)
         {
-            AcceptAutoCompleteSuggestion(tabSelected);
+            // Tab fills the path and continues drilling (appends \ and shows subdirectories)
+            var path = tabSelected.TrimEnd('\\') + "\\";
+            _suppressAutoComplete = true;
+            ViewModel.AddressBarText = path;
+            AddressBar.CaretIndex = path.Length;
+            _suppressAutoComplete = false;
+            ViewModel.UpdateAddressSuggestions();
+            AddressAutoCompletePopup.IsOpen = ViewModel.IsAddressSuggestionsOpen;
             e.Handled = true;
         }
     }
@@ -132,6 +139,8 @@ public partial class MainWindow : Window
         if (_suppressAutoComplete) return;
         ViewModel.UpdateAddressSuggestions();
         AddressAutoCompletePopup.IsOpen = ViewModel.IsAddressSuggestionsOpen;
+        if (AddressAutoCompletePopup.IsOpen && AutoCompleteList.Items.Count > 0)
+            AutoCompleteList.SelectedIndex = 0;
     }
 
     private void AutoComplete_Select(object sender, MouseButtonEventArgs e)
