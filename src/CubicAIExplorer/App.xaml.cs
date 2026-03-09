@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using CubicAIExplorer.Converters;
+using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
 
@@ -23,11 +24,14 @@ public partial class App : Application
             return;
         }
 
+        var settingsService = new SettingsService();
+        var settings = settingsService.Load();
+
         var fileSystemService = new FileSystemService();
         var clipboardService = new ClipboardService();
         var shellIconService = new ShellIconService();
         ShellIconConverter.IconService = shellIconService;
-        var mainViewModel = new MainViewModel(fileSystemService, clipboardService);
+        var mainViewModel = new MainViewModel(fileSystemService, clipboardService, settingsService, settings);
         mainViewModel.NewTabCommand.Execute(null);
 
         var mainWindow = new MainWindow
@@ -52,6 +56,12 @@ public partial class App : Application
         {
             mainViewModel.NavigateToPath(e.Args[0]);
         }
+
+        // Apply startup preferences
+        if (settings.StartInDualPane)
+            mainViewModel.ToggleDualPaneCommand.Execute(null);
+        if (settings.StartWithPreview)
+            mainViewModel.TogglePreviewCommand.Execute(null);
 
         RestoreWindowBounds(mainWindow);
         mainWindow.Closing += (_, _) => SaveWindowBounds(mainWindow);

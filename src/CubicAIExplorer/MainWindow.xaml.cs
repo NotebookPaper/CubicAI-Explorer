@@ -683,6 +683,7 @@ public partial class MainWindow : Window
             _boundViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             _boundViewModel.DualPaneModeChanged -= ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
+            _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
         }
 
         _boundViewModel = e.NewValue as MainViewModel;
@@ -691,6 +692,7 @@ public partial class MainWindow : Window
             _boundViewModel.PropertyChanged += ViewModel_PropertyChanged;
             _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
+            _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
             UpdatePaneHighlight();
@@ -1001,6 +1003,16 @@ public partial class MainWindow : Window
         var enabled = _boundViewModel?.IsPreviewVisible == true;
         PreviewSplitterCol.Width = enabled ? GridLength.Auto : new GridLength(0);
         PreviewCol.Width = enabled ? new GridLength(280) : new GridLength(0);
+    }
+
+    private void ViewModel_OpenPreferencesRequested(object? sender, EventArgs e)
+    {
+        if (_boundViewModel == null) return;
+        var dialog = new PreferencesWindow(_boundViewModel.CurrentSettings) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            _boundViewModel.ApplyAndSaveSettings(dialog.Settings);
+        }
     }
 
     private void RightPane_MouseDoubleClick(object sender, MouseButtonEventArgs e)

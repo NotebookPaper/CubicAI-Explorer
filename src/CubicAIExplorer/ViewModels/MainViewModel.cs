@@ -19,6 +19,8 @@ public partial class MainViewModel : ObservableObject
 
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
+    private readonly Services.SettingsService? _settingsService;
+    private readonly Models.UserSettings _userSettings;
 
     [ObservableProperty]
     private TabViewModel? _activeTab;
@@ -141,13 +143,19 @@ public partial class MainViewModel : ObservableObject
 
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
+    public event EventHandler? OpenPreferencesRequested;
+
+    public Models.UserSettings CurrentSettings => _userSettings;
 
     private const int MaxRecentFolders = 15;
 
-    public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
+    public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService,
+        Services.SettingsService? settingsService = null, Models.UserSettings? userSettings = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
+        _settingsService = settingsService;
+        _userSettings = userSettings ?? new Models.UserSettings();
         LoadBookmarks();
         LoadRecentFolders();
         LoadDrives();
@@ -346,8 +354,18 @@ public partial class MainViewModel : ObservableObject
         Tabs.Add(tab);
         ActiveTab = tab;
 
-        // Navigate to user profile by default
-        var defaultPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        // Apply user settings
+        if (_userSettings.ShowHiddenFiles)
+            tab.FileList.ShowHiddenFiles = true;
+        if (_userSettings.DefaultViewMode is "List" or "Tiles")
+            tab.FileList.ViewMode = _userSettings.DefaultViewMode;
+
+        // Navigate to startup folder or user profile
+        var startupFolder = _userSettings.StartupFolder;
+        var defaultPath = !string.IsNullOrWhiteSpace(startupFolder)
+            && _fileSystemService.DirectoryExists(startupFolder)
+            ? startupFolder
+            : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         tab.NavigateTo(defaultPath);
     }
 
@@ -739,6 +757,22 @@ public partial class MainViewModel : ObservableObject
         PreviewModeChanged?.Invoke(this, EventArgs.Empty);
         if (IsPreviewVisible)
             UpdatePreview();
+    }
+
+    [RelayCommand]
+    private void OpenPreferences()
+    {
+        OpenPreferencesRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void ApplyAndSaveSettings(Models.UserSettings newSettings)
+    {
+        _userSettings.DefaultViewMode = newSettings.DefaultViewMode;
+        _userSettings.ShowHiddenFiles = newSettings.ShowHiddenFiles;
+        _userSettings.StartupFolder = newSettings.StartupFolder;
+        _userSettings.StartInDualPane = newSettings.StartInDualPane;
+        _userSettings.StartWithPreview = newSettings.StartWithPreview;
+        _settingsService?.Save(_userSettings);
     }
 
     private int _previewGeneration;

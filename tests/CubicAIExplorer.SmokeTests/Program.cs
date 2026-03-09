@@ -52,6 +52,9 @@ internal static class Program
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
+            Run("user settings defaults", failures, TestUserSettingsDefaults);
+            Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
+            Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
         finally
@@ -993,6 +996,77 @@ internal static class Program
 
         vm.ActiveTab = firstTab;
         Assert(vm.PreviewFileName == "one.txt", "Preview should refresh when switching back to another tab.");
+    }
+
+    private static void TestUserSettingsDefaults()
+    {
+        var settings = new UserSettings();
+
+        Assert(settings.DefaultViewMode == "Details", "Default view mode should be Details.");
+        Assert(!settings.ShowHiddenFiles, "Hidden files should be off by default.");
+        Assert(string.IsNullOrEmpty(settings.StartupFolder), "Startup folder should default to empty.");
+        Assert(!settings.StartInDualPane, "Dual-pane startup should be off by default.");
+        Assert(!settings.StartWithPreview, "Preview startup should be off by default.");
+    }
+
+    private static void TestSettingsServiceRoundTrip(string root)
+    {
+        var settingsPath = Path.Combine(root, "settings.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var service = new SettingsService();
+            var initial = service.Load();
+            Assert(initial.DefaultViewMode == "Details", "Missing settings should load defaults.");
+
+            var expected = new UserSettings
+            {
+                DefaultViewMode = "Tiles",
+                ShowHiddenFiles = true,
+                StartupFolder = root,
+                StartInDualPane = true,
+                StartWithPreview = true
+            };
+
+            service.Save(expected);
+            var reloaded = service.Load();
+
+            Assert(reloaded.DefaultViewMode == "Tiles", "Settings round-trip should persist view mode.");
+            Assert(reloaded.ShowHiddenFiles, "Settings round-trip should persist ShowHiddenFiles.");
+            Assert(reloaded.StartupFolder == root, "Settings round-trip should persist startup folder.");
+            Assert(reloaded.StartInDualPane, "Settings round-trip should persist dual-pane startup.");
+            Assert(reloaded.StartWithPreview, "Settings round-trip should persist preview startup.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
+    private static void TestNewTabAppliesSettings(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var startupFolder = CreateCleanSubdir(root, "settings_startup");
+
+        var settings = new UserSettings
+        {
+            DefaultViewMode = "Tiles",
+            ShowHiddenFiles = true,
+            StartupFolder = startupFolder
+        };
+
+        var vm = new MainViewModel(fs, clipboard, userSettings: settings);
+        vm.NewTabCommand.Execute(null);
+
+        Assert(vm.ActiveTab != null, "NewTab should create an active tab.");
+        Assert(vm.ActiveTab!.CurrentPath == startupFolder, "Startup folder setting should control first tab path.");
+        Assert(vm.ActiveTab.FileList.ViewMode == "Tiles", "Default view mode setting should apply to new tabs.");
+        Assert(vm.ActiveTab.FileList.ShowHiddenFiles, "ShowHiddenFiles setting should apply to new tabs.");
     }
 
     private static void TestXamlWiring()

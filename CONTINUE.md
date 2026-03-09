@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
 > **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + dual-pane parity/polish well beyond MVP. Latest code is committed and pushed on `origin/master`. Smoke suite passes. Recent refactor cleaned up event leaks and code duplication.
+> **Status:** Tier 1 complete + dual-pane, preview, autocomplete, and preferences UI all implemented. Uncommitted work-in-progress: settings/preferences feature is **code-complete, builds, and now has smoke coverage** but not yet committed. Smoke suite passes.
 
 ---
 
@@ -43,12 +43,10 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Breadcrumb-style address bar
 - Recent folders panel
 - Toolbar vector icons replacing Unicode glyphs
-- Address bar autocomplete suggestions
-- Dual-pane mode with active-pane routing
-- Preview panel for text/images with async loading, folder preview, and file metadata fallback
+- Preview panel with async loading, folder preview, and file metadata fallback
 - Address bar autocomplete with drive-root completion and debounced async suggestions
 
-### Dual-pane parity already implemented
+### Dual-pane parity
 - Active-pane model for commands and navigation
 - Right-pane context menu parity
 - Right-pane sorting, inline rename, select-all, properties routing
@@ -57,53 +55,42 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
 - Right-pane header single-click activation and inline address editing with autocomplete
 
-### Recent refactor (4442153)
-- Fixed event listener leak: closed tabs now properly unsubscribed via `DetachTab()`
-- Fixed right-pane drop bug: subfolder drop targeting now works (was always dropping to current dir)
-- Deduplicated left/right pane handlers into shared methods (`SyncSelection`, `TryInitiateDrag`, `HandleDrop`, `OpenSelectedInPane`, `ConfigureContextMenu`, `HookPaneFileListViewModel`)
-- Cached `LinearGradientBrush` as static frozen field
-- Removed duplicate `UpdatePreview` calls on selection change
-- Consolidated `OnFileListPropertyChanged` to use switch + cached `isCurrentPane`
-- Consolidated `OnTabPropertyChanged` to single `CurrentPath` check
-- Extracted `GetAppDataPath()` and `GetDisplayName()` helpers
+### Async I/O
+- Preview loading (images, text, folders) runs on background threads with generation tracking
+- Address suggestions debounced 100ms + filesystem queries on background thread
+- `SaveRecentFolders` uses `File.WriteAllTextAsync`
 
 ## Current Worktree State
-Tracked files are committed through `4442153` on `origin/master`.
 
-Untracked local-only paths still present:
+**Committed on `origin/master`:** `8ad16c9` (async autocomplete + right-pane autocomplete).
+
+**Uncommitted but building + tests passing — settings/preferences feature:**
+- `src/CubicAIExplorer/Models/UserSettings.cs` — NEW: settings model (DefaultViewMode, ShowHiddenFiles, StartupFolder, StartInDualPane, StartWithPreview)
+- `src/CubicAIExplorer/Services/SettingsService.cs` — NEW: load/save `%AppData%\CubicAIExplorer\settings.json` (supports `CUBICAI_SETTINGS_PATH` override for tests)
+- `src/CubicAIExplorer/PreferencesWindow.xaml` + `.cs` — NEW: Preferences dialog with folder browser
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — constructor accepts `SettingsService`/`UserSettings`, `NewTab()` applies settings (view mode, hidden files, startup folder), `OpenPreferencesCommand`, `ApplyAndSaveSettings()`, `CurrentSettings` property
+- `src/CubicAIExplorer/App.xaml.cs` — loads settings via `SettingsService`, passes to `MainViewModel`, applies `StartInDualPane`/`StartWithPreview` on startup
+- `src/CubicAIExplorer/MainWindow.xaml` — Tools > Preferences menu item
+- `src/CubicAIExplorer/MainWindow.xaml.cs` — `ViewModel_OpenPreferencesRequested` handler opens dialog
+
+Untracked local-only paths:
 - `.claude/`
 - `src/CubicAIExplorer/obj_verify/`
 - `tests/CubicAIExplorer.SmokeTests/obj_verify/`
 
 ## Verification
 Verified on **2026-03-09**:
-- `dotnet build CubicAIExplorer.sln`
-- `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
-- `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-
-Current smoke coverage includes:
-- dual-pane toggle
-- active pane command routing
-- active pane UI command routing
-- active pane view/search routing
-- active pane status labels
-- current pane navigation routing
-- current pane navigation sources
-- preview properties
-- preview refresh on tab switch
-- preview status states
-- address suggestions
-- XAML wiring checks
+- `dotnet build CubicAIExplorer.sln` — 0 errors, 0 warnings
+- Smoke tests: 41/41 pass (includes settings defaults + round-trip + `NewTab` settings application)
 
 ## Priority Next Work
-1. **Consider eliminating proxy properties.**
+1. **Commit the settings/preferences feature** once user is ready.
+2. **Consider eliminating proxy properties.**
    MainViewModel has ~15 `Current*` proxy properties that forward to `CurrentPaneFileList`. XAML could bind directly to `CurrentPaneFileList.FilterText` etc., eliminating manual `OnPropertyChanged` propagation.
-2. **Expand preview to more file types.**
-   PDF metadata, audio/video info, or rich text rendering would add value but may require new NuGet packages.
-3. **Keyboard accessibility polish.**
+3. **Expand preview to more file types.**
+   PDF metadata, audio/video info would add value but may require new NuGet packages.
+4. **Keyboard accessibility polish.**
    Tab order, focus management, and keyboard-only navigation through all panels.
-4. **Settings/preferences UI.**
-   Persist user preferences (default view mode, show hidden files, startup folder, etc.).
 
 ## Known Gotchas
 - **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.
@@ -113,6 +100,7 @@ Current smoke coverage includes:
 - **Keyed DataTemplate + DataType:** avoid combining them in `App.xaml`.
 - **Right-pane header double-click:** `Border` does not support a `MouseDoubleClick` XAML event. Handle double-click via `MouseLeftButtonDown` and `ClickCount`.
 - **Forwarding commands:** MainViewModel has ~20 `[RelayCommand]` methods that forward to `CurrentPaneFileList?.XCommand.Execute(null)`. These exist because XAML KeyBindings and toolbar buttons bind to MainViewModel. Could be eliminated by binding directly to `CurrentPaneFileList.*` in XAML.
+- **WinForms namespace collisions:** Adding `<UseWindowsForms>true</UseWindowsForms>` to the csproj causes widespread `Point`, `Brush`, `DragEventArgs`, `ListView` ambiguities. Use `Microsoft.Win32.OpenFolderDialog` (.NET 8+) instead of `System.Windows.Forms.FolderBrowserDialog`.
 
 ## Notes
 - No new NuGet packages unless explicitly approved.
