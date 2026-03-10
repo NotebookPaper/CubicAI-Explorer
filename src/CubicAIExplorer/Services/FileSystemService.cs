@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using Microsoft.VisualBasic.FileIO;
 using CubicAIExplorer.Models;
 
@@ -264,6 +265,56 @@ public sealed class FileSystemService : IFileSystemService
         var targetPath = GetUniquePath(sanitizedParent, baseName, isDirectory: true);
         Directory.CreateDirectory(targetPath);
         return targetPath;
+    }
+
+    public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100)
+    {
+        var sanitized = SanitizePath(archivePath);
+        if (sanitized == null || !File.Exists(sanitized))
+            return [];
+
+        using var stream = new FileStream(sanitized, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+
+        return archive.Entries
+            .Take(Math.Max(1, maxEntries))
+            .Select(static entry => new ArchiveEntryInfo(
+                entry.FullName,
+                entry.Length,
+                entry.FullName.EndsWith("/", StringComparison.Ordinal) || string.IsNullOrEmpty(entry.Name)))
+            .ToList();
+    }
+
+    public void ExtractArchive(string archivePath, string destinationDirectory)
+    {
+        var sanitizedArchive = SanitizePath(archivePath);
+        var sanitizedDestination = SanitizePath(destinationDirectory);
+        if (sanitizedArchive == null || sanitizedDestination == null)
+            return;
+        if (!File.Exists(sanitizedArchive) || !Directory.Exists(sanitizedDestination))
+            return;
+
+        using var stream = new FileStream(sanitizedArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+
+        foreach (var entry in archive.Entries)
+        {
+            var targetPath = SanitizePath(Path.Combine(sanitizedDestination, entry.FullName));
+            if (targetPath == null || !targetPath.StartsWith(sanitizedDestination, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(targetPath);
+                continue;
+            }
+
+            var targetDir = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrWhiteSpace(targetDir))
+                Directory.CreateDirectory(targetDir);
+
+            entry.ExtractToFile(targetPath, overwrite: false);
+        }
     }
 
     /// <summary>

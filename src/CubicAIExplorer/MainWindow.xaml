@@ -453,6 +453,7 @@
                                 <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                 <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
+                                <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive" Command="{Binding ExtractArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                 <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
@@ -592,6 +593,7 @@
                                     <MenuItem x:Name="RightRenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                     <MenuItem x:Name="RightNewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
+                                    <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive" Command="{Binding ExtractArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />
                                     <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                     <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />

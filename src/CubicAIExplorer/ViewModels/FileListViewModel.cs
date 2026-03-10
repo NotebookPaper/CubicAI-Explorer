@@ -267,6 +267,34 @@ public partial class FileListViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ExtractArchive()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null || !string.Equals(item.Extension, ".zip", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var parentPath = Path.GetDirectoryName(item.FullPath);
+        if (string.IsNullOrWhiteSpace(parentPath))
+            return;
+
+        try
+        {
+            var destination = _fileSystemService.CreateFolder(parentPath, Path.GetFileNameWithoutExtension(item.Name));
+            _fileSystemService.ExtractArchive(item.FullPath, destination);
+            SetTransferSummary($"Extracted archive to {Path.GetFileName(destination)}");
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Extract archive failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
     private void Refresh()
     {
         if (!string.IsNullOrWhiteSpace(CurrentPath))

@@ -2,6 +2,8 @@ using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Services;
 
+public sealed record ArchiveEntryInfo(string FullName, long Length, bool IsDirectory);
+
 public enum FileTransferCollisionResolution
 {
     KeepBoth,
@@ -44,4 +46,6 @@ public interface IFileSystemService
     void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false);
     string RenameFile(string path, string newName);
     string CreateFolder(string parentPath, string folderName);
+    IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);
+    void ExtractArchive(string archivePath, string destinationDirectory);
 }

@@ -791,6 +791,10 @@ public partial class MainViewModel : ObservableObject
         {
             LoadPdfPreviewAsync(item.FullPath, generation);
         }
+        else if (IsArchiveExtension(ext))
+        {
+            LoadArchivePreviewAsync(item.FullPath, generation);
+        }
         else if (IsMediaExtension(ext))
         {
             LoadMediaPreviewAsync(item.FullPath, generation);
@@ -952,6 +956,38 @@ public partial class MainViewModel : ObservableObject
                 details.Add($"Duration: {FormatDuration(duration)}");
             if (media.Width > 0 && media.Height > 0)
                 details.Add($"Dimensions: {media.Width} x {media.Height}");
+
+            PreviewStatusText = string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            ShowFileMetadata(path);
+        }
+    }
+
+    private async void LoadArchivePreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var entries = await Task.Run(() => _fileSystemService.GetArchiveEntries(path, maxEntries: 8));
+            if (_previewGeneration != generation) return;
+
+            var fileCount = entries.Count(static entry => !entry.IsDirectory);
+            var folderCount = entries.Count(static entry => entry.IsDirectory);
+            var details = new List<string> { "ZIP archive" };
+            details.Add($"Entries: {entries.Count}");
+            if (folderCount > 0)
+                details.Add($"Folders: {folderCount}");
+            if (fileCount > 0)
+                details.Add($"Files: {fileCount}");
+
+            if (entries.Count > 0)
+            {
+                PreviewText = string.Join("\n", entries.Select(static entry => entry.FullName));
+                HasPreviewText = true;
+            }
 
             PreviewStatusText = string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
             HasPreviewStatus = true;
@@ -1126,6 +1162,8 @@ public partial class MainViewModel : ObservableObject
         ".tiff" or ".tif" or ".webp";
 
     private static bool IsPdfExtension(string ext) => ext is ".pdf";
+
+    private static bool IsArchiveExtension(string ext) => ext is ".zip";
 
     private static bool IsMediaExtension(string ext) => ext is
         ".mp3" or ".wav" or ".flac" or ".aac" or ".m4a" or ".ogg" or ".wma" or

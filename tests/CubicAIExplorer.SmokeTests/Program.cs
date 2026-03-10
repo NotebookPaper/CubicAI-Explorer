@@ -32,6 +32,8 @@ internal static class Program
             Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
             Run("clipboard drop effect byte array", failures, TestClipboardDropEffectByteArray);
             Run("file operation queue service", failures, TestFileOperationQueueService);
+            Run("zip archive service", failures, () => TestZipArchiveService(tempRoot));
+            Run("extract archive command", failures, () => TestExtractArchiveCommand(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -57,6 +59,7 @@ internal static class Program
             Run("current pane navigation sources", failures, () => TestCurrentPaneNavigationSources(tempRoot));
             Run("preview properties", failures, () => TestPreviewProperties(tempRoot));
             Run("image preview metadata", failures, () => TestImagePreviewMetadata(tempRoot));
+            Run("archive preview metadata", failures, () => TestArchivePreviewMetadata(tempRoot));
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
@@ -450,6 +453,59 @@ internal static class Program
         Assert(secondStarted, "Queued operation should run after the first completes.");
         Assert(!queue.IsBusy, "Queue should become idle after all work completes.");
         Assert(queue.PendingCount == 0, "Queue should clear pending work after completion.");
+    }
+
+    private static void TestZipArchiveService(string root)
+    {
+        var fs = new FileSystemService();
+        var folder = CreateCleanSubdir(root, "zip_service");
+        var archive = Path.Combine(folder, "sample.zip");
+        var extractDir = Path.Combine(folder, "extracted");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            zip.CreateEntry("docs/");
+            var entry = zip.CreateEntry("docs/readme.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("archive text");
+        }
+
+        var entries = fs.GetArchiveEntries(archive);
+        Assert(entries.Any(e => e.FullName == "docs/readme.txt"), "Archive listing should include file entries.");
+
+        Directory.CreateDirectory(extractDir);
+        fs.ExtractArchive(archive, extractDir);
+        Assert(File.Exists(Path.Combine(extractDir, "docs", "readme.txt")), "Archive extraction should materialize files.");
+    }
+
+    private static void TestExtractArchiveCommand(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "extract_archive_command");
+        var archive = Path.Combine(folder, "sample.zip");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var entry = zip.CreateEntry("inner.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("hello archive");
+        }
+
+        var vm = new FileListViewModel(fs, clipboard);
+        vm.LoadDirectory(folder);
+        var archiveItem = vm.Items.Single(i => i.Name == "sample.zip");
+        vm.SelectedItem = archiveItem;
+        vm.SelectedItems.Clear();
+        vm.SelectedItems.Add(archiveItem);
+
+        vm.ExtractArchiveCommand.Execute(null);
+
+        Assert(Directory.Exists(Path.Combine(folder, "sample")), "Extract archive command should create a destination folder.");
+        Assert(File.Exists(Path.Combine(folder, "sample", "inner.txt")), "Extract archive command should extract files.");
+        Assert(vm.StatusText.Contains("Extracted archive"), "Extract archive command should update status text.");
     }
 
     private static void TestRedoCopy(string root)
@@ -1107,6 +1163,34 @@ internal static class Program
         Assert(vm.PreviewStatusText.Contains("Dimensions"), "Image preview should include dimensions.");
     }
 
+    private static void TestArchivePreviewMetadata(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "preview_archive");
+        var archive = Path.Combine(folder, "sample.zip");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var entry = zip.CreateEntry("notes.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("hello");
+        }
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+        vm.TogglePreviewCommand.Execute(null);
+
+        var archiveItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "sample.zip");
+        vm.ActiveTab.FileList.SelectedItem = archiveItem;
+        WaitFor(() => vm.PreviewStatusText.Contains("ZIP"), 1000);
+
+        Assert(vm.PreviewStatusText.Contains("ZIP archive"), "ZIP files should show archive metadata.");
+        Assert(vm.PreviewText.Contains("notes.txt"), "ZIP preview should list archive entries.");
+    }
+
     private static void TestAddressSuggestions(string root)
     {
         var fs = new FileSystemService();
@@ -1290,6 +1374,7 @@ internal static class Program
         Assert(main.Contains("FilterTextBox"), "Filter text box should be in MainWindow.");
         Assert(main.Contains("PropertiesMenuItem"), "Properties menu item should be in context menu.");
         Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
+        Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
         Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");
         Assert(main.Contains("FolderTree_Drop"), "Folder tree drop handler should be wired.");
