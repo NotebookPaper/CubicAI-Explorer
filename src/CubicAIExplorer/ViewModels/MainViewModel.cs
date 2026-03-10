@@ -42,6 +42,9 @@ public partial class MainViewModel : ObservableObject
     private BookmarkItem? _selectedBookmark;
 
     [ObservableProperty]
+    private SavedSearchItem? _selectedSavedSearch;
+
+    [ObservableProperty]
     private bool _isRightPaneActive;
 
     // Dual pane
@@ -94,6 +97,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
+    public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
     public ObservableCollection<string> AddressSuggestions { get; } = [];
     public ObservableCollection<string> RightPaneAddressSuggestions { get; } = [];
     public TabViewModel? CurrentPaneTab => IsRightPaneActive && IsDualPaneMode ? _rightPaneTab : ActiveTab;
@@ -129,6 +133,7 @@ public partial class MainViewModel : ObservableObject
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
         LoadBookmarks();
         LoadRecentFolders();
+        LoadSavedSearches();
         LoadDrives();
     }
 
@@ -472,6 +477,59 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddCurrentSearch()
+    {
+        var fileList = CurrentPaneFileList;
+        if (fileList == null || string.IsNullOrWhiteSpace(CurrentPanePath) || string.IsNullOrWhiteSpace(fileList.SearchText))
+            return;
+
+        var searchTerm = fileList.SearchText.Trim();
+        var name = $"{GetDisplayName(CurrentPanePath)}: {searchTerm}";
+        var existing = SavedSearches.FirstOrDefault(saved =>
+            string.Equals(saved.SearchPath, CurrentPanePath, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(saved.SearchTerm, searchTerm, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            SelectedSavedSearch = existing;
+            return;
+        }
+
+        var item = new SavedSearchItem
+        {
+            Name = name,
+            SearchPath = CurrentPanePath,
+            SearchTerm = searchTerm
+        };
+        SavedSearches.Insert(0, item);
+        SelectedSavedSearch = item;
+        SaveSavedSearches();
+    }
+
+    [RelayCommand]
+    private void RemoveSavedSearch(SavedSearchItem? savedSearch)
+    {
+        if (savedSearch == null)
+            return;
+
+        SavedSearches.Remove(savedSearch);
+        if (SelectedSavedSearch == savedSearch)
+            SelectedSavedSearch = null;
+        SaveSavedSearches();
+    }
+
+    [RelayCommand]
+    private void RunSavedSearch(SavedSearchItem? savedSearch)
+    {
+        if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath) || string.IsNullOrWhiteSpace(savedSearch.SearchTerm))
+            return;
+        if (!_fileSystemService.DirectoryExists(savedSearch.SearchPath))
+            return;
+
+        NavigateCurrentPaneToPath(savedSearch.SearchPath);
+        CurrentPaneFileList?.ApplySavedSearch(savedSearch.SearchPath, savedSearch.SearchTerm);
+    }
+
+    [RelayCommand]
     private void Undo()
     {
         ExecuteOnCurrentPaneFileList(fileList => fileList.UndoCommand.Execute(null));
@@ -692,6 +750,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     private sealed record BookmarkRecord(string Name, string Path);
+    private sealed record SavedSearchRecord(string Name, string Path, string Term);
 
     // --- Dual Pane ---
 
@@ -1314,6 +1373,15 @@ public partial class MainViewModel : ObservableObject
 
     private static string GetRecentFoldersPath() => GetAppDataPath("recent.json");
 
+    private static string GetSavedSearchesPath()
+    {
+        var overridePath = Environment.GetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return overridePath;
+
+        return GetAppDataPath("saved-searches.json");
+    }
+
     private void LoadRecentFolders()
     {
         try
@@ -1354,6 +1422,56 @@ public partial class MainViewModel : ObservableObject
             var payload = RecentFolders.Select(static r => r.FullPath).ToList();
             var json = JsonSerializer.Serialize(payload);
             await File.WriteAllTextAsync(filePath, json);
+        }
+        catch
+        {
+            // Non-critical.
+        }
+    }
+
+    private void LoadSavedSearches()
+    {
+        try
+        {
+            var path = GetSavedSearchesPath();
+            if (!File.Exists(path)) return;
+
+            var json = File.ReadAllText(path);
+            var savedSearches = JsonSerializer.Deserialize<List<SavedSearchRecord>>(json);
+            if (savedSearches == null) return;
+
+            foreach (var savedSearch in savedSearches)
+            {
+                if (string.IsNullOrWhiteSpace(savedSearch.Path) || string.IsNullOrWhiteSpace(savedSearch.Term))
+                    continue;
+
+                SavedSearches.Add(new SavedSearchItem
+                {
+                    Name = string.IsNullOrWhiteSpace(savedSearch.Name) ? savedSearch.Term : savedSearch.Name,
+                    SearchPath = savedSearch.Path,
+                    SearchTerm = savedSearch.Term
+                });
+            }
+        }
+        catch
+        {
+            // Ignore corrupted saved search persistence.
+        }
+    }
+
+    private void SaveSavedSearches()
+    {
+        try
+        {
+            var path = GetSavedSearchesPath();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var payload = SavedSearches
+                .Select(static s => new SavedSearchRecord(s.Name, s.SearchPath, s.SearchTerm))
+                .ToList();
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
         }
         catch
         {

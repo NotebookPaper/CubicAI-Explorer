@@ -50,6 +50,7 @@ internal static class Program
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
+            Run("saved searches", failures, () => TestSavedSearches(tempRoot));
             Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
             Run("active pane command routing", failures, () => TestActivePaneCommandRouting(tempRoot));
             Run("active pane ui command routing", failures, () => TestActivePaneUiCommandRouting(tempRoot));
@@ -835,6 +836,47 @@ internal static class Program
         Assert(!vm.IsSearchVisible, "CloseSearch should hide search bar.");
     }
 
+    private static void TestSavedSearches(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "saved_search_root");
+        CreateCleanSubdir(folder, "needle-folder");
+        var savedSearchesPath = Path.Combine(root, "saved-searches.json");
+        Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", savedSearchesPath);
+        TryDelete(savedSearchesPath);
+
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
+            vm.SearchInFolderCommand.Execute(null);
+            vm.CurrentPaneFileList!.SearchText = "needle";
+            vm.CurrentPaneFileList.ExecuteSearchSync();
+
+            vm.AddCurrentSearchCommand.Execute(null);
+
+            Assert(vm.SavedSearches.Count == 1, "AddCurrentSearch should persist a saved search entry.");
+            Assert(File.Exists(savedSearchesPath), "Saved searches should be written to disk.");
+
+            var reloaded = new MainViewModel(fs, clipboard);
+            reloaded.NewTabCommand.Execute(null);
+            Assert(reloaded.SavedSearches.Count == 1, "Saved searches should reload from persistence.");
+
+            var saved = reloaded.SavedSearches[0];
+            reloaded.NavigateToPath(folder);
+            reloaded.RunSavedSearchCommand.Execute(saved);
+
+            Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved search should show search results.");
+            Assert(reloaded.CurrentPaneFileList.Items.Any(i => i.Name == "needle-folder"), "Running a saved search should reproduce results.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", null);
+        }
+    }
+
     private static void TestDualPaneToggle(string root)
     {
         var fs = new FileSystemService();
@@ -1359,6 +1401,7 @@ internal static class Program
         Assert(main.Contains("Drop=\"FileList_Drop\""), "File list drop handler should be wired.");
         Assert(main.Contains("ClearHistoryCommand"), "Clear history command should be wired.");
         Assert(main.Contains("BookmarkList_SelectionChanged"), "Bookmark single-click navigation should be wired.");
+        Assert(main.Contains("SavedSearchList_SelectionChanged"), "Saved search single-click navigation should be wired.");
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
         Assert(app.Contains("ShellIconConverter"), "ShellIconConverter should be in app resources.");
@@ -1384,13 +1427,16 @@ internal static class Program
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
         Assert(main.Contains("BookmarkList_KeyDown"), "Bookmark keyboard handler should be wired.");
+        Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
+        Assert(main.Contains("AddCurrentSearchCommand"), "Saved-search add command should exist.");
         Assert(main.Contains("Command=\"{Binding CopyCommand}\""), "Copy bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding GoBackCommand}\""), "Back bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding RenameCommand}\""), "Rename bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding SelectAllCommand}\""), "Select-all bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
+        Assert(main.Contains("Command=\"{Binding AddCurrentSearchCommand}\""), "Saved-search save bindings should route through the main view model.");
         Assert(main.Contains("CurrentPaneFileList.FilterText"), "Filter bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.SearchText"), "Search bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.IsSearchVisible"), "Search visibility should bind to the current active pane.");
@@ -1416,6 +1462,8 @@ internal static class Program
         Assert(mainCs.Contains("Key.D2"), "Ctrl+2 shortcut should be handled.");
         Assert(mainCs.Contains("Key.D3"), "Ctrl+3 shortcut should be handled.");
         Assert(mainCs.Contains("Key.D4"), "Ctrl+4 shortcut should be handled.");
+        Assert(mainCs.Contains("SavedSearchList_KeyDown"), "Saved search keyboard handler should be wired.");
+        Assert(mainCs.Contains("SavedSearchList_MouseDoubleClick"), "Saved search double-click handler should be wired.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");

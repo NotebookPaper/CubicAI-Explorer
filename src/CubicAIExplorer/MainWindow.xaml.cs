@@ -490,6 +490,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SavedSearchList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel.SelectedSavedSearch is { } savedSearch)
+            ViewModel.RunSavedSearchCommand.Execute(savedSearch);
+    }
+
+    private void SavedSearchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ViewModel.SelectedSavedSearch is { } savedSearch)
+            ViewModel.RunSavedSearchCommand.Execute(savedSearch);
+    }
+
+    private void SavedSearchList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && ViewModel.SelectedSavedSearch is { } savedSearch)
+        {
+            ViewModel.RunSavedSearchCommand.Execute(savedSearch);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete && ViewModel.SelectedSavedSearch is { } selected)
+        {
+            ViewModel.RemoveSavedSearchCommand.Execute(selected);
+            e.Handled = true;
+        }
+    }
+
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ActivateLeftPane();

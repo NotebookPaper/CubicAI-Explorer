@@ -429,6 +429,19 @@ public partial class FileListViewModel : ObservableObject
         ApplySearchResults(results, SearchText);
     }
 
+    public void ApplySavedSearch(string searchPath, string searchTerm)
+    {
+        if (string.IsNullOrWhiteSpace(searchPath) || string.IsNullOrWhiteSpace(searchTerm))
+            return;
+
+        if (!string.Equals(CurrentPath, searchPath, StringComparison.OrdinalIgnoreCase))
+            LoadDirectory(searchPath);
+
+        SearchText = searchTerm;
+        IsSearchVisible = true;
+        ExecuteSearchSync();
+    }
+
     private void ApplySearchResults(List<FileSystemItem> results, string searchTerm)
     {
         Items.Clear();
