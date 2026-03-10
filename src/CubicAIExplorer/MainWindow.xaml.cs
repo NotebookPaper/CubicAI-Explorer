@@ -921,6 +921,7 @@ public partial class MainWindow : Window
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
             _boundViewModel.ScrollToSelectedRequested -= MainWindow_ScrollToSelectedRequested;
+            _boundViewModel.ScrollToSelectedBookmarkRequested -= MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested -= ViewModel_BookmarkPropertiesRequested;
         }
 
@@ -932,6 +933,7 @@ public partial class MainWindow : Window
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
             _boundViewModel.ScrollToSelectedRequested += MainWindow_ScrollToSelectedRequested;
+            _boundViewModel.ScrollToSelectedBookmarkRequested += MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested += ViewModel_BookmarkPropertiesRequested;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);

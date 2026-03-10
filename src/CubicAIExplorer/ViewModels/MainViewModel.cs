@@ -400,11 +400,39 @@ public partial class MainViewModel : ObservableObject
             SyncFolderTreeToPath(path);
         }
     }
+public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
+public event EventHandler<BookmarkItem>? ScrollToSelectedBookmarkRequested;
 
-    public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
+private bool _isSyncingTree;
+...
+public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
+{
+    if (string.IsNullOrWhiteSpace(path)) return;
 
-    private bool _isSyncingTree;
-    private void SyncFolderTreeToPath(string path)
+    var newItem = new BookmarkItem
+    {
+        Name = GetDisplayName(path),
+        Path = path,
+        IsFolder = true,
+        IsExpanded = true
+    };
+
+    if (targetParent != null && targetParent.IsFolder)
+    {
+        targetParent.Children.Add(newItem);
+        targetParent.IsExpanded = true;
+    }
+    else
+    {
+        Bookmarks.Add(newItem);
+    }
+
+    SelectedBookmark = newItem;
+    SaveBookmarks();
+    ScrollToSelectedBookmarkRequested?.Invoke(this, newItem);
+}
+
+private void SyncFolderTreeToPath(string path)
     {
         if (_isSyncingTree || string.IsNullOrEmpty(path)) return;
         _isSyncingTree = true;
