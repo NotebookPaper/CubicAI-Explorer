@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Text.Json;
 using System.ComponentModel;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -180,10 +181,7 @@ public partial class MainViewModel : ObservableObject
         if (sender is not FileListViewModel fileList)
             return;
 
-        if (ActiveTab?.FileList == fileList)
-            OnPropertyChanged(nameof(LeftPaneStatusText));
-        if (_rightPaneTab?.FileList == fileList)
-            OnPropertyChanged(nameof(RightPaneStatusText));
+        RaisePaneStatusProperties(fileList);
 
         var isCurrentPane = CurrentPaneFileList == fileList;
         if (!isCurrentPane)
@@ -193,8 +191,7 @@ public partial class MainViewModel : ObservableObject
         {
             case nameof(FileListViewModel.StatusText):
                 StatusText = fileList.StatusText;
-                OnPropertyChanged(nameof(ActiveUndoDescription));
-                OnPropertyChanged(nameof(ActiveRedoDescription));
+                RaiseCurrentPaneCommandProperties();
                 break;
             case nameof(FileListViewModel.SelectedItem):
             case nameof(FileListViewModel.CurrentPath):
@@ -202,8 +199,7 @@ public partial class MainViewModel : ObservableObject
                 break;
             case nameof(FileListViewModel.UndoDescription):
             case nameof(FileListViewModel.RedoDescription):
-                OnPropertyChanged(nameof(ActiveUndoDescription));
-                OnPropertyChanged(nameof(ActiveRedoDescription));
+                RaiseCurrentPaneCommandProperties();
                 break;
         }
     }
@@ -227,15 +223,7 @@ public partial class MainViewModel : ObservableObject
         StatusText = currentPaneTab?.FileList.StatusText ?? "Ready";
         UpdateBreadcrumbs(currentPaneTab?.CurrentPath ?? string.Empty);
         UpdatePreview();
-        OnPropertyChanged(nameof(CurrentPaneTab));
-        OnPropertyChanged(nameof(CurrentPaneFileList));
-        OnPropertyChanged(nameof(CurrentPanePath));
-        OnPropertyChanged(nameof(IsLeftPaneActive));
-        OnPropertyChanged(nameof(CurrentPaneLabel));
-        OnPropertyChanged(nameof(LeftPaneStatusText));
-        OnPropertyChanged(nameof(RightPaneStatusText));
-        OnPropertyChanged(nameof(ActiveUndoDescription));
-        OnPropertyChanged(nameof(ActiveRedoDescription));
+        RaiseCurrentPaneStateProperties();
     }
 
     private static string GetAppDataPath(string filename)
@@ -373,31 +361,31 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void GoBack()
     {
-        ExecuteOnCurrentPaneTab(tab => tab.GoBackCommand.Execute(null));
+        ExecuteOnCurrentPaneTab(tab => ExecuteCommand(tab.GoBackCommand));
     }
 
     [RelayCommand]
     private void GoForward()
     {
-        ExecuteOnCurrentPaneTab(tab => tab.GoForwardCommand.Execute(null));
+        ExecuteOnCurrentPaneTab(tab => ExecuteCommand(tab.GoForwardCommand));
     }
 
     [RelayCommand]
     private void Copy()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.CopyCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.CopyCommand);
     }
 
     [RelayCommand]
     private void Cut()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.CutCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.CutCommand);
     }
 
     [RelayCommand]
     private void Paste()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.PasteCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.PasteCommand);
     }
 
     [RelayCommand]
@@ -413,67 +401,67 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Delete()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.DeleteCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.DeleteCommand);
     }
 
     [RelayCommand]
     private void PermanentDelete()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.PermanentDeleteCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.PermanentDeleteCommand);
     }
 
     [RelayCommand]
     private void Refresh()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.RefreshCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.RefreshCommand);
     }
 
     [RelayCommand]
     private void NewFolder()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.NewFolderCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.NewFolderCommand);
     }
 
     [RelayCommand]
     private void Rename()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.RenameCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.RenameCommand);
     }
 
     [RelayCommand]
     private void SelectAll()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.SelectAllCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.SelectAllCommand);
     }
 
     [RelayCommand]
     private void ShowProperties()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.ShowPropertiesCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.ShowPropertiesCommand);
     }
 
     [RelayCommand]
     private void SearchInFolder()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.SearchInFolderCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.SearchInFolderCommand);
     }
 
     [RelayCommand]
     private void ExecuteSearch()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.ExecuteSearchCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.ExecuteSearchCommand);
     }
 
     [RelayCommand]
     private void CloseSearch()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.CloseSearchCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.CloseSearchCommand);
     }
 
     [RelayCommand]
     private void ClearSearchResults()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.ClearSearchResultsCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.ClearSearchResultsCommand);
     }
 
     [RelayCommand]
@@ -532,19 +520,19 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Undo()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.UndoCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.UndoCommand);
     }
 
     [RelayCommand]
     private void Redo()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.RedoCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.RedoCommand);
     }
 
     [RelayCommand]
     private void ClearHistory()
     {
-        ExecuteOnCurrentPaneFileList(fileList => fileList.ClearHistoryCommand.Execute(null));
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.ClearHistoryCommand);
     }
 
     private void ExecuteOnCurrentPaneTab(Action<TabViewModel> action)
@@ -557,6 +545,43 @@ public partial class MainViewModel : ObservableObject
     {
         if (CurrentPaneFileList is { } fileList)
             action(fileList);
+    }
+
+    private void ExecuteCurrentPaneFileListCommand(Func<FileListViewModel, ICommand> commandSelector)
+    {
+        ExecuteOnCurrentPaneFileList(fileList => ExecuteCommand(commandSelector(fileList)));
+    }
+
+    private static void ExecuteCommand(ICommand command, object? parameter = null)
+    {
+        if (command.CanExecute(parameter))
+            command.Execute(parameter);
+    }
+
+    private void RaiseCurrentPaneStateProperties()
+    {
+        OnPropertyChanged(nameof(CurrentPaneTab));
+        OnPropertyChanged(nameof(CurrentPaneFileList));
+        OnPropertyChanged(nameof(CurrentPanePath));
+        OnPropertyChanged(nameof(IsLeftPaneActive));
+        OnPropertyChanged(nameof(CurrentPaneLabel));
+        OnPropertyChanged(nameof(LeftPaneStatusText));
+        OnPropertyChanged(nameof(RightPaneStatusText));
+        RaiseCurrentPaneCommandProperties();
+    }
+
+    private void RaiseCurrentPaneCommandProperties()
+    {
+        OnPropertyChanged(nameof(ActiveUndoDescription));
+        OnPropertyChanged(nameof(ActiveRedoDescription));
+    }
+
+    private void RaisePaneStatusProperties(FileListViewModel fileList)
+    {
+        if (ActiveTab?.FileList == fileList)
+            OnPropertyChanged(nameof(LeftPaneStatusText));
+        if (_rightPaneTab?.FileList == fileList)
+            OnPropertyChanged(nameof(RightPaneStatusText));
     }
 
     public void DuplicateTab(TabViewModel sourceTab)
