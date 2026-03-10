@@ -445,16 +445,22 @@
 
                 <!-- Bookmarks -->
                 <TextBlock Grid.Row="3" Text="Bookmarks" Style="{StaticResource ClassicPaneHeaderTextStyle}" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}" />
-                <DockPanel Grid.Row="4" Margin="4,4,4,2" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
-                    <Button Content="+ Add Current"
+                <UniformGrid Grid.Row="4" Columns="3" Margin="4,4,4,2" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
+                    <Button Content="+ Bookmark"
                             Command="{Binding AddBookmarkCommand}"
-                            Padding="6,2"
-                            Margin="0,0,4,0" />
+                            Padding="2,2"
+                            Margin="0,0,2,0" />
+                    <Button Content="+ Folder"
+                            Command="{Binding AddBookmarkFolderCommand}"
+                            CommandParameter="{Binding SelectedBookmark}"
+                            Padding="2,2"
+                            Margin="2,0,2,0" />
                     <Button Content="- Remove"
                             Command="{Binding RemoveBookmarkCommand}"
                             CommandParameter="{Binding SelectedBookmark}"
-                            Padding="6,2" />
-                </DockPanel>
+                            Padding="2,2"
+                            Margin="2,0,0,0" />
+                </UniformGrid>
                 <Border Grid.Row="5" Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
                     <TreeView x:Name="BookmarkTree"
                               ItemsSource="{Binding Bookmarks}"
@@ -474,6 +480,7 @@
                                 </Style.Triggers>
                                 <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_MouseDoubleClick" />
                                 <EventSetter Event="Selected" Handler="BookmarkItem_Selected" />
+                                <Setter Property="ContextMenu" Value="{StaticResource BookmarkContextMenu}" />
                             </Style>
                         </TreeView.ItemContainerStyle>
                         <TreeView.ItemTemplate>
@@ -487,7 +494,13 @@
                         </TreeView.ItemTemplate>
                         <TreeView.Resources>
                             <ContextMenu x:Key="BookmarkContextMenu">
-                                <MenuItem Header="Open" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <MenuItem Header="Open in New Tab" Command="{Binding DataContext.OpenBookmarkInNewTabCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <MenuItem Header="Open in Other Pane" Command="{Binding DataContext.OpenBookmarkInOtherPaneCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <Separator />
+                                <MenuItem Header="New Folder" Command="{Binding DataContext.AddBookmarkFolderCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <MenuItem Header="Rename" Command="{Binding DataContext.RenameBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <Separator />
                                 <MenuItem Header="Remove" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                             </ContextMenu>
                         </TreeView.Resources>

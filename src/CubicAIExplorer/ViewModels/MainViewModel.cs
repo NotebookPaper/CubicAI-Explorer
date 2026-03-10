@@ -853,6 +853,43 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddBookmarkFolder(BookmarkItem? parent)
+    {
+        var newItem = new BookmarkItem
+        {
+            Name = "New Folder",
+            IsFolder = true,
+            IsExpanded = true
+        };
+
+        if (parent != null && parent.IsFolder)
+        {
+            parent.Children.Add(newItem);
+            parent.IsExpanded = true;
+        }
+        else
+        {
+            Bookmarks.Add(newItem);
+        }
+
+        SelectedBookmark = newItem;
+        SaveBookmarks();
+    }
+
+    [RelayCommand]
+    private void RenameBookmark(BookmarkItem? bookmark)
+    {
+        if (bookmark == null) return;
+
+        var dialog = new Views.RenameDialog(bookmark.Name);
+        if (dialog.ShowDialog() == true)
+        {
+            bookmark.Name = dialog.EnteredName;
+            SaveBookmarks();
+        }
+    }
+
+    [RelayCommand]
     private void RemoveBookmark(BookmarkItem? bookmark)
     {
         if (bookmark == null) return;
@@ -945,9 +982,40 @@ public partial class MainViewModel : ObservableObject
     private void NavigateBookmark(BookmarkItem? bookmark)
     {
         if (bookmark == null) return;
+        if (string.IsNullOrWhiteSpace(bookmark.Path)) return;
+        
         if (_fileSystemService.DirectoryExists(bookmark.Path))
         {
             NavigateCurrentPaneToPath(bookmark.Path);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenBookmarkInNewTab(BookmarkItem? bookmark)
+    {
+        if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
+        if (_fileSystemService.DirectoryExists(bookmark.Path))
+        {
+            var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+            AttachTab(tab);
+            Tabs.Add(tab);
+            ActiveTab = tab;
+            tab.NavigateTo(bookmark.Path);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenBookmarkInOtherPane(BookmarkItem? bookmark)
+    {
+        if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
+        if (!IsDualPaneMode) ToggleDualPane();
+        
+        if (_fileSystemService.DirectoryExists(bookmark.Path))
+        {
+            if (IsRightPaneActive)
+                ActiveTab?.NavigateTo(bookmark.Path);
+            else
+                _rightPaneTab?.NavigateTo(bookmark.Path);
         }
     }
 
