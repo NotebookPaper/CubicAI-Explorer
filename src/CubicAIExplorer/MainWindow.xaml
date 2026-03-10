@@ -135,97 +135,113 @@
                 <Button Command="{Binding RefreshCommand}" ToolTip="Refresh (F5)" Padding="4,2" MinWidth="26">
                     <Image Source="{StaticResource IconRefresh}" Width="16" Height="16" />
                 </Button>
+                
+                <Separator />
+                
+                <!-- Inline Address Bar -->
+                <Grid Margin="4,0" Visibility="{Binding IsAddressBarVisible, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="300" MaxWidth="1200" />
+                    </Grid.ColumnDefinitions>
+                    <!-- Breadcrumb mode -->
+                    <DockPanel x:Name="BreadcrumbBar" Visibility="Visible"
+                               MouseLeftButtonDown="BreadcrumbBar_MouseDown">
+                        <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
+                                ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0">
+                            <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                        </Button>
+                        <ItemsControl x:Name="BreadcrumbItems" ItemsSource="{Binding BreadcrumbSegments}"
+                                      VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="\" Foreground="#999999" VerticalAlignment="Center"
+                                                   Margin="0,0,0,0" FontSize="11"
+                                                   Visibility="{Binding SeparatorVisibility}" />
+                                        <Button Content="{Binding DisplayName}" Tag="{Binding FullPath}"
+                                                Click="BreadcrumbSegment_Click"
+                                                Background="Transparent" BorderThickness="0"
+                                                Padding="3,1" Cursor="Hand"
+                                                FontSize="12">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#2255AA" />
+                                                            <Setter Property="Background" Value="#E0EEFF" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+
+                    <!-- Edit mode (TextBox) -->
+                    <DockPanel x:Name="AddressBarPanel" Visibility="Collapsed">
+                        <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
+                                ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0"
+                                Click="AddressBarGo_Click">
+                            <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                        </Button>
+                        <Grid>
+                            <TextBox x:Name="AddressBar"
+                                     Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
+                                     KeyDown="AddressBar_KeyDown"
+                                     LostKeyboardFocus="AddressBar_LostFocus"
+                                     TextChanged="AddressBar_TextChanged"
+                                     VerticalContentAlignment="Center" Padding="4,2"
+                                     TabIndex="10" />
+                            <Popup x:Name="AddressAutoCompletePopup"
+                                   PlacementTarget="{Binding ElementName=AddressBar}"
+                                   Placement="Bottom"
+                                   StaysOpen="False"
+                                   AllowsTransparency="True"
+                                   Width="{Binding ActualWidth, ElementName=AddressBar}">
+                                <Border BorderBrush="#999999" BorderThickness="1" Background="White"
+                                        MaxHeight="250">
+                                    <ListBox x:Name="AutoCompleteList"
+                                             ItemsSource="{Binding AddressSuggestions}"
+                                             MaxHeight="240"
+                                             PreviewMouseLeftButtonUp="AutoComplete_Select" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </DockPanel>
+                </Grid>
             </ToolBar>
         </ToolBarTray>
 
-        <!-- Address / Breadcrumb Bar -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource ClassicChromeBrush}"
-                BorderBrush="{StaticResource ClassicChromeBorderBrush}" BorderThickness="0,0,0,1"
-                Padding="4,2" Visibility="{Binding IsAddressBarVisible, Converter={StaticResource BoolToVisibility}}">
-            <Grid>
-                <!-- Breadcrumb mode -->
-                <DockPanel x:Name="BreadcrumbBar" Visibility="Visible"
-                           MouseLeftButtonDown="BreadcrumbBar_MouseDown">
-                    <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
-                            ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0">
-                        <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
-                    </Button>
-                    <ItemsControl x:Name="BreadcrumbItems" ItemsSource="{Binding BreadcrumbSegments}"
-                                  VerticalAlignment="Center">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="\" Foreground="#999999" VerticalAlignment="Center"
-                                               Margin="0,0,0,0" FontSize="11"
-                                               Visibility="{Binding SeparatorVisibility}" />
-                                    <Button Content="{Binding DisplayName}" Tag="{Binding FullPath}"
-                                            Click="BreadcrumbSegment_Click"
-                                            Background="Transparent" BorderThickness="0"
-                                            Padding="3,1" Cursor="Hand"
-                                            FontSize="12">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Foreground" Value="#2255AA" />
-                                                        <Setter Property="Background" Value="#E0EEFF" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </DockPanel>
-
-                <!-- Edit mode (TextBox) -->
-                <DockPanel x:Name="AddressBarPanel" Visibility="Collapsed">
-                    <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
-                            ToolTip="Go" Padding="4,2" MinWidth="24" Margin="2,0,0,0"
-                            Click="AddressBarGo_Click">
-                        <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
-                    </Button>
-                    <Grid>
-                        <TextBox x:Name="AddressBar"
-                                 Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
-                                 KeyDown="AddressBar_KeyDown"
-                                 LostKeyboardFocus="AddressBar_LostFocus"
-                                 TextChanged="AddressBar_TextChanged"
-                                 VerticalContentAlignment="Center" Padding="4,2"
-                                 TabIndex="10" />
-                        <Popup x:Name="AddressAutoCompletePopup"
-                               PlacementTarget="{Binding ElementName=AddressBar}"
-                               Placement="Bottom"
-                               StaysOpen="False"
-                               AllowsTransparency="True"
-                               Width="{Binding ActualWidth, ElementName=AddressBar}">
-                            <Border BorderBrush="#999999" BorderThickness="1" Background="White"
-                                    MaxHeight="250">
-                                <ListBox x:Name="AutoCompleteList"
-                                         ItemsSource="{Binding AddressSuggestions}"
-                                         MaxHeight="240"
-                                         PreviewMouseLeftButtonUp="AutoComplete_Select" />
-                            </Border>
-                        </Popup>
-                    </Grid>
-                </DockPanel>
-            </Grid>
-        </Border>
-
         <!-- Tab Bar -->
         <DockPanel DockPanel.Dock="Top" Background="{StaticResource ClassicChromeBrush}" Visibility="{Binding IsTabsVisible, Converter={StaticResource BoolToVisibility}}">
-            <Button DockPanel.Dock="Right" Command="{Binding NewTabCommand}"
-                    Content="+" FontSize="14" Padding="8,2" Margin="2"
-                    ToolTip="New Tab (Ctrl+T)" />
             <TabControl ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}"
                         Padding="0" Margin="0">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid KeyboardNavigation.TabNavigation="Local">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <DockPanel Grid.Row="0">
+                                <Button DockPanel.Dock="Right" Command="{Binding DataContext.NewTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Content="+" FontSize="14" Padding="10,2" Margin="2,0,2,0"
+                                        ToolTip="New Tab (Ctrl+T)"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand" />
+                                <TabPanel IsItemsHost="True" Background="Transparent" />
+                            </DockPanel>
+                            <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
                 <TabControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:TabViewModel}">
                         <DockPanel MinWidth="80" MaxWidth="200">
