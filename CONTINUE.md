@@ -70,6 +70,7 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - `2cd2788` — active-pane UI now binds directly to `CurrentPaneFileList.*`; removed `Current*` forwarding proxies and related wiring
 - `b5e59e9` — expanded preview metadata (PDF/media) + keyboard navigation shortcuts/focus polish
 - `e2b513f` — fixed startup crashes (read-only binding mode + suggestion UI-thread safety) + smoke guards
+- `70a4a1a` — refactored pane command forwarding through shared helpers in `MainViewModel`
 
 **Worktree:** clean for tracked files (only local untracked utility paths below).
 
@@ -85,8 +86,8 @@ Verified on **2026-03-10**:
 
 ## Priority Next Work
 1. **Manual UX verification pass** for new keyboard shortcuts and media metadata behavior on real files.
-2. **Optional next cleanup:** reduce MainViewModel forwarding `[RelayCommand]` methods by binding deeper into pane view models where practical.
-3. **Preview roadmap (optional):** improve PDF page-count accuracy and richer audio/video metadata if future package approvals are allowed.
+2. **Preview roadmap (optional):** improve PDF page-count accuracy and richer audio/video metadata if future package approvals are allowed.
+3. **Optional architecture cleanup:** evaluate splitting `MainViewModel` into smaller focused collaborators if command surface keeps growing.
 
 ## Known Gotchas
 - **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.
@@ -95,7 +96,7 @@ Verified on **2026-03-10**:
 - **KeyBinding null commands:** WPF `KeyBinding` requires a non-null command.
 - **Keyed DataTemplate + DataType:** avoid combining them in `App.xaml`.
 - **Right-pane header double-click:** `Border` does not support a `MouseDoubleClick` XAML event. Handle double-click via `MouseLeftButtonDown` and `ClickCount`.
-- **Forwarding commands:** MainViewModel has ~20 `[RelayCommand]` methods that forward to `CurrentPaneFileList?.XCommand.Execute(null)`. These exist because XAML KeyBindings and toolbar buttons bind to MainViewModel. Could be eliminated by binding directly to `CurrentPaneFileList.*` in XAML.
+- **Forwarding commands (partially reduced):** command forwarding now uses shared helper methods, but command surface remains large due to top-level keybindings and toolbar wiring.
 - **WinForms namespace collisions:** Adding `<UseWindowsForms>true</UseWindowsForms>` to the csproj causes widespread `Point`, `Brush`, `DragEventArgs`, `ListView` ambiguities. Use `Microsoft.Win32.OpenFolderDialog` (.NET 8+) instead of `System.Windows.Forms.FolderBrowserDialog`.
 
 ## Notes
