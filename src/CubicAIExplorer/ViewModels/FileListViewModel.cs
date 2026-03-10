@@ -160,16 +160,31 @@ public partial class FileListViewModel : ObservableObject
         var (paths, isCut) = _clipboardService.GetFiles();
         if (paths.Count == 0) return;
 
-        if (TransferFiles(paths, CurrentPath, moveFiles: isCut, "Paste Error", out var transferResults))
+        var collisionResolution = ResolvePasteCollisionResolution(paths, CurrentPath);
+        if (collisionResolution == null)
+            return;
+
+        if (TransferFiles(
+                paths,
+                CurrentPath,
+                moveFiles: isCut,
+                "Paste Error",
+                collisionResolution.Value,
+                out var transferResults))
         {
+            var successfulTransfers = transferResults
+                .Where(static result => result.Status == FileTransferStatus.Success)
+                .ToArray();
+
             if (isCut)
             {
-                RegisterMoveUndo(transferResults);
-                _clipboardService.Clear();
+                RegisterMoveUndo(successfulTransfers);
+                if (transferResults.All(static result => result.Status == FileTransferStatus.Success))
+                    _clipboardService.Clear();
             }
             else
             {
-                RegisterCopyUndo(transferResults);
+                RegisterCopyUndo(successfulTransfers);
             }
         }
     }
@@ -568,16 +583,26 @@ public partial class FileListViewModel : ObservableObject
 
     public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
     {
-        if (!TransferFiles(paths, destinationPath, moveFiles, "Drop Error", out var transferResults))
+        if (!TransferFiles(
+                paths,
+                destinationPath,
+                moveFiles,
+                "Drop Error",
+                FileTransferCollisionResolution.KeepBoth,
+                out var transferResults))
             return;
+
+        var successfulTransfers = transferResults
+            .Where(static result => result.Status == FileTransferStatus.Success)
+            .ToArray();
 
         if (moveFiles)
         {
-            RegisterMoveUndo(transferResults);
+            RegisterMoveUndo(successfulTransfers);
         }
         else
         {
-            RegisterCopyUndo(transferResults);
+            RegisterCopyUndo(successfulTransfers);
         }
     }
 
@@ -588,6 +613,7 @@ public partial class FileListViewModel : ObservableObject
         string destinationPath,
         bool moveFiles,
         string errorTitle,
+        FileTransferCollisionResolution collisionResolution,
         out IReadOnlyList<FileTransferResult> transferResults)
     {
         transferResults = [];
@@ -606,15 +632,16 @@ public partial class FileListViewModel : ObservableObject
         {
             if (moveFiles)
             {
-                transferResults = _fileSystemService.MoveFiles(distinctPaths, destinationPath);
+                transferResults = _fileSystemService.MoveFiles(distinctPaths, destinationPath, collisionResolution);
             }
             else
             {
-                transferResults = _fileSystemService.CopyFiles(distinctPaths, destinationPath);
+                transferResults = _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution);
             }
 
+            ShowTransferStatus(transferResults, errorTitle);
             Refresh();
-            return true;
+            return transferResults.Any(static result => result.Status == FileTransferStatus.Success);
         }
         catch (Exception ex)
         {
@@ -625,6 +652,75 @@ public partial class FileListViewModel : ObservableObject
                 MessageBoxImage.Error);
             return false;
         }
+    }
+
+    private FileTransferCollisionResolution? ResolvePasteCollisionResolution(IEnumerable<string> sourcePaths, string destinationPath)
+    {
+        var conflictCount = CountConflictingTargets(sourcePaths, destinationPath);
+        if (conflictCount == 0)
+            return FileTransferCollisionResolution.KeepBoth;
+
+        var dialog = new FileConflictDialog(conflictCount);
+        if (dialog.ShowDialog() != true)
+            return null;
+
+        return dialog.Resolution;
+    }
+
+    private int CountConflictingTargets(IEnumerable<string> sourcePaths, string destinationPath)
+    {
+        var count = 0;
+
+        foreach (var sourcePath in sourcePaths
+                     .Where(static path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var entryName = GetTransferEntryName(sourcePath);
+            if (string.IsNullOrWhiteSpace(entryName))
+                continue;
+
+            var targetPath = Path.Combine(destinationPath, entryName);
+            if (_fileSystemService.FileExists(targetPath) || _fileSystemService.DirectoryExists(targetPath))
+                count++;
+        }
+
+        return count;
+    }
+
+    private static string GetTransferEntryName(string sourcePath)
+    {
+        var normalizedPath = sourcePath.TrimEnd('\\');
+        return Path.GetFileName(normalizedPath);
+    }
+
+    private static void ShowTransferStatus(IReadOnlyList<FileTransferResult> transferResults, string errorTitle)
+    {
+        var skippedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Skipped);
+        var failedItems = transferResults
+            .Where(static result => result.Status == FileTransferStatus.Failed)
+            .ToArray();
+
+        if (skippedCount == 0 && failedItems.Length == 0)
+            return;
+
+        var message = failedItems.Length == 0
+            ? $"Skipped {skippedCount} existing item(s)."
+            : $"Completed with {failedItems.Length} failure(s) and {skippedCount} skipped item(s).";
+
+        if (failedItems.Length > 0)
+        {
+            var firstFailure = failedItems[0];
+            var details = string.IsNullOrWhiteSpace(firstFailure.ErrorMessage)
+                ? Path.GetFileName(firstFailure.SourcePath)
+                : $"{Path.GetFileName(firstFailure.SourcePath)}: {firstFailure.ErrorMessage}";
+            message = $"{message}\n\nFirst failure: {details}";
+        }
+
+        MessageBox.Show(
+            message,
+            errorTitle,
+            MessageBoxButton.OK,
+            failedItems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
     }
 
     private void RegisterMoveUndo(IReadOnlyList<FileTransferResult> results)

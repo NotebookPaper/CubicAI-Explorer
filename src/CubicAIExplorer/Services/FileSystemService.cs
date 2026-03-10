@@ -124,7 +124,10 @@ public sealed class FileSystemService : IFileSystemService
         Process.Start(psi);
     }
 
-    public IReadOnlyList<FileTransferResult> CopyFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
+    public IReadOnlyList<FileTransferResult> CopyFiles(
+        IEnumerable<string> sourcePaths,
+        string destinationDirectory,
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth)
     {
         var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
@@ -137,22 +140,21 @@ public sealed class FileSystemService : IFileSystemService
 
             if (File.Exists(source))
             {
-                var targetPath = GetUniquePath(destination, Path.GetFileName(source), isDirectory: false);
-                File.Copy(source, targetPath, overwrite: false);
-                results.Add(new FileTransferResult(source, targetPath, IsDirectory: false));
+                results.Add(CopyFile(source, destination, collisionResolution));
             }
             else if (Directory.Exists(source))
             {
-                var targetPath = GetUniquePath(destination, Path.GetFileName(source.TrimEnd('\\')), isDirectory: true);
-                CopyDirectoryRecursive(source, targetPath);
-                results.Add(new FileTransferResult(source, targetPath, IsDirectory: true));
+                results.Add(CopyDirectory(source, destination, collisionResolution));
             }
         }
 
         return results;
     }
 
-    public IReadOnlyList<FileTransferResult> MoveFiles(IEnumerable<string> sourcePaths, string destinationDirectory)
+    public IReadOnlyList<FileTransferResult> MoveFiles(
+        IEnumerable<string> sourcePaths,
+        string destinationDirectory,
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth)
     {
         var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
@@ -172,9 +174,7 @@ public sealed class FileSystemService : IFileSystemService
                     continue;
                 }
 
-                var targetPath = GetUniquePath(destination, Path.GetFileName(source), isDirectory: false);
-                File.Move(source, targetPath);
-                results.Add(new FileTransferResult(source, targetPath, IsDirectory: false));
+                results.Add(MoveFile(source, destination, collisionResolution));
             }
             else if (Directory.Exists(source))
             {
@@ -185,9 +185,7 @@ public sealed class FileSystemService : IFileSystemService
                     continue;
                 }
 
-                var targetPath = GetUniquePath(destination, Path.GetFileName(source.TrimEnd('\\')), isDirectory: true);
-                MoveDirectory(source, targetPath);
-                results.Add(new FileTransferResult(source, targetPath, IsDirectory: true));
+                results.Add(MoveDirectoryEntry(source, destination, collisionResolution));
             }
         }
 
@@ -371,4 +369,117 @@ public sealed class FileSystemService : IFileSystemService
             Directory.Delete(sourcePath, recursive: true);
         }
     }
+
+    private FileTransferResult CopyFile(string source, string destinationDirectory, FileTransferCollisionResolution collisionResolution)
+    {
+        var targetPath = ResolveTargetPath(destinationDirectory, source, isDirectory: false, collisionResolution, out var skipped);
+        if (skipped)
+            return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
+
+        try
+        {
+            File.Copy(source, targetPath, overwrite: false);
+            return new FileTransferResult(source, targetPath, IsDirectory: false);
+        }
+        catch (Exception ex)
+        {
+            return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
+        }
+    }
+
+    private FileTransferResult CopyDirectory(string source, string destinationDirectory, FileTransferCollisionResolution collisionResolution)
+    {
+        var targetPath = ResolveTargetPath(destinationDirectory, source, isDirectory: true, collisionResolution, out var skipped);
+        if (skipped)
+            return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
+
+        try
+        {
+            CopyDirectoryRecursive(source, targetPath);
+            return new FileTransferResult(source, targetPath, IsDirectory: true);
+        }
+        catch (Exception ex)
+        {
+            return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
+        }
+    }
+
+    private FileTransferResult MoveFile(string source, string destinationDirectory, FileTransferCollisionResolution collisionResolution)
+    {
+        var targetPath = ResolveTargetPath(destinationDirectory, source, isDirectory: false, collisionResolution, out var skipped);
+        if (skipped)
+            return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
+
+        try
+        {
+            File.Move(source, targetPath);
+            return new FileTransferResult(source, targetPath, IsDirectory: false);
+        }
+        catch (Exception ex)
+        {
+            return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
+        }
+    }
+
+    private FileTransferResult MoveDirectoryEntry(string source, string destinationDirectory, FileTransferCollisionResolution collisionResolution)
+    {
+        var targetPath = ResolveTargetPath(destinationDirectory, source, isDirectory: true, collisionResolution, out var skipped);
+        if (skipped)
+            return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
+
+        try
+        {
+            MoveDirectory(source, targetPath);
+            return new FileTransferResult(source, targetPath, IsDirectory: true);
+        }
+        catch (Exception ex)
+        {
+            return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
+        }
+    }
+
+    private string ResolveTargetPath(
+        string destinationDirectory,
+        string sourcePath,
+        bool isDirectory,
+        FileTransferCollisionResolution collisionResolution,
+        out bool skipped)
+    {
+        skipped = false;
+        var entryName = isDirectory
+            ? Path.GetFileName(sourcePath.TrimEnd('\\'))
+            : Path.GetFileName(sourcePath);
+        var preferredPath = Path.Combine(destinationDirectory, entryName);
+
+        if (!PathExists(preferredPath))
+            return preferredPath;
+
+        switch (collisionResolution)
+        {
+            case FileTransferCollisionResolution.Skip:
+                skipped = true;
+                return preferredPath;
+            case FileTransferCollisionResolution.Replace:
+                DeleteExistingTarget(preferredPath);
+                return preferredPath;
+            default:
+                return GetUniquePath(destinationDirectory, entryName, isDirectory);
+        }
+    }
+
+    private void DeleteExistingTarget(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+            return;
+        }
+
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
 }

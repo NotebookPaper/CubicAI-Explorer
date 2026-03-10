@@ -27,6 +27,8 @@ internal static class Program
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("move same folder no-op", failures, () => TestMoveSameFolderNoOp(tempRoot));
+            Run("copy collision replace", failures, () => TestCopyCollisionReplace(tempRoot));
+            Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -340,6 +342,43 @@ internal static class Program
         Assert(results.Count == 0, "Same-folder move should be ignored.");
         Assert(File.Exists(file), "Source file should remain unchanged.");
         Assert(!File.Exists(Path.Combine(folder, "same (2).txt")), "No renamed duplicate should be created.");
+    }
+
+    private static void TestCopyCollisionReplace(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "copy_replace_source");
+        var destinationDir = CreateCleanSubdir(root, "copy_replace_destination");
+        var source = Path.Combine(sourceDir, "item.txt");
+        var destination = Path.Combine(destinationDir, "item.txt");
+        File.WriteAllText(source, "new");
+        File.WriteAllText(destination, "old");
+
+        var results = fs.CopyFiles([source], destinationDir, FileTransferCollisionResolution.Replace);
+
+        Assert(results.Count == 1, "Copy replace should return one result.");
+        Assert(results[0].Status == FileTransferStatus.Success, "Copy replace should succeed.");
+        Assert(results[0].DestinationPath == destination, "Copy replace should target the original path.");
+        Assert(File.ReadAllText(destination) == "new", "Copy replace should overwrite the destination contents.");
+        Assert(File.Exists(source), "Copy replace should leave the source intact.");
+    }
+
+    private static void TestMoveCollisionSkip(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "move_skip_source");
+        var destinationDir = CreateCleanSubdir(root, "move_skip_destination");
+        var source = Path.Combine(sourceDir, "item.txt");
+        var destination = Path.Combine(destinationDir, "item.txt");
+        File.WriteAllText(source, "source");
+        File.WriteAllText(destination, "existing");
+
+        var results = fs.MoveFiles([source], destinationDir, FileTransferCollisionResolution.Skip);
+
+        Assert(results.Count == 1, "Move skip should return one result.");
+        Assert(results[0].Status == FileTransferStatus.Skipped, "Move skip should report the collision as skipped.");
+        Assert(File.Exists(source), "Move skip should leave the source file in place.");
+        Assert(File.ReadAllText(destination) == "existing", "Move skip should preserve the destination file.");
     }
 
     private static void TestRedoCopy(string root)
