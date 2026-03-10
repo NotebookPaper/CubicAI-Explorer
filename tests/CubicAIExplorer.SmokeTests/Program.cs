@@ -36,6 +36,7 @@ internal static class Program
             Run("redo move", failures, () => TestRedoMove(tempRoot));
             Run("view mode property", failures, () => TestViewModeProperty(tempRoot));
             Run("selection status text", failures, () => TestSelectionStatus(tempRoot));
+            Run("transfer status summary", failures, () => TestTransferStatusSummary(tempRoot));
             Run("filter text", failures, () => TestFilterText(tempRoot));
             Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
@@ -494,6 +495,23 @@ internal static class Program
         vm.SelectedItems.Clear();
         vm.UpdateSelectionStatus();
         Assert(vm.StatusText == "2 items", "Status should reset when selection cleared.");
+    }
+
+    private static void TestTransferStatusSummary(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var sourceDir = CreateCleanSubdir(root, "transfer_status_source");
+        var destinationDir = CreateCleanSubdir(root, "transfer_status_destination");
+        var source = Path.Combine(sourceDir, "item.txt");
+        File.WriteAllText(source, "source");
+
+        vm.LoadDirectory(destinationDir);
+        vm.ImportDroppedFiles([source], destinationDir, moveFiles: true);
+
+        Assert(vm.StatusText.Contains("Moved 1 item(s)"), "Transfer status should report completed transfers.");
+        Assert(vm.StatusText.Contains("1 items"), "Transfer status should retain the item count summary.");
     }
 
     private static void TestFilterText(string root)

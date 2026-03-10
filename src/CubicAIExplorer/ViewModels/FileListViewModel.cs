@@ -31,6 +31,9 @@ public partial class FileListViewModel : ObservableObject
     private string _statusText = "Ready";
 
     [ObservableProperty]
+    private string _transferSummary = string.Empty;
+
+    [ObservableProperty]
     private int _itemCount;
 
     [ObservableProperty]
@@ -501,19 +504,29 @@ public partial class FileListViewModel : ObservableObject
 
     public void UpdateSelectionStatus()
     {
+        StatusText = BuildSelectionStatusText();
+    }
+
+    private string BuildSelectionStatusText()
+    {
         var selectionCount = SelectedItems.Count;
+        string baseStatus;
         if (selectionCount > 0)
         {
             var totalSize = SelectedItems
                 .Where(i => i.ItemType == FileSystemItemType.File)
                 .Sum(i => i.Size);
             var sizeText = totalSize > 0 ? $" ({FormatSize(totalSize)})" : "";
-            StatusText = $"{ItemCount} items | {selectionCount} selected{sizeText}";
+            baseStatus = $"{ItemCount} items | {selectionCount} selected{sizeText}";
         }
         else
         {
-            StatusText = $"{ItemCount} items";
+            baseStatus = $"{ItemCount} items";
         }
+
+        return string.IsNullOrWhiteSpace(TransferSummary)
+            ? baseStatus
+            : $"{TransferSummary} | {baseStatus}";
     }
 
     private static string FormatSize(long bytes) => bytes switch
@@ -635,7 +648,8 @@ public partial class FileListViewModel : ObservableObject
                 transferResults = _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution);
             }
 
-            ShowTransferStatus(transferResults, errorTitle);
+            SetTransferSummary(BuildTransferSummary(moveFiles ? "Moved" : "Copied", transferResults));
+            ShowTransferIssues(transferResults, errorTitle);
             Refresh();
             return transferResults.Any(static result => result.Status == FileTransferStatus.Success);
         }
@@ -689,34 +703,52 @@ public partial class FileListViewModel : ObservableObject
         return Path.GetFileName(normalizedPath);
     }
 
-    private static void ShowTransferStatus(IReadOnlyList<FileTransferResult> transferResults, string errorTitle)
+    private void SetTransferSummary(string summary)
     {
+        TransferSummary = summary;
+        UpdateSelectionStatus();
+    }
+
+    private static string BuildTransferSummary(string actionVerb, IReadOnlyList<FileTransferResult> transferResults)
+    {
+        var successCount = transferResults.Count(static result => result.Status == FileTransferStatus.Success);
         var skippedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Skipped);
+        var failedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Failed);
+
+        var parts = new List<string>();
+        if (successCount > 0)
+            parts.Add($"{actionVerb} {successCount} item(s)");
+        if (skippedCount > 0)
+            parts.Add($"Skipped {skippedCount}");
+        if (failedCount > 0)
+            parts.Add($"Failed {failedCount}");
+
+        return parts.Count == 0 ? string.Empty : string.Join(" | ", parts);
+    }
+
+    private static void ShowTransferIssues(IReadOnlyList<FileTransferResult> transferResults, string errorTitle)
+    {
         var failedItems = transferResults
             .Where(static result => result.Status == FileTransferStatus.Failed)
             .ToArray();
 
-        if (skippedCount == 0 && failedItems.Length == 0)
+        if (failedItems.Length == 0)
             return;
 
-        var message = failedItems.Length == 0
-            ? $"Skipped {skippedCount} existing item(s)."
-            : $"Completed with {failedItems.Length} failure(s) and {skippedCount} skipped item(s).";
+        var skippedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Skipped);
+        var message = $"Completed with {failedItems.Length} failure(s) and {skippedCount} skipped item(s).";
 
-        if (failedItems.Length > 0)
-        {
-            var firstFailure = failedItems[0];
-            var details = string.IsNullOrWhiteSpace(firstFailure.ErrorMessage)
-                ? Path.GetFileName(firstFailure.SourcePath)
-                : $"{Path.GetFileName(firstFailure.SourcePath)}: {firstFailure.ErrorMessage}";
-            message = $"{message}\n\nFirst failure: {details}";
-        }
+        var firstFailure = failedItems[0];
+        var details = string.IsNullOrWhiteSpace(firstFailure.ErrorMessage)
+            ? Path.GetFileName(firstFailure.SourcePath)
+            : $"{Path.GetFileName(firstFailure.SourcePath)}: {firstFailure.ErrorMessage}";
+        message = $"{message}\n\nFirst failure: {details}";
 
         MessageBox.Show(
             message,
             errorTitle,
             MessageBoxButton.OK,
-            failedItems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            MessageBoxImage.Warning);
     }
 
     private static FileTransferResult[] GetSuccessfulTransfers(IReadOnlyList<FileTransferResult> transferResults)
@@ -842,12 +874,14 @@ public partial class FileListViewModel : ObservableObject
             if (permanentDelete)
             {
                 var stagedItems = _fileSystemService.MoveFiles(deletePaths, _undoStagingPath);
-                ShowTransferStatus(stagedItems, "Delete Error");
+                SetTransferSummary(BuildTransferSummary("Permanently deleted", stagedItems));
+                ShowTransferIssues(stagedItems, "Delete Error");
                 RegisterPermanentDeleteUndo(GetSuccessfulTransfers(stagedItems));
             }
             else
             {
                 _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false);
+                SetTransferSummary($"Deleted {deletePaths.Length} item(s)");
             }
 
             Refresh();
