@@ -937,32 +937,25 @@ public partial class MainWindow : Window
         }
     }
 
-    private void MainWindow_ScrollToSelectedRequested(object? sender, EventArgs e)
+    private void MainWindow_ScrollToSelectedRequested(object? sender, FolderTreeNodeViewModel node)
     {
         // We might need a few attempts as containers are generated
         int attempts = 0;
-        void TryScrollAndFlash()
+        void TryScroll()
         {
             var selectedContainer = FindSelectedTreeViewItem(FolderTree);
             if (selectedContainer != null)
             {
                 selectedContainer.BringIntoView();
-                
-                // Trigger the flash animation
-                if (FolderTree.Resources["FlashNodeStoryboard"] is System.Windows.Media.Animation.Storyboard sb)
-                {
-                    System.Windows.Media.Animation.Storyboard.SetTarget(sb, selectedContainer);
-                    sb.Begin(selectedContainer); // Begin specifically on this container
-                }
             }
             else if (attempts < 10)
             {
                 attempts++;
-                Dispatcher.BeginInvoke(new Action(TryScrollAndFlash), System.Windows.Threading.DispatcherPriority.Background);
+                Dispatcher.BeginInvoke(new Action(TryScroll), System.Windows.Threading.DispatcherPriority.Background);
             }
         }
 
-        Dispatcher.BeginInvoke(new Action(TryScrollAndFlash), System.Windows.Threading.DispatcherPriority.Background);
+        Dispatcher.BeginInvoke(new Action(TryScroll), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private TreeViewItem? FindSelectedTreeViewItem(ItemsControl parent)

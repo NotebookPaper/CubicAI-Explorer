@@ -449,8 +449,15 @@
                                   Drop="BookmarkTree_Drop"
                                   TabIndex="30">
                             <TreeView.Resources>
-                                <ContextMenu x:Key="BookmarkContextMenu">
-                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <Storyboard x:Key="FlashNodeStoryboard">
+                                    <ColorAnimationUsingKeyFrames Storyboard.TargetProperty="(Control.Background).(SolidColorBrush.Color)">
+                                        <EasingColorKeyFrame KeyTime="0:0:0.0" Value="#3366AA" />
+                                        <EasingColorKeyFrame KeyTime="0:0:0.6" Value="#FFFF00" />
+                                        <EasingColorKeyFrame KeyTime="0:0:1.2" Value="#3366AA" />
+                                        <EasingColorKeyFrame KeyTime="0:0:1.8" Value="#FFFF00" />
+                                        <EasingColorKeyFrame KeyTime="0:0:2.4" Value="#3366AA" />
+                                    </ColorAnimationUsingKeyFrames>
+                                </Storyboard>                                <ContextMenu x:Key="BookmarkContextMenu">                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <MenuItem Header="Open in New Tab" Command="{Binding DataContext.OpenBookmarkInNewTabCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <MenuItem Header="Open in Other Pane" Command="{Binding DataContext.OpenBookmarkInOtherPaneCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <Separator />
@@ -566,8 +573,6 @@
                     </Border>
                     <Border Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}">
                         <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderTreeRoots}"
-                                  VirtualizingStackPanel.IsVirtualizing="True"
-                                  VirtualizingStackPanel.VirtualizationMode="Recycling"
                                   AllowDrop="True"
                                   DragOver="FolderTree_DragOver"
                                   Drop="FolderTree_Drop"
@@ -576,7 +581,13 @@
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                                     <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                                    <Setter Property="AllowDrop" Value="True" />
+                                    <Style.Resources>
+                                        <!-- Sharp vibrant blue for selection (both active and inactive) -->
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D7" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White" />
+                                    </Style.Resources>
                                     <EventSetter Event="Selected" Handler="TreeViewItem_Selected" />
                                 </Style>
                             </TreeView.ItemContainerStyle>
