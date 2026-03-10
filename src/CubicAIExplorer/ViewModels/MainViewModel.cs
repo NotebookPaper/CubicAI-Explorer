@@ -1141,35 +1141,11 @@ public partial class MainViewModel : ObservableObject
         await Task.Delay(100, token).ConfigureAwait(false);
         if (token.IsCancellationRequested) return;
 
-        string parentDir;
-        string prefix;
-
-        if (text.EndsWith('\\') || text.EndsWith('/'))
-        {
-            parentDir = text;
-            prefix = string.Empty;
-        }
-        else
-        {
-            parentDir = Path.GetDirectoryName(text) ?? string.Empty;
-            prefix = Path.GetFileName(text);
-        }
-
         List<string>? results = null;
         try
         {
-            results = await Task.Run(() =>
-            {
-                if (!_fileSystemService.DirectoryExists(parentDir))
-                    return null;
-
-                return _fileSystemService.GetSubDirectories(parentDir)
-                    .Where(d => string.IsNullOrEmpty(prefix)
-                        || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .Take(15)
-                    .Select(d => d.FullPath)
-                    .ToList();
-            }, token);
+            var query = ParseSuggestionQuery(text);
+            results = await Task.Run(() => GetDirectorySuggestions(query.ParentDirectory, query.Prefix), token);
         }
         catch (OperationCanceledException) { return; }
         catch { /* filesystem error — ignore */ }
@@ -1186,34 +1162,30 @@ public partial class MainViewModel : ObservableObject
 
     private void PopulateSuggestions(string text, ObservableCollection<string> suggestions, Action<bool> setOpen)
     {
-        string parentDir;
-        string prefix;
+        var query = ParseSuggestionQuery(text);
+        var results = GetDirectorySuggestions(query.ParentDirectory, query.Prefix);
+        SetSuggestions(suggestions, setOpen, results);
+    }
 
+    private static (string ParentDirectory, string Prefix) ParseSuggestionQuery(string text)
+    {
         if (text.EndsWith('\\') || text.EndsWith('/'))
-        {
-            parentDir = text;
-            prefix = string.Empty;
-        }
-        else
-        {
-            parentDir = Path.GetDirectoryName(text) ?? string.Empty;
-            prefix = Path.GetFileName(text);
-        }
+            return (text, string.Empty);
 
-        if (!_fileSystemService.DirectoryExists(parentDir))
-        {
-            SetSuggestions(suggestions, setOpen, []);
-            return;
-        }
+        return (Path.GetDirectoryName(text) ?? string.Empty, Path.GetFileName(text));
+    }
 
-        var results = _fileSystemService.GetSubDirectories(parentDir)
+    private List<string> GetDirectorySuggestions(string parentDirectory, string prefix)
+    {
+        if (!_fileSystemService.DirectoryExists(parentDirectory))
+            return [];
+
+        return _fileSystemService.GetSubDirectories(parentDirectory)
             .Where(d => string.IsNullOrEmpty(prefix)
                 || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .Take(15)
             .Select(d => d.FullPath)
             .ToList();
-
-        SetSuggestions(suggestions, setOpen, results);
     }
 
     private static void SetSuggestions(ObservableCollection<string> suggestions, Action<bool> setOpen, List<string>? results)
