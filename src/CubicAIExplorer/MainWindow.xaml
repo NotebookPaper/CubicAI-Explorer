@@ -166,38 +166,84 @@
                 <!-- Inline Address Bar -->
                 <Border Margin="4,2" Background="White" BorderBrush="#A0A0A0" BorderThickness="1" CornerRadius="2"
                         Visibility="{Binding IsAddressBarVisible, Converter={StaticResource BoolToVisibility}}">
-                    <DockPanel>
-                        <Image Source="{Binding Converter={StaticResource ShellIconConverter}}" 
-                               Width="16" Height="16" Margin="4,0,2,0" VerticalAlignment="Center" />
-                        <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
-                                ToolTip="Go" Padding="4,0" MinWidth="24" BorderThickness="0" Background="Transparent">
-                            <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
-                        </Button>
-                        <Grid>
+                    <Grid>
+                        <!-- Breadcrumb mode -->
+                        <DockPanel x:Name="BreadcrumbBar" Visibility="Visible" Background="Transparent"
+                                   MouseLeftButtonDown="BreadcrumbBar_MouseDown">
+                            <Image Source="{Binding Converter={StaticResource ShellIconConverter}}" 
+                                   Width="16" Height="16" Margin="4,0,2,0" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right" Content="..>" FontSize="10" FontWeight="Bold"
+                                    ToolTip="Switch to Edit Mode" Width="24" BorderThickness="0" Background="Transparent"
+                                    Click="SwitchToEditMode_Click" />
+                            <ItemsControl x:Name="BreadcrumbItems" ItemsSource="{Binding BreadcrumbSegments}"
+                                          VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="\" Foreground="#999999" VerticalAlignment="Center"
+                                                       Margin="0,0,0,0" FontSize="11"
+                                                       Visibility="{Binding SeparatorVisibility}" />
+                                            <Button Content="{Binding DisplayName}" Tag="{Binding FullPath}"
+                                                    Click="BreadcrumbSegment_Click"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Padding="3,1" Cursor="Hand"
+                                                    FontSize="12">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Foreground" Value="#2255AA" />
+                                                                <Setter Property="Background" Value="#E0EEFF" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+
+                        <!-- Edit mode (TextBox) -->
+                        <DockPanel x:Name="AddressBarPanel" Visibility="Collapsed">
+                            <Image Source="{Binding Converter={StaticResource ShellIconConverter}}" 
+                                   Width="16" Height="16" Margin="4,0,2,0" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right" Command="{Binding NavigateToAddressCommand}"
+                                    ToolTip="Go" Padding="4,0" MinWidth="24" BorderThickness="0" Background="Transparent">
+                                <Image Source="{StaticResource IconGo}" Width="14" Height="14" />
+                            </Button>
                             <TextBox x:Name="AddressBar"
                                      Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
                                      KeyDown="AddressBar_KeyDown"
                                      GotFocus="AddressBar_GotFocus"
+                                     LostKeyboardFocus="AddressBar_LostFocus"
                                      TextChanged="AddressBar_TextChanged"
                                      VerticalContentAlignment="Center" Padding="2,0"
                                      BorderThickness="0" Background="Transparent"
                                      TabIndex="10" />
-                            <Popup x:Name="AddressAutoCompletePopup"
-                                   PlacementTarget="{Binding ElementName=AddressBar}"
-                                   Placement="Bottom"
-                                   StaysOpen="False"
-                                   AllowsTransparency="True"
-                                   Width="{Binding ActualWidth, ElementName=AddressBar}">
-                                <Border BorderBrush="#999999" BorderThickness="1" Background="White"
-                                        MaxHeight="250">
-                                    <ListBox x:Name="AutoCompleteList"
-                                             ItemsSource="{Binding AddressSuggestions}"
-                                             MaxHeight="240"
-                                             PreviewMouseLeftButtonUp="AutoComplete_Select" />
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </DockPanel>
+                        </DockPanel>
+                        
+                        <Popup x:Name="AddressAutoCompletePopup"
+                               PlacementTarget="{Binding ElementName=AddressBar}"
+                               Placement="Bottom"
+                               StaysOpen="False"
+                               AllowsTransparency="True"
+                               Width="{Binding ActualWidth, ElementName=AddressBar}">
+                            <Border BorderBrush="#999999" BorderThickness="1" Background="White"
+                                    MaxHeight="250">
+                                <ListBox x:Name="AutoCompleteList"
+                                         ItemsSource="{Binding AddressSuggestions}"
+                                         MaxHeight="240"
+                                         PreviewMouseLeftButtonUp="AutoComplete_Select" />
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </Border>
             </ToolBar>
         </ToolBarTray>
