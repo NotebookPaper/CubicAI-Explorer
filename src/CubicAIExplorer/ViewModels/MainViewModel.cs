@@ -805,6 +805,10 @@ public partial class MainViewModel : ObservableObject
             }
             LoadTextPreviewAsync(item.FullPath, generation);
         }
+        else if (item.Size <= 4 * 1024)
+        {
+            LoadBinaryPreviewAsync(item.FullPath, generation);
+        }
         else
         {
             ShowFileMetadata(item.FullPath);
@@ -829,6 +833,7 @@ public partial class MainViewModel : ObservableObject
             if (_previewGeneration != generation) return;
             PreviewImageSource = bitmap;
             HasPreviewImage = true;
+            ShowImageMetadata(path, bitmap.PixelWidth, bitmap.PixelHeight);
         }
         catch
         {
@@ -856,6 +861,24 @@ public partial class MainViewModel : ObservableObject
             if (_previewGeneration != generation) return;
             PreviewStatusText = "Text preview unavailable.";
             HasPreviewStatus = true;
+        }
+    }
+
+    private async void LoadBinaryPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var preview = await Task.Run(() => BuildHexPreview(path));
+            if (_previewGeneration != generation) return;
+            PreviewText = preview;
+            HasPreviewText = true;
+            PreviewStatusText = "Binary preview (hex)";
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            ShowFileMetadata(path);
         }
     }
 
@@ -954,6 +977,16 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private void ShowImageMetadata(string path, int width, int height)
+    {
+        var details = new List<string> { "Image file" };
+        if (width > 0 && height > 0)
+            details.Add($"Dimensions: {width} x {height}");
+
+        PreviewStatusText = string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
+        HasPreviewStatus = true;
+    }
+
     private static string GetBasicFileMetadata(string path)
     {
         var fi = new FileInfo(path);
@@ -969,6 +1002,25 @@ public partial class MainViewModel : ObservableObject
         if (duration.TotalHours >= 1)
             return duration.ToString(@"h\:mm\:ss");
         return duration.ToString(@"m\:ss");
+    }
+
+    private static string BuildHexPreview(string path)
+    {
+        const int bytesPerLine = 16;
+        var bytes = File.ReadAllBytes(path);
+        var lines = new List<string>();
+
+        for (var offset = 0; offset < bytes.Length; offset += bytesPerLine)
+        {
+            var lineBytes = bytes.Skip(offset).Take(bytesPerLine).ToArray();
+            var hex = string.Join(" ", lineBytes.Select(static b => b.ToString("X2")));
+            var ascii = new string(lineBytes
+                .Select(static b => b >= 32 && b <= 126 ? (char)b : '.')
+                .ToArray());
+            lines.Add($"{offset:X4}: {hex.PadRight(bytesPerLine * 3 - 1)}  {ascii}");
+        }
+
+        return string.Join("\n", lines);
     }
 
     private static (string Version, int ApproxPageCount, bool IsEncrypted) ReadPdfMetadata(string path)

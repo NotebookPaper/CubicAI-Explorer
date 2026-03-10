@@ -56,6 +56,7 @@ internal static class Program
             Run("current pane navigation routing", failures, () => TestCurrentPaneNavigationRouting(tempRoot));
             Run("current pane navigation sources", failures, () => TestCurrentPaneNavigationSources(tempRoot));
             Run("preview properties", failures, () => TestPreviewProperties(tempRoot));
+            Run("image preview metadata", failures, () => TestImagePreviewMetadata(tempRoot));
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
@@ -1068,9 +1069,10 @@ internal static class Program
 
         var unsupportedItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "archive.bin");
         vm.ActiveTab.FileList.SelectedItem = unsupportedItem;
-        Assert(vm.HasPreviewStatus, "Unsupported files should show a preview status.");
-        Assert(vm.PreviewStatusText.Contains("Created") || vm.PreviewStatusText.Contains("Modified"),
-            "Unsupported files should show file metadata.");
+        WaitFor(() => vm.HasPreviewText && vm.HasPreviewStatus);
+        Assert(vm.HasPreviewText, "Small binary files should produce preview text.");
+        Assert(vm.PreviewStatusText.Contains("Binary preview"), "Small binary files should use binary preview status.");
+        Assert(vm.PreviewText.Contains("0000:"), "Binary preview should include a hex offset.");
 
         var largeTextItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "large.txt");
         vm.ActiveTab.FileList.SelectedItem = largeTextItem;
@@ -1080,6 +1082,29 @@ internal static class Program
         vm.ActiveTab.FileList.SelectedItem = pdfItem;
         WaitFor(() => vm.PreviewStatusText.Contains("PDF"), 1000);
         Assert(vm.PreviewStatusText.Contains("PDF"), "PDF files should show PDF metadata preview.");
+    }
+
+    private static void TestImagePreviewMetadata(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "preview_image");
+        var imageFile = Path.Combine(folder, "preview.png");
+        File.WriteAllBytes(imageFile, Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9sAAAAASUVORK5CYII="));
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+        vm.TogglePreviewCommand.Execute(null);
+
+        var imageItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "preview.png");
+        vm.ActiveTab.FileList.SelectedItem = imageItem;
+        WaitFor(() => vm.HasPreviewImage && vm.HasPreviewStatus);
+
+        Assert(vm.HasPreviewImage, "Image files should produce image preview content.");
+        Assert(vm.PreviewStatusText.Contains("Image file"), "Image preview should include image metadata.");
+        Assert(vm.PreviewStatusText.Contains("Dimensions"), "Image preview should include dimensions.");
     }
 
     private static void TestAddressSuggestions(string root)
