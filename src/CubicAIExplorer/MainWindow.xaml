@@ -82,6 +82,12 @@
                 <MenuItem Header="Show _Hidden Files" IsCheckable="True"
                           IsChecked="{Binding CurrentPaneFileList.ShowHiddenFiles}" />
             </MenuItem>
+            <MenuItem Header="_Bookmarks">
+                <MenuItem Header="_Add Current" Command="{Binding AddBookmarkCommand}" />
+                <Separator />
+                <MenuItem Header="_Import..." Click="ImportBookmarks_Click" />
+                <MenuItem Header="_Export..." Click="ExportBookmarks_Click" />
+            </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Preferences..." Command="{Binding OpenPreferencesCommand}" />
             </MenuItem>
@@ -394,14 +400,6 @@
                     <Button Content="- Remove"
                             Command="{Binding RemoveBookmarkCommand}"
                             CommandParameter="{Binding SelectedBookmark}"
-                            Padding="6,2"
-                            Margin="0,0,4,0" />
-                    <Button Content="Import..."
-                            Click="ImportBookmarks_Click"
-                            Padding="6,2"
-                            Margin="0,0,4,0" />
-                    <Button Content="Export..."
-                            Click="ExportBookmarks_Click"
                             Padding="6,2" />
                 </DockPanel>
                 <Border DockPanel.Dock="Top" Margin="4,0,4,4" Height="100" Style="{StaticResource ClassicPaneSurfaceStyle}" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
