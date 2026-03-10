@@ -53,6 +53,8 @@ internal static class Program
             Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
             Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
+            Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
+            Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
             Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
             Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
@@ -927,6 +929,62 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
         }
+    }
+
+    private static void TestCloseTabsToLeft(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var first = CreateCleanSubdir(root, "close_left_first");
+        var second = CreateCleanSubdir(root, "close_left_second");
+        var third = CreateCleanSubdir(root, "close_left_third");
+        var fourth = CreateCleanSubdir(root, "close_left_fourth");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(first);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(second);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(third);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(fourth);
+
+        vm.ActiveTab = vm.Tabs[0];
+        var keepTab = vm.Tabs[2];
+        vm.CloseTabsToLeft(keepTab);
+
+        Assert(vm.Tabs.Count == 2, "Close tabs to left should remove all tabs before the selected tab.");
+        Assert(vm.Tabs[0] == keepTab, "Close tabs to left should retain the selected tab.");
+        Assert(vm.Tabs[1].CurrentPath == fourth, "Close tabs to left should preserve tabs on the right.");
+        Assert(vm.ActiveTab == keepTab, "Close tabs to left should activate the kept tab when the active tab is closed.");
+    }
+
+    private static void TestCloseTabsToRight(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var first = CreateCleanSubdir(root, "close_right_first");
+        var second = CreateCleanSubdir(root, "close_right_second");
+        var third = CreateCleanSubdir(root, "close_right_third");
+        var fourth = CreateCleanSubdir(root, "close_right_fourth");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(first);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(second);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(third);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(fourth);
+
+        var keepTab = vm.Tabs[1];
+        vm.ActiveTab = vm.Tabs[3];
+        vm.CloseTabsToRight(keepTab);
+
+        Assert(vm.Tabs.Count == 2, "Close tabs to right should remove all tabs after the selected tab.");
+        Assert(vm.Tabs[0].CurrentPath == first, "Close tabs to right should preserve tabs on the left.");
+        Assert(vm.Tabs[1] == keepTab, "Close tabs to right should retain the selected tab.");
+        Assert(vm.ActiveTab == keepTab, "Close tabs to right should activate the kept tab when the active tab is closed.");
     }
 
     private static void TestSelectionSizeStatus(string root)
@@ -2001,6 +2059,8 @@ internal static class Program
         Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
         Assert(main.Contains("BrowseArchiveMenuItem"), "Browse Archive menu item should exist.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
+        Assert(main.Contains("CloseTabsToLeft_Click"), "Close tabs to left handler should be wired.");
+        Assert(main.Contains("CloseTabsToRight_Click"), "Close tabs to right handler should be wired.");
         Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");
         Assert(main.Contains("FolderTree_Drop"), "Folder tree drop handler should be wired.");
         Assert(main.Contains("AllowDrop=\"True\""), "Drop should be enabled.");

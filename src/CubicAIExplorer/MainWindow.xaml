@@ -317,6 +317,10 @@
                                     <Separator />
                                     <MenuItem Header="Close Tab" Click="CloseTab_Click"
                                               Tag="{Binding}" />
+                                    <MenuItem Header="Close Tabs to the Left" Click="CloseTabsToLeft_Click"
+                                              Tag="{Binding}" />
+                                    <MenuItem Header="Close Tabs to the Right" Click="CloseTabsToRight_Click"
+                                              Tag="{Binding}" />
                                     <MenuItem Header="Close Other Tabs" Click="CloseOtherTabs_Click"
                                               Tag="{Binding}" />
                                 </ContextMenu>

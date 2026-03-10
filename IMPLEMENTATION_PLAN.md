@@ -63,6 +63,12 @@ Primary files:
 - both panes recreate the details view from the persisted layout so the same configuration survives restart and mode switches
 - smoke coverage now verifies default column layout behavior, normalized saves, and settings round-trip persistence
 
+### Tab-management parity: close-left and close-right
+
+- added tab context-menu actions to close all tabs to the left or right of the chosen tab
+- tab cleanup now preserves event-detach behavior through a shared close helper and promotes the clicked tab when the active tab was closed
+- smoke coverage now verifies close-left and close-right behavior alongside duplicate and close-others
+
 Primary files:
 
 - `src/CubicAIExplorer/Models/DetailsColumnId.cs`
@@ -141,16 +147,15 @@ Smoke coverage explicitly includes:
 
 The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
 
-### 1. Tab-management parity
+### 1. Tab-management follow-up
 
 Why this matters:
 
-- the rewrite already has duplicate tab and close others, so the missing pieces are incremental and high-value
-- original CubicExplorer exposed more tab/session management power, including close-left / close-right and related affordances
+- the rewrite now covers duplicate tab, close others, close left, and close right, but still lacks a few heavy-session affordances from the original
+- original CubicExplorer also exposed stronger tab reuse and overflow handling for crowded tab strips
 
 Scope:
 
-- add close tabs on left / right
 - consider "reuse already open tabs" navigation behavior
 - evaluate tab overflow / more-tabs affordances once command parity is in place
 

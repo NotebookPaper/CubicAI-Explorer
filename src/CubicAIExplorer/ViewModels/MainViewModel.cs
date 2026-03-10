@@ -1334,16 +1334,49 @@ public partial class MainViewModel : ObservableObject
             ActiveTab!.NavigateTo(sourceTab.CurrentPath);
     }
 
+    public void CloseTabsToLeft(TabViewModel keepTab)
+    {
+        var keepIndex = Tabs.IndexOf(keepTab);
+        if (keepIndex <= 0)
+            return;
+
+        CloseTabSet(Tabs.Take(keepIndex).ToList(), keepTab);
+    }
+
+    public void CloseTabsToRight(TabViewModel keepTab)
+    {
+        var keepIndex = Tabs.IndexOf(keepTab);
+        if (keepIndex < 0 || keepIndex >= Tabs.Count - 1)
+            return;
+
+        CloseTabSet(Tabs.Skip(keepIndex + 1).ToList(), keepTab);
+    }
+
     public void CloseOtherTabs(TabViewModel keepTab)
     {
-        var toClose = Tabs.Where(t => t != keepTab).ToList();
-        foreach (var tab in toClose)
+        CloseTabSet(Tabs.Where(t => t != keepTab).ToList(), keepTab);
+    }
+
+    private void CloseTabSet(IReadOnlyCollection<TabViewModel> tabsToClose, TabViewModel fallbackActiveTab)
+    {
+        if (tabsToClose.Count == 0)
+            return;
+
+        var activeTabWasClosed = ActiveTab != null && tabsToClose.Contains(ActiveTab);
+        foreach (var tab in tabsToClose)
         {
             DetachTab(tab);
             Tabs.Remove(tab);
         }
 
-        ActiveTab = keepTab;
+        if (Tabs.Count == 0)
+        {
+            NewTab();
+            return;
+        }
+
+        if (activeTabWasClosed || ActiveTab == null)
+            ActiveTab = Tabs.Contains(fallbackActiveTab) ? fallbackActiveTab : Tabs[0];
     }
 
     public void NavigateToPath(string path)

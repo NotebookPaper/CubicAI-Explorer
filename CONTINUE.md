@@ -2,17 +2,17 @@
 
 > Last updated: 2026-03-10
 > Branch: `master`
-> HEAD: `a625885` - `Enhance Edit menu with Duplicate, Copy Path options, New File, Invert Selection and Symbolic Link support`
-> Status: persistent details-column customization is now implemented locally and verified; next roadmap work is tab-management parity.
+> HEAD: current local `master` after the latest verified roadmap slice
+> Status: tab close-left / close-right parity is now implemented locally and verified; next roadmap work is tab reuse and overflow follow-up.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
-- Local `master` still tracks GitHub at `a625885`, but this checkout now has uncommitted richer-filter/search work on top.
+- Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes again.
 - Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are complete in this checkout.
-- The next completed roadmap slice after those specs is persistent details-column customization for the details view.
+- The next completed roadmap slice after those specs is tab close-left / close-right parity for the tab strip context menu.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
@@ -32,16 +32,20 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - the View menu now exposes column show/hide, move-left/right, auto-size, and reset actions
   - both panes rebuild the details view from the saved layout so settings survive restart and view-mode switches
   - smoke coverage now verifies column-layout defaults, normalized saves, and settings-service round-trip persistence
+- Tab-management parity:
+  - added tab context-menu actions for close tabs to the left and close tabs to the right
+  - shared close logic now detaches tab event subscriptions consistently for close-left/right/others flows
+  - when a close-left/right action removes the active tab, the clicked tab becomes the active fallback
+  - smoke coverage now verifies close-left/right behavior
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
 
 ## Next Steps
 
-1. Move to the next roadmap item: tab-management parity.
-   - add close tabs on left / right
+1. Continue the remaining tab-management follow-up.
    - decide whether to reuse already-open tabs for navigation instead of duplicating
-   - evaluate whether tab overflow or a more-tabs affordance is needed once command parity lands
+   - evaluate whether tab overflow or a more-tabs affordance is needed now that close-left/right parity is in place
 2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
    - do not delete the existing target before the incoming transfer succeeds
    - prefer a stage/rename-backup flow so failed replacements preserve the original destination

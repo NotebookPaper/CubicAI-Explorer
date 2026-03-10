@@ -1146,6 +1146,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CloseTabsToLeft_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: TabViewModel tab })
+        {
+            ViewModel.CloseTabsToLeft(tab);
+        }
+    }
+
+    private void CloseTabsToRight_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: TabViewModel tab })
+        {
+            ViewModel.CloseTabsToRight(tab);
+        }
+    }
+
     private void CloseOtherTabs_Click(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: TabViewModel tab })
