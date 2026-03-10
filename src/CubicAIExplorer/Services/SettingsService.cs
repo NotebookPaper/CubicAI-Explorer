@@ -16,8 +16,11 @@ public sealed class SettingsService : IDisposable
     {
         var path = GetSettingsPath();
         var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+        if (!string.IsNullOrWhiteSpace(dir))
         {
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
             _watcher = new FileSystemWatcher(dir, Path.GetFileName(path))
             {
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,

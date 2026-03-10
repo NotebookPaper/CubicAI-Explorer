@@ -79,7 +79,6 @@ public partial class FileListViewModel : ObservableObject
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
 
     public event EventHandler<string>? NavigateRequested;
-    public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
     public event EventHandler? InvertSelectionRequested;
     public event EventHandler<FileSystemItem>? InlineRenameRequested;

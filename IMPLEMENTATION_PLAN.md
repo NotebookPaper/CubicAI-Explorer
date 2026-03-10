@@ -15,75 +15,56 @@ The app currently includes:
 - folder tree with lazy loading
 - file list sorting, multi-select, inline rename, drag/drop, and shell icons
 - copy, cut, paste, move, delete, permanent delete, create folder, undo/redo, and Explorer clipboard interop
-- bookmarks, recent folders, breadcrumbs, autocomplete, search/filter, and recursive search
+- hierarchical bookmarks with icons, recent folders, breadcrumbs, autocomplete, search/filter, and recursive search
 - preview panel with text, image, folder, metadata, and fallback states
 - properties dialog, toolbar, context menus, keyboard shortcuts, and persisted window/settings state
 - smoke-test harness covering core behaviors and recent regressions
+- cross-machine settings and bookmark synchronization via OneDrive or shared paths
 
 ## Recently Completed Slices
 
-### Transfer reliability
+### Edit menu and advanced operations
+
+- added full original CubicExplorer Edit menu parity
+- commands: `Duplicate` (Ctrl+D), `Copy Path` (Ctrl+R), `New File`, `Create Symbolic Link`
+- `Invert Selection` (Ctrl+Shift+A) for active file list
+- improved toolbar with inline Address/Breadcrumb bar and "New Tab" button
+- hierarchical bookmark organization with folders and drag-and-drop
+
+Primary files:
+
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+
+### Session persistence and machine sync
+
+- added persistent session state: open tabs, active tab, pane paths, and window layout (sidebar/preview widths)
+- implemented non-locking settings/bookmark access for OneDrive compatibility
+- added `FileSystemWatcher` support for live auto-refresh of bookmarks and settings when updated externally
+- environment variable overrides (`CUBICAI_SETTINGS_PATH`, `CUBICAI_BOOKMARKS_PATH`) for flexible sync location
+
+Primary files:
+
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/Services/SettingsService.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/App.xaml.cs`
+
+### Transfer reliability and safety
 
 - conflict-aware paste flow supports `KeepBoth`, `Replace`, and `Skip`
+- **Safer Replace:** implemented "stage and rename" logic to prevent data loss if a replace operation fails mid-transfer
 - transfer history keeps partial results instead of collapsing mixed outcomes
-- skip-only results report through pane status text rather than modal noise
 - clipboard handling is more robust against transient failures and Explorer drop-effect variants
 
 Primary files:
 
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `src/CubicAIExplorer/Services/FileSystemService.cs`
 - `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/Services/ClipboardService.cs`
-- `src/CubicAIExplorer/Views/FileConflictDialog.xaml`
-- `src/CubicAIExplorer/Views/FileConflictDialog.xaml.cs`
-
-### Background file operations
-
-- added a shared `IFileOperationQueueService` / `FileOperationQueueService`
-- paste, delete, permanent delete, and drag/drop transfers run off the UI thread
-- queue state is surfaced in the status bar
-- active queued transfers now expose item-count progress and cooperative cancellation
-- the queue details panel now shows current progress/detail plus a cancel action
-
-Primary files:
-
-- `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
-- `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
-- `src/CubicAIExplorer/App.xaml.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/ViewModels/TabViewModel.cs`
-
-### Preview and archive support
-
-- small binary files fall back to a hex preview
-- image preview includes dimensions and basic metadata
-- ZIP files show archive metadata and entry listings in preview
-- added `Extract Archive` for single selected `.zip` files
-- added an in-app archive browser with filtering and a folders-only toggle for larger ZIPs
-
-Primary files:
-
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-
-### Saved searches and cleanup
-
-- saved searches persist and render in the left rail
-- running a saved search rehydrates the search results view
-- `MainViewModel` command-forwarding/property-notification duplication was reduced
-
-Primary files:
-
-- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
 
 ## Verification
 
@@ -102,18 +83,16 @@ Smoke coverage explicitly includes:
 - ZIP listing and extraction
 - archive browser filtering
 - archive preview metadata
-- image preview metadata
-- saved search persistence and rerun behavior
-- preview refresh and preview status states
+- hierarchical bookmark import and persistence
+- cross-session tab restoration
+- sidebar width persistence
 
 ## Next Planned Work
 
 1. Manual UX pass on the newest slices:
-   - paste conflict dialog behavior
-   - transfer summary wording
-   - queue visibility and busy feedback
-   - ZIP extraction flow
-   - saved-search rail interactions
+   - verify drag-and-drop bookmark reordering UX
+   - check symbolic link creation success feedback
+   - ensure "New File" creates usable template-based files if appropriate
 2. Archive follow-up:
    - add richer archive actions beyond browse + filter + extract-all
    - decide whether opening an archive should stay metadata-first or become navigable
@@ -122,17 +101,16 @@ Smoke coverage explicitly includes:
    - keep expensive preview generation off the UI thread
 4. Queue follow-up:
    - preserve richer queue history than the last result only
-   - consider per-item failure detail or batch summaries beyond the current item-count progress model
+   - implement per-item failure detail or batch summaries
 
 ## Constraints And Decisions
 
 - stay on `.NET 8` / WPF with no new NuGet packages unless explicitly approved
 - keep all file paths sanitized through `FileSystemService`
 - prefer existing MVVM and service-wiring patterns over new abstractions
-- do not recreate the `GridView` during tab initialization
+- do not delete existing targets before replacement copy/move succeeds (safety first)
 - avoid `DockPanel` for file-list plus popup layouts; use explicit `Grid`
-- avoid keyed `DataTemplate` plus `DataType` combinations in `App.xaml`
-- do not enable WinForms just to obtain folder dialogs
+- keep settings and bookmark watchers active for multi-instance synchronization
 
 ## Known Gotchas
 

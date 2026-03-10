@@ -48,6 +48,8 @@ public interface IFileSystemService
     void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false, IFileOperationContext? operationContext = null);
     string RenameFile(string path, string newName);
     string CreateFolder(string parentPath, string folderName);
+    string CreateFile(string parentPath, string fileName);
+    void CreateSymbolicLink(string linkPath, string targetPath);
     string? EnsureDirectoryExists(string path);
     IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);
     void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null);

@@ -38,7 +38,6 @@ public partial class App : Application
             settingsService,
             settings,
             fileOperationQueueService);
-        mainViewModel.NewTabCommand.Execute(null);
 
         var mainWindow = new MainWindow
         {

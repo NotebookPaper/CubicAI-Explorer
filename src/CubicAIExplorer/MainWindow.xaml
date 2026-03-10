@@ -446,18 +446,17 @@
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                    <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_MouseDoubleClick" />
+                                    <EventSetter Event="Selected" Handler="BookmarkItem_Selected" />
+                                    <Setter Property="ContextMenu" Value="{StaticResource BookmarkContextMenu}" />
                                     <Style.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
                                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
                                         </Trigger>
                                     </Style.Triggers>
-                                    <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_MouseDoubleClick" />
-                                    <EventSetter Event="Selected" Handler="BookmarkItem_Selected" />
-                                    <Setter Property="ContextMenu" Value="{StaticResource BookmarkContextMenu}" />
                                 </Style>
-                            </TreeView.ItemContainerStyle>
-                            <TreeView.ItemTemplate>
+                            </TreeView.ItemContainerStyle>                            <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate DataType="{x:Type models:BookmarkItem}" ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal" Margin="2">
                                         <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"

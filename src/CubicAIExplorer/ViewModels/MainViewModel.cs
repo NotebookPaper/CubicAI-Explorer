@@ -206,8 +206,11 @@ public partial class MainViewModel : ObservableObject
         // Setup bookmark watcher
         var bookmarkPath = GetBookmarksPath();
         var bookmarkDir = Path.GetDirectoryName(bookmarkPath);
-        if (!string.IsNullOrWhiteSpace(bookmarkDir) && Directory.Exists(bookmarkDir))
+        if (!string.IsNullOrWhiteSpace(bookmarkDir))
         {
+            if (!Directory.Exists(bookmarkDir))
+                Directory.CreateDirectory(bookmarkDir);
+
             _bookmarkWatcher = new FileSystemWatcher(bookmarkDir, Path.GetFileName(bookmarkPath))
             {
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,

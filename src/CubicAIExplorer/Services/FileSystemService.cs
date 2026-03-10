@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using Microsoft.VisualBasic.FileIO;
 using CubicAIExplorer.Models;
 
@@ -309,6 +310,34 @@ public sealed class FileSystemService : IFileSystemService
         return targetPath;
     }
 
+    public string CreateFile(string parentPath, string fileName)
+    {
+        var sanitizedParent = SanitizePath(parentPath);
+        if (sanitizedParent == null || !Directory.Exists(sanitizedParent))
+            return parentPath;
+
+        var baseName = string.IsNullOrWhiteSpace(fileName) ? "New file.txt" : fileName.Trim();
+        var targetPath = GetUniquePath(sanitizedParent, baseName, isDirectory: false);
+        File.WriteAllText(targetPath, string.Empty);
+        return targetPath;
+    }
+
+    public void CreateSymbolicLink(string linkPath, string targetPath)
+    {
+        var sanitizedLink = SanitizePath(linkPath);
+        var sanitizedTarget = SanitizePath(targetPath);
+        if (sanitizedLink == null || sanitizedTarget == null) return;
+
+        if (Directory.Exists(sanitizedTarget))
+        {
+            Directory.CreateSymbolicLink(sanitizedLink, sanitizedTarget);
+        }
+        else if (File.Exists(sanitizedTarget))
+        {
+            File.CreateSymbolicLink(sanitizedLink, sanitizedTarget);
+        }
+    }
+
     public string? EnsureDirectoryExists(string path)
     {
         var sanitized = SanitizePath(path);
@@ -534,13 +563,23 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
 
+        string? backupPath = null;
+        if (collisionResolution == FileTransferCollisionResolution.Replace && File.Exists(targetPath))
+        {
+            backupPath = CreateBackup(targetPath);
+            if (backupPath == null)
+                return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, "Could not create backup for replace.");
+        }
+
         try
         {
             File.Copy(source, targetPath, overwrite: false);
+            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false);
         }
         catch (Exception ex)
         {
+            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -551,13 +590,23 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
 
+        string? backupPath = null;
+        if (collisionResolution == FileTransferCollisionResolution.Replace && Directory.Exists(targetPath))
+        {
+            backupPath = CreateBackup(targetPath);
+            if (backupPath == null)
+                return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, "Could not create backup for replace.");
+        }
+
         try
         {
             CopyDirectoryRecursive(source, targetPath);
+            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true);
         }
         catch (Exception ex)
         {
+            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -568,13 +617,23 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
 
+        string? backupPath = null;
+        if (collisionResolution == FileTransferCollisionResolution.Replace && File.Exists(targetPath))
+        {
+            backupPath = CreateBackup(targetPath);
+            if (backupPath == null)
+                return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, "Could not create backup for replace.");
+        }
+
         try
         {
-            File.Move(source, targetPath);
+            File.Move(source, targetPath, overwrite: false);
+            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false);
         }
         catch (Exception ex)
         {
+            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -585,13 +644,23 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
 
+        string? backupPath = null;
+        if (collisionResolution == FileTransferCollisionResolution.Replace && Directory.Exists(targetPath))
+        {
+            backupPath = CreateBackup(targetPath);
+            if (backupPath == null)
+                return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, "Could not create backup for replace.");
+        }
+
         try
         {
             MoveDirectory(source, targetPath);
+            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true);
         }
         catch (Exception ex)
         {
+            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -618,25 +687,51 @@ public sealed class FileSystemService : IFileSystemService
                 skipped = true;
                 return preferredPath;
             case FileTransferCollisionResolution.Replace:
-                DeleteExistingTarget(preferredPath);
+                // We return the preferred path but the caller must handle the Replace backup
                 return preferredPath;
             default:
                 return GetUniquePath(destinationDirectory, entryName, isDirectory);
         }
     }
 
-    private void DeleteExistingTarget(string path)
+    private string? CreateBackup(string path)
     {
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-            return;
-        }
+        if (!PathExists(path)) return null;
 
-        if (Directory.Exists(path))
+        try
         {
-            Directory.Delete(path, recursive: true);
+            var backupPath = path + ".bak_" + Guid.NewGuid().ToString("N")[..8];
+            if (File.Exists(path))
+                File.Move(path, backupPath);
+            else
+                Directory.Move(path, backupPath);
+            return backupPath;
         }
+        catch { return null; }
+    }
+
+    private void RestoreBackup(string backupPath, string originalPath)
+    {
+        try
+        {
+            if (File.Exists(backupPath))
+                File.Move(backupPath, originalPath, overwrite: true);
+            else if (Directory.Exists(backupPath))
+                Directory.Move(backupPath, originalPath);
+        }
+        catch { /* Best effort */ }
+    }
+
+    private void DeleteBackup(string backupPath)
+    {
+        try
+        {
+            if (File.Exists(backupPath))
+                File.Delete(backupPath);
+            else if (Directory.Exists(backupPath))
+                Directory.Delete(backupPath, recursive: true);
+        }
+        catch { /* Best effort */ }
     }
 
     private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
