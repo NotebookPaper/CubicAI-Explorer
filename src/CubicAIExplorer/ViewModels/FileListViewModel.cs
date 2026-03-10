@@ -172,9 +172,7 @@ public partial class FileListViewModel : ObservableObject
                 collisionResolution.Value,
                 out var transferResults))
         {
-            var successfulTransfers = transferResults
-                .Where(static result => result.Status == FileTransferStatus.Success)
-                .ToArray();
+            var successfulTransfers = GetSuccessfulTransfers(transferResults);
 
             if (isCut)
             {
@@ -592,9 +590,7 @@ public partial class FileListViewModel : ObservableObject
                 out var transferResults))
             return;
 
-        var successfulTransfers = transferResults
-            .Where(static result => result.Status == FileTransferStatus.Success)
-            .ToArray();
+        var successfulTransfers = GetSuccessfulTransfers(transferResults);
 
         if (moveFiles)
         {
@@ -723,6 +719,13 @@ public partial class FileListViewModel : ObservableObject
             failedItems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
     }
 
+    private static FileTransferResult[] GetSuccessfulTransfers(IReadOnlyList<FileTransferResult> transferResults)
+    {
+        return transferResults
+            .Where(static result => result.Status == FileTransferStatus.Success)
+            .ToArray();
+    }
+
     private void RegisterMoveUndo(IReadOnlyList<FileTransferResult> results)
     {
         if (_isApplyingHistory || results.Count == 0) return;
@@ -790,8 +793,8 @@ public partial class FileListViewModel : ObservableObject
                     var restoreDir = Path.GetDirectoryName(item.SourcePath);
                     if (string.IsNullOrWhiteSpace(restoreDir)) continue;
 
-                    var movedBack = _fileSystemService.MoveFiles([item.DestinationPath], restoreDir);
-                    if (movedBack.Count == 0) continue;
+                    var movedBack = GetSuccessfulTransfers(_fileSystemService.MoveFiles([item.DestinationPath], restoreDir));
+                    if (movedBack.Length == 0) continue;
 
                     var restoredPath = movedBack[0].DestinationPath;
                     if (!string.Equals(restoredPath, item.SourcePath, StringComparison.OrdinalIgnoreCase))
@@ -839,7 +842,8 @@ public partial class FileListViewModel : ObservableObject
             if (permanentDelete)
             {
                 var stagedItems = _fileSystemService.MoveFiles(deletePaths, _undoStagingPath);
-                RegisterPermanentDeleteUndo(stagedItems);
+                ShowTransferStatus(stagedItems, "Delete Error");
+                RegisterPermanentDeleteUndo(GetSuccessfulTransfers(stagedItems));
             }
             else
             {

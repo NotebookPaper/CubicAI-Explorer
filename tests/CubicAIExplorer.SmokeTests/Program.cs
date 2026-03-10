@@ -27,6 +27,7 @@ internal static class Program
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("move same folder no-op", failures, () => TestMoveSameFolderNoOp(tempRoot));
+            Run("move collision keep both", failures, () => TestMoveCollisionKeepBoth(tempRoot));
             Run("copy collision replace", failures, () => TestCopyCollisionReplace(tempRoot));
             Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
@@ -361,6 +362,27 @@ internal static class Program
         Assert(results[0].DestinationPath == destination, "Copy replace should target the original path.");
         Assert(File.ReadAllText(destination) == "new", "Copy replace should overwrite the destination contents.");
         Assert(File.Exists(source), "Copy replace should leave the source intact.");
+    }
+
+    private static void TestMoveCollisionKeepBoth(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "move_keep_both_source");
+        var destinationDir = CreateCleanSubdir(root, "move_keep_both_destination");
+        var source = Path.Combine(sourceDir, "item.txt");
+        var destination = Path.Combine(destinationDir, "item.txt");
+        var renamedDestination = Path.Combine(destinationDir, "item (2).txt");
+        File.WriteAllText(source, "source");
+        File.WriteAllText(destination, "existing");
+
+        var results = fs.MoveFiles([source], destinationDir);
+
+        Assert(results.Count == 1, "Move keep-both should return one result.");
+        Assert(results[0].Status == FileTransferStatus.Success, "Move keep-both should succeed.");
+        Assert(results[0].DestinationPath == renamedDestination, "Move keep-both should create a suffixed destination.");
+        Assert(File.Exists(renamedDestination), "Move keep-both should create the renamed target.");
+        Assert(File.ReadAllText(destination) == "existing", "Move keep-both should preserve the existing destination.");
+        Assert(!File.Exists(source), "Move keep-both should remove the source file.");
     }
 
     private static void TestMoveCollisionSkip(string root)
