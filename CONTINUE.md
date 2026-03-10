@@ -2,76 +2,91 @@
 
 > Last updated: 2026-03-10
 > Branch: `master`
-> HEAD: `e636845` - `Add archive browser and queue progress UX`
-> Status: `master` is pushed through `e636845`; only local-only untracked helper/artifact folders remain
+> HEAD: `a625885` - `Enhance Edit menu with Duplicate, Copy Path options, New File, Invert Selection and Symbolic Link support`
+> Status: local `master` was fast-forwarded to `origin/master`; tracked worktree differs only by this refreshed handoff, plus local-only untracked helper/artifact folders
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
-- `origin/master` now includes `e636845`, which adds the archive browser/extraction UX, queue progress/cancel UX, saved-search rename behavior, README, and updated planning docs.
-- The tracked worktree is clean after the push.
+- Local `master` now matches GitHub at `a625885`.
+- The archive/queue/saved-search work from `e636845` is still part of the baseline, but GitHub added 12 more commits on top of it.
+- The latest remote slices include:
+  - bookmark import/export menu work and XML import fixes
+  - hierarchical bookmarks with icons, folders, rename, and drag/drop organization
+  - sidebar resizability/layout fixes and better vertical fill behavior
+  - multi-machine sync and session persistence via file watchers and non-locking file access
+  - address bar moved inline with the toolbar plus a New Tab button in the tab bar
+  - Edit menu additions: Duplicate, Copy Path, New File, Invert Selection, and symbolic link support
+- `CONTINUE.md` and `IMPLEMENTATION_PLAN.md` on the branch were stale after the GitHub updates; only `CONTINUE.md` has been refreshed in this local checkout so far.
 - Remaining untracked paths are local-only (`.claude/` and `obj_verify` folders) and are not part of the shipped project state.
 
 ## Completed
 
-- Queue work:
-  - `FileOperationQueueService` now exposes current progress, detail text, cancel support, and last completed/canceled status after the queue goes idle.
-  - `MainViewModel` and `MainWindow.xaml` now surface a toggleable queue details panel with progress bar, detail text, pending count, last result, and cancel action.
-  - Copy, move, delete, permanent delete staging, and archive extraction now run through cancellable/progress-aware queue contexts.
-- Archive work:
-  - `.zip` files can now be browsed in-app instead of only showing preview metadata.
-  - Added archive filtering, folders-only mode, and custom extraction destination/options.
-  - `FileSystemService` / `IFileSystemService` gained directory-validation support used by archive extraction.
-- Saved-search and preview work:
-  - `SavedSearchItem` is observable, rename persists, and saved searches run explicitly instead of firing on single selection.
-  - Text preview status now includes detected encoding and line-count metadata.
-  - Media preview status distinguishes audio vs video; ZIP preview status now calls out that only the first 8 entries are shown.
-- Docs:
-  - Added `README.md`.
-  - Refreshed `IMPLEMENTATION_PLAN.md` to match the current shipped feature set.
+- Baseline already shipped before the fast-forward:
+  - archive browser and extraction dialogs
+  - queue progress/cancel UX
+  - saved-search rename behavior
+  - README and refreshed planning docs
+- Additional GitHub-delivered work now in the checkout:
+  - new `GridLengthConverter` and App resource wiring
+  - substantial `MainWindow.xaml` / `MainWindow.xaml.cs` layout and menu changes
+  - bookmark model expansion in `BookmarkItem`
+  - new session/sync-related settings in `UserSettings` and `SettingsService`
+  - `MainViewModel` and `FileListViewModel` updates for bookmarks, toolbar/address bar, and new edit actions
 
 ## In Progress
 
-- No tracked in-progress code is left in the worktree.
-- The next work is a product decision/validation step, not unfinished implementation from the last slice.
+- The current branch does not build cleanly after the GitHub fast-forward.
+- The first build attempt hit the known WPF markup file-lock issue on `App.g.cs`.
+- The second build attempt exposed a real XAML error:
+  - [MainWindow.xaml](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/MainWindow.xaml#L455)
+  - `MC3088: Property elements cannot be in the middle of an element's content`
+  - The immediate cause is `EventSetter` elements placed after `Style.Triggers` inside the `TreeView.ItemContainerStyle`.
 
 ## Next Steps
 
-1. Run the app and manually exercise:
-   - queue details panel visibility, wording, and cancel behavior during longer transfers
-   - archive browser filtering and folders-only mode on larger ZIPs
-   - extraction dialog defaults and optional open-folder flow
-   - saved-search rename, keyboard behavior, and discoverability
-2. If the UX looks solid, start the next roadmap slice:
-   - richer archive actions beyond browse/filter/extract
-   - broader preview/metadata support
-   - deeper queue history or per-item failure reporting
-3. Keep `CONTINUE.md` and `IMPLEMENTATION_PLAN.md` aligned when the next material feature slice lands.
+1. Recover the build before any further feature work:
+   - fix the invalid `TreeView.ItemContainerStyle` ordering in [MainWindow.xaml](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/MainWindow.xaml#L446)
+   - remove the duplicate `NavigateRequested` event in [FileListViewModel.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/ViewModels/FileListViewModel.cs#L81)
+   - reconcile the new file/link commands with the service abstraction by adding `CreateFile` / `CreateSymbolicLink` to [IFileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/IFileSystemService.cs) and implementing them in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs), or temporarily backing the commands out
+2. Once the branch builds, verify the latest Edit-menu slice end to end:
+   - `dotnet build CubicAIExplorer.sln -v minimal`
+   - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
+   - manually exercise Duplicate, Copy Path/Name, New File, Invert Selection, and Create Symbolic Link in both panes
+3. Fix the replace-on-conflict data-loss path in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
+   - do not delete the existing target before the replacement copy/move succeeds
+   - prefer a stage/rename-backup flow so failed replacements preserve the original destination
+4. Add smoke-test coverage for the risky file-operation paths:
+   - replace failure behavior
+   - same-folder duplicate behavior
+   - undo/redo after duplicate, new file, and link creation
+5. Fix startup/session initialization:
+   - remove the unconditional extra tab creation in [App.xaml.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/App.xaml.cs#L41)
+   - keep [MainViewModel.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/ViewModels/MainViewModel.cs#L224) as the single owner of restore-vs-create tab logic
+6. Make settings/bookmark sync reliable on first run:
+   - ensure watcher directories exist before `FileSystemWatcher` setup, or create watchers lazily after the first save
+   - harden watcher callbacks against transient `IOException` / partial-write races for both settings and bookmarks
+7. After the code is stable again, refresh `IMPLEMENTATION_PLAN.md` so it matches the post-`a625885` reality rather than the older archive/queue milestone.
 
 ## Key Files
 
-- `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
-- `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/App.xaml`
+- `src/CubicAIExplorer/Converters/GridLengthConverter.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
-- `src/CubicAIExplorer/Models/ArchiveBrowseRequest.cs`
-- `src/CubicAIExplorer/Views/ArchiveBrowserDialog.xaml`
-- `src/CubicAIExplorer/Views/ArchiveBrowserDialog.xaml.cs`
-- `src/CubicAIExplorer/Views/ExtractArchiveDialog.xaml`
-- `src/CubicAIExplorer/Views/ExtractArchiveDialog.xaml.cs`
+- `src/CubicAIExplorer/Models/BookmarkItem.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/Services/SettingsService.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ## Worktree
 
 Tracked worktree state:
 
-- clean
+- `CONTINUE.md` modified locally for this handoff refresh
 
 Untracked local-only paths:
 
@@ -81,13 +96,14 @@ Untracked local-only paths:
 
 ## Verification
 
-Verified in this session on 2026-03-10:
+Verification run on the updated checkout on 2026-03-10:
 
 - `dotnet build CubicAIExplorer.sln -v minimal`
+  - failed once with the known WPF markup lock on `App.g.cs`
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
-- `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
+  - failed with `MC3088` in [MainWindow.xaml](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/MainWindow.xaml#L455)
 
-The smoke run passed, including the new checks for queue recent status, queue cancel/progress, archive browse/filter/custom extract, saved-search rename, preview metadata, and XAML wiring.
+No smoke-test executable run was attempted after the fast-forward because the project currently fails to build.
 
 ## Gotchas
 
@@ -97,3 +113,6 @@ The smoke run passed, including the new checks for queue recent status, queue ca
 - Avoid keyed `DataTemplate` plus `DataType` combinations in `App.xaml`.
 - Do not enable WinForms just to get a folder picker.
 - Keep all path handling routed through `FileSystemService` sanitization helpers.
+- The current top priority is the invalid `Style` content ordering in `MainWindow.xaml`; until that is fixed, the updated branch is not buildable.
+- After the markup fix, expect additional compile errors from the duplicate `NavigateRequested` declaration and the missing `CreateFile` / `CreateSymbolicLink` members on `IFileSystemService`.
+- `FileTransferCollisionResolution.Replace` is currently unsafe because it deletes the destination before the incoming transfer succeeds; do not ship that behavior unchanged.
