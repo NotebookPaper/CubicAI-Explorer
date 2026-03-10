@@ -90,6 +90,19 @@ Primary files:
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### Crowded-tab overflow affordances
+
+- the main tab strip now supports horizontal scrolling when the header row overflows instead of compressing tabs into unusable widths
+- added explicit left/right tab-strip scroll buttons plus a `More Tabs` dropdown listing every open tab with the active tab marked
+- when tab count or window width changes, the active tab is automatically scrolled back into view
+- smoke coverage now verifies the overflow wiring is present in the main window
+
+Primary files:
+
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Edit menu and advanced operations
 
 - added full original CubicExplorer Edit menu parity
@@ -158,25 +171,7 @@ Smoke coverage explicitly includes:
 
 The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
 
-### 1. Tab-management follow-up
-
-Why this matters:
-
-- the rewrite now covers duplicate tab, close others, close left, close right, and bookmark-driven tab reuse, but still lacks a few heavy-session affordances from the original
-- original CubicExplorer also exposed stronger tab reuse and overflow handling for crowded tab strips
-
-Scope:
-
-- evaluate tab overflow / more-tabs affordances once command parity is in place
-
-Likely files:
-
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
-### 2. Deeper shell integration
+### 1. Deeper shell integration
 
 Why this matters:
 

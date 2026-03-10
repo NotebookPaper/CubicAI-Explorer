@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Specialized;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -33,6 +34,11 @@ public partial class MainWindow : Window
     private FileSystemItem? _inlineRenameItem;
     private FileListViewModel? _inlineRenameFileListViewModel;
     private ListView? _inlineRenameListView;
+    private ScrollViewer? _tabHeaderScrollViewer;
+    private Button? _tabScrollLeftButton;
+    private Button? _tabScrollRightButton;
+    private Button? _tabOverflowButton;
+    private ContextMenu? _tabOverflowMenu;
     private Point _dragStartPoint;
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
@@ -57,6 +63,19 @@ public partial class MainWindow : Window
         DataContextChanged += MainWindow_DataContextChanged;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
+        Loaded += MainWindow_Loaded;
+        SizeChanged += MainWindow_SizeChanged;
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        EnsureTabStripParts();
+        QueueTabStripUpdate(scrollActiveIntoView: true);
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        QueueTabStripUpdate(scrollActiveIntoView: false);
     }
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1187,6 +1206,7 @@ public partial class MainWindow : Window
         if (_boundViewModel != null)
         {
             _boundViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            _boundViewModel.Tabs.CollectionChanged -= Tabs_CollectionChanged;
             _boundViewModel.DualPaneModeChanged -= ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
@@ -1199,6 +1219,7 @@ public partial class MainWindow : Window
         if (_boundViewModel != null)
         {
             _boundViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            _boundViewModel.Tabs.CollectionChanged += Tabs_CollectionChanged;
             _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
@@ -1209,6 +1230,7 @@ public partial class MainWindow : Window
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
             ApplyDetailsLayoutToBothPanes();
             UpdatePaneHighlight();
+            QueueTabStripUpdate(scrollActiveIntoView: true);
         }
     }
 
@@ -1304,6 +1326,7 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.ActiveTab))
         {
             HookFileListViewModel(_boundViewModel?.ActiveTab?.FileList);
+            QueueTabStripUpdate(scrollActiveIntoView: true);
         }
         else if (e.PropertyName == nameof(MainViewModel.RightPaneTab))
         {
@@ -1319,6 +1342,164 @@ public partial class MainWindow : Window
         {
             UpdatePaneHighlight();
         }
+    }
+
+    private void Tabs_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        QueueTabStripUpdate(scrollActiveIntoView: true);
+    }
+
+    private void EnsureTabStripParts()
+    {
+        if (_tabHeaderScrollViewer != null && _tabScrollLeftButton != null
+            && _tabScrollRightButton != null && _tabOverflowButton != null && _tabOverflowMenu != null)
+            return;
+
+        TabsControl.ApplyTemplate();
+        _tabHeaderScrollViewer = TabsControl.Template.FindName("TabHeaderScrollViewer", TabsControl) as ScrollViewer;
+        _tabScrollLeftButton = TabsControl.Template.FindName("TabScrollLeftButton", TabsControl) as Button;
+        _tabScrollRightButton = TabsControl.Template.FindName("TabScrollRightButton", TabsControl) as Button;
+        _tabOverflowButton = TabsControl.Template.FindName("TabOverflowButton", TabsControl) as Button;
+        _tabOverflowMenu = _tabOverflowButton?.ContextMenu;
+
+        if (_tabHeaderScrollViewer != null)
+        {
+            _tabHeaderScrollViewer.ScrollChanged -= TabHeaderScrollViewer_ScrollChanged;
+            _tabHeaderScrollViewer.ScrollChanged += TabHeaderScrollViewer_ScrollChanged;
+        }
+    }
+
+    private void TabHeaderScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateTabStripAffordances();
+    }
+
+    private void QueueTabStripUpdate(bool scrollActiveIntoView)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            EnsureTabStripParts();
+            UpdateTabStripAffordances();
+            if (scrollActiveIntoView)
+                EnsureActiveTabVisible();
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void UpdateTabStripAffordances()
+    {
+        EnsureTabStripParts();
+        if (_tabHeaderScrollViewer == null || _tabScrollLeftButton == null
+            || _tabScrollRightButton == null || _tabOverflowButton == null)
+            return;
+
+        _tabHeaderScrollViewer.UpdateLayout();
+        var hasOverflow = _tabHeaderScrollViewer.ScrollableWidth > 1;
+        var overflowVisibility = hasOverflow ? Visibility.Visible : Visibility.Collapsed;
+        _tabScrollLeftButton.Visibility = overflowVisibility;
+        _tabScrollRightButton.Visibility = overflowVisibility;
+        _tabOverflowButton.Visibility = overflowVisibility;
+
+        _tabScrollLeftButton.IsEnabled = hasOverflow && _tabHeaderScrollViewer.HorizontalOffset > 0.5;
+        _tabScrollRightButton.IsEnabled = hasOverflow
+            && _tabHeaderScrollViewer.HorizontalOffset < _tabHeaderScrollViewer.ScrollableWidth - 0.5;
+    }
+
+    private void EnsureActiveTabVisible()
+    {
+        EnsureTabStripParts();
+        if (_tabHeaderScrollViewer == null || _boundViewModel?.ActiveTab == null)
+            return;
+
+        TabsControl.UpdateLayout();
+        var container = TabsControl.ItemContainerGenerator.ContainerFromItem(_boundViewModel.ActiveTab) as System.Windows.Controls.TabItem;
+        if (container == null)
+            return;
+
+        var bounds = container.TransformToAncestor(_tabHeaderScrollViewer)
+            .TransformBounds(new Rect(new Point(), container.RenderSize));
+
+        if (bounds.Left < 0)
+        {
+            _tabHeaderScrollViewer.ScrollToHorizontalOffset(Math.Max(0, _tabHeaderScrollViewer.HorizontalOffset + bounds.Left - 8));
+        }
+        else if (bounds.Right > _tabHeaderScrollViewer.ViewportWidth)
+        {
+            var delta = bounds.Right - _tabHeaderScrollViewer.ViewportWidth + 8;
+            _tabHeaderScrollViewer.ScrollToHorizontalOffset(
+                Math.Min(_tabHeaderScrollViewer.ScrollableWidth, _tabHeaderScrollViewer.HorizontalOffset + delta));
+        }
+
+        UpdateTabStripAffordances();
+    }
+
+    private void ScrollTabStrip(double direction)
+    {
+        EnsureTabStripParts();
+        if (_tabHeaderScrollViewer == null)
+            return;
+
+        var pageWidth = _tabHeaderScrollViewer.ViewportWidth > 0
+            ? _tabHeaderScrollViewer.ViewportWidth * 0.65
+            : 180;
+        var targetOffset = _tabHeaderScrollViewer.HorizontalOffset + (pageWidth * direction);
+        targetOffset = Math.Max(0, Math.Min(_tabHeaderScrollViewer.ScrollableWidth, targetOffset));
+        _tabHeaderScrollViewer.ScrollToHorizontalOffset(targetOffset);
+        UpdateTabStripAffordances();
+    }
+
+    private void TabScrollLeftButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollTabStrip(-1);
+    }
+
+    private void TabScrollRightButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollTabStrip(1);
+    }
+
+    private void TabOverflowButton_Click(object sender, RoutedEventArgs e)
+    {
+        EnsureTabStripParts();
+        if (sender is not Button button || _tabOverflowMenu == null)
+            return;
+
+        PopulateTabOverflowMenu(_tabOverflowMenu);
+        if (_tabOverflowMenu.Items.Count == 0)
+            return;
+
+        _tabOverflowMenu.PlacementTarget = button;
+        _tabOverflowMenu.Placement = PlacementMode.Bottom;
+        _tabOverflowMenu.IsOpen = true;
+    }
+
+    private void PopulateTabOverflowMenu(ContextMenu menu)
+    {
+        menu.Items.Clear();
+        if (_boundViewModel == null)
+            return;
+
+        foreach (var tab in _boundViewModel.Tabs)
+        {
+            var item = new MenuItem
+            {
+                Header = string.IsNullOrWhiteSpace(tab.Title) ? "(Untitled)" : tab.Title,
+                ToolTip = tab.CurrentPath,
+                IsCheckable = true,
+                IsChecked = ReferenceEquals(tab, _boundViewModel.ActiveTab),
+                Tag = tab
+            };
+            item.Click += TabOverflowItem_Click;
+            menu.Items.Add(item);
+        }
+    }
+
+    private void TabOverflowItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: TabViewModel tab } || _boundViewModel == null)
+            return;
+
+        _boundViewModel.ActiveTab = tab;
+        QueueTabStripUpdate(scrollActiveIntoView: true);
     }
 
     private void HookFileListViewModel(FileListViewModel? fileListViewModel)

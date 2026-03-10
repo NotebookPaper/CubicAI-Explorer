@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: bookmark-driven tab reuse is now implemented locally and verified; next roadmap work is tab overflow / crowded-tab affordances.
+> Status: crowded-tab overflow affordances are now implemented locally and verified; next roadmap work is deeper shell integration.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -12,7 +12,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes again.
 - Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are complete in this checkout.
-- The next completed roadmap slice after those specs is tab close-left / close-right parity for the tab strip context menu.
+- The next completed roadmap slice after those specs is crowded-tab overflow handling for the main tab strip.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
@@ -41,14 +41,21 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - bookmark `Open in New Tab` now activates an existing tab when that folder is already open
   - bookmark `Open All in Tabs` now only creates tabs for unopened folders and reuses existing ones
   - smoke coverage now verifies both single-bookmark and category open-all reuse flows
+- Crowded-tab affordances:
+  - the main tab strip now scrolls horizontally when there are more tabs than fit in the window
+  - added left/right tab-strip scroll buttons plus a `More Tabs` dropdown listing every open tab
+  - active-tab changes now auto-scroll the selected tab back into view after tab-count or window-size changes
+  - smoke coverage now verifies the overflow wiring is present in the main window
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
 
 ## Next Steps
 
-1. Continue the remaining tab-management follow-up.
-   - evaluate whether tab overflow or a more-tabs affordance is needed now that close-left/right parity and bookmark tab reuse are in place
+1. Continue deeper shell integration.
+   - improve special-folder coverage and path/display handling
+   - expose more shell metadata in details/properties views where practical
+   - review shell-context and Explorer interop edge cases
 2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
    - do not delete the existing target before the incoming transfer succeeds
    - prefer a stage/rename-backup flow so failed replacements preserve the original destination
@@ -78,7 +85,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- bookmark-driven tab reuse implementation and verification updates are local and uncommitted in this checkout
+- crowded-tab overflow affordances and verification updates are local and uncommitted in this checkout
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:

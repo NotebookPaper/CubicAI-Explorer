@@ -90,6 +90,7 @@ internal static class Program
             Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
             Run("named session startup selection", failures, () => TestNamedSessionStartupSelection(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
+            Run("tab overflow wiring", failures, TestTabOverflowWiring);
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
         finally
@@ -2077,6 +2078,24 @@ internal static class Program
             "Startup session selection should restore the right pane path.");
     }
 
+    private static void TestTabOverflowWiring()
+    {
+        var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
+        var mainCodeBehind = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml.cs"));
+        var main = File.ReadAllText(mainXaml);
+        var mainCs = File.ReadAllText(mainCodeBehind);
+
+        Assert(main.Contains("x:Name=\"TabsControl\""), "TabControl should be named for overflow management.");
+        Assert(main.Contains("TabHeaderScrollViewer"), "Tab strip should use a named header scroll viewer.");
+        Assert(main.Contains("TabScrollLeftButton"), "Tab strip should expose a left scroll button.");
+        Assert(main.Contains("TabScrollRightButton"), "Tab strip should expose a right scroll button.");
+        Assert(main.Contains("TabOverflowButton"), "Tab strip should expose a more-tabs button.");
+        Assert(mainCs.Contains("TabOverflowButton_Click"), "Overflow button click handler should be implemented.");
+        Assert(mainCs.Contains("PopulateTabOverflowMenu"), "Overflow menu population should be implemented.");
+        Assert(mainCs.Contains("EnsureActiveTabVisible"), "Active-tab visibility should be enforced when the tab strip overflows.");
+        Assert(mainCs.Contains("Tabs_CollectionChanged"), "Tab collection changes should refresh overflow affordances.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -2121,6 +2140,9 @@ internal static class Program
         Assert(main.Contains("CloseTabsToLeft_Click"), "Close tabs to left handler should be wired.");
         Assert(main.Contains("CloseTabsToRight_Click"), "Close tabs to right handler should be wired.");
         Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");
+        Assert(main.Contains("TabOverflowButton_Click"), "Tab overflow button should be wired.");
+        Assert(main.Contains("TabScrollLeftButton_Click"), "Tab strip left scroll handler should be wired.");
+        Assert(main.Contains("TabScrollRightButton_Click"), "Tab strip right scroll handler should be wired.");
         Assert(main.Contains("FolderTree_Drop"), "Folder tree drop handler should be wired.");
         Assert(main.Contains("AllowDrop=\"True\""), "Drop should be enabled.");
         Assert(main.Contains("BreadcrumbSegments"), "Breadcrumb segments binding should exist.");
