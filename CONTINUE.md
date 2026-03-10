@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: tab close-left / close-right parity is now implemented locally and verified; next roadmap work is tab reuse and overflow follow-up.
+> Status: bookmark-driven tab reuse is now implemented locally and verified; next roadmap work is tab overflow / crowded-tab affordances.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -37,6 +37,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - shared close logic now detaches tab event subscriptions consistently for close-left/right/others flows
   - when a close-left/right action removes the active tab, the clicked tab becomes the active fallback
   - smoke coverage now verifies close-left/right behavior
+- Tab reuse follow-up:
+  - bookmark `Open in New Tab` now activates an existing tab when that folder is already open
+  - bookmark `Open All in Tabs` now only creates tabs for unopened folders and reuses existing ones
+  - smoke coverage now verifies both single-bookmark and category open-all reuse flows
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
@@ -44,8 +48,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue the remaining tab-management follow-up.
-   - decide whether to reuse already-open tabs for navigation instead of duplicating
-   - evaluate whether tab overflow or a more-tabs affordance is needed now that close-left/right parity is in place
+   - evaluate whether tab overflow or a more-tabs affordance is needed now that close-left/right parity and bookmark tab reuse are in place
 2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
    - do not delete the existing target before the incoming transfer succeeds
    - prefer a stage/rename-backup flow so failed replacements preserve the original destination
@@ -75,8 +78,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- richer filter/search implementation and verification updates are local and uncommitted in this checkout
-- planning/history/spec docs were refreshed to mark specs 001 and 002 complete
+- bookmark-driven tab reuse implementation and verification updates are local and uncommitted in this checkout
+- planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:
 

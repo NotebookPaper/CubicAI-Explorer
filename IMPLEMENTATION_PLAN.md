@@ -79,6 +79,17 @@ Primary files:
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### Tab reuse for bookmark-driven navigation
+
+- bookmark `Open in New Tab` now reuses an already-open tab for the same folder instead of silently creating duplicates
+- bookmark categories opened through `Open All in Tabs` inherit the same reuse behavior, so only unopened folders create new tabs
+- smoke coverage now verifies single-bookmark and category-based reuse paths
+
+Primary files:
+
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Edit menu and advanced operations
 
 - added full original CubicExplorer Edit menu parity
@@ -151,12 +162,11 @@ The rewrite is already past "basic file manager" parity. The remaining gap with 
 
 Why this matters:
 
-- the rewrite now covers duplicate tab, close others, close left, and close right, but still lacks a few heavy-session affordances from the original
+- the rewrite now covers duplicate tab, close others, close left, close right, and bookmark-driven tab reuse, but still lacks a few heavy-session affordances from the original
 - original CubicExplorer also exposed stronger tab reuse and overflow handling for crowded tab strips
 
 Scope:
 
-- consider "reuse already open tabs" navigation behavior
 - evaluate tab overflow / more-tabs affordances once command parity is in place
 
 Likely files:

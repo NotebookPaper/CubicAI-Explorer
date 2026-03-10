@@ -1334,6 +1334,27 @@ public partial class MainViewModel : ObservableObject
             ActiveTab!.NavigateTo(sourceTab.CurrentPath);
     }
 
+    private TabViewModel? FindOpenTab(string? rawPath)
+    {
+        if (string.IsNullOrWhiteSpace(rawPath))
+            return null;
+
+        var normalizedPath = rawPath.Trim();
+        return Tabs.FirstOrDefault(tab =>
+            !string.IsNullOrWhiteSpace(tab.CurrentPath)
+            && string.Equals(tab.CurrentPath, normalizedPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool ActivateOpenTab(string? rawPath)
+    {
+        var existingTab = FindOpenTab(rawPath);
+        if (existingTab == null)
+            return false;
+
+        ActiveTab = existingTab;
+        return true;
+    }
+
     public void CloseTabsToLeft(TabViewModel keepTab)
     {
         var keepIndex = Tabs.IndexOf(keepTab);
@@ -1703,10 +1724,14 @@ public partial class MainViewModel : ObservableObject
         if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
         if (_fileSystemService.DirectoryExists(bookmark.Path))
         {
+            if (ActivateOpenTab(bookmark.Path))
+                return;
+
             var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
             AttachTab(tab);
             Tabs.Add(tab);
             ActiveTab = tab;
+            ApplyTabDefaults(tab);
             tab.NavigateTo(bookmark.Path);
         }
     }

@@ -53,6 +53,8 @@ internal static class Program
             Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
             Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
+            Run("bookmark open in new tab reuses existing", failures, () => TestBookmarkOpenInNewTabReusesExisting(tempRoot));
+            Run("bookmark open all in tabs reuses existing", failures, () => TestBookmarkOpenAllInTabsReusesExisting(tempRoot));
             Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
             Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
@@ -903,6 +905,63 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
         }
+    }
+
+    private static void TestBookmarkOpenInNewTabReusesExisting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "bookmark_reuse_existing");
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(folder);
+
+        var existingTab = vm.ActiveTab;
+        var bookmark = new BookmarkItem
+        {
+            Name = "Existing Folder",
+            Path = folder
+        };
+
+        vm.OpenBookmarkInNewTabCommand.Execute(bookmark);
+
+        Assert(vm.Tabs.Count == 1, "Open in new tab should reuse an already-open folder tab.");
+        Assert(vm.ActiveTab == existingTab, "Reused tab should become the active tab.");
+    }
+
+    private static void TestBookmarkOpenAllInTabsReusesExisting(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var existingFolder = CreateCleanSubdir(root, "bookmark_open_all_existing");
+        var newFolder = CreateCleanSubdir(root, "bookmark_open_all_new");
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(existingFolder);
+
+        var category = new BookmarkItem
+        {
+            Name = "Session",
+            IsFolder = true,
+            Children =
+            {
+                new BookmarkItem
+                {
+                    Name = "Existing",
+                    Path = existingFolder
+                },
+                new BookmarkItem
+                {
+                    Name = "New",
+                    Path = newFolder
+                }
+            }
+        };
+
+        vm.OpenAllInTabsCommand.Execute(category);
+
+        Assert(vm.Tabs.Count == 2, "Open all in tabs should only create tabs for folders that are not already open.");
+        Assert(vm.Tabs.Count(tab => string.Equals(tab.CurrentPath, existingFolder, StringComparison.OrdinalIgnoreCase)) == 1,
+            "Open all in tabs should not duplicate an already-open folder.");
+        Assert(vm.ActiveTab?.CurrentPath == newFolder, "Open all in tabs should still activate the last opened new tab.");
     }
 
     private static void TestCloseOtherTabs(string root)
