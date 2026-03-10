@@ -330,17 +330,15 @@ public partial class MainViewModel : ObservableObject
             if (File.Exists(bookmarksPath))
             {
                 var json = File.ReadAllText(bookmarksPath);
-                var bookmarks = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
-                if (bookmarks is { Count: > 0 })
+                var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
+                if (records is { Count: > 0 })
                 {
-                    foreach (var bookmark in bookmarks)
+                    Bookmarks.Clear();
+                    foreach (var record in records)
                     {
-                        if (string.IsNullOrWhiteSpace(bookmark.Path)) continue;
-                        TryAddBookmark(bookmark.Path, bookmark.Name, save: false);
+                        Bookmarks.Add(MapRecordToBookmark(record));
                     }
-
-                    if (Bookmarks.Count > 0)
-                        return;
+                    return;
                 }
             }
         }
@@ -355,6 +353,30 @@ public partial class MainViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Downloads"), save: false);
         SaveBookmarks();
+    }
+
+    private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
+    {
+        var item = new BookmarkItem
+        {
+            Name = record.Name,
+            Path = record.Path,
+            IsFolder = record.IsFolder
+        };
+        if (record.Children != null)
+        {
+            foreach (var childRecord in record.Children)
+            {
+                item.Children.Add(MapRecordToBookmark(childRecord));
+            }
+        }
+        return item;
+    }
+
+    private BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
+    {
+        var children = item.Children.Select(MapBookmarkToRecord).ToList();
+        return new BookmarkRecord(item.Name, item.Path, item.IsFolder, children.Count > 0 ? children : null);
     }
 
     private void LoadDrives()
@@ -889,10 +911,8 @@ public partial class MainViewModel : ObservableObject
         if (root == null) return;
 
         var count = 0;
-        var skipped = 0;
 
-        // We'll traverse the tree to preserve naming context
-        void ProcessNode(XElement element, string? prefix)
+        void ProcessNode(XElement element, ObservableCollection<BookmarkItem> targetCollection)
         {
             foreach (var node in element.Elements())
             {
@@ -901,46 +921,42 @@ public partial class MainViewModel : ObservableObject
                            || string.Equals(localName, "Bookmark", StringComparison.OrdinalIgnoreCase);
                 var isCategory = string.Equals(localName, "category", StringComparison.OrdinalIgnoreCase);
 
+                if (!isItem && !isCategory) continue;
+
                 var name = node.Attribute("Name")?.Value 
                           ?? node.Attribute("name")?.Value 
-                          ?? node.Attribute("Title")?.Value;
+                          ?? node.Attribute("Title")?.Value 
+                          ?? "Untitled";
 
                 var path = node.Attribute("Path")?.Value 
                           ?? node.Attribute("path")?.Value 
-                          ?? node.Attribute("Location")?.Value;
+                          ?? node.Attribute("Location")?.Value 
+                          ?? string.Empty;
 
-                if (isItem || isCategory)
+                var newItem = new BookmarkItem
                 {
-                    var displayName = string.IsNullOrEmpty(prefix) ? name : $"{prefix} - {name}";
+                    Name = name,
+                    Path = path,
+                    IsFolder = isCategory || string.IsNullOrWhiteSpace(path)
+                };
 
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        if (TryAddBookmarkWithFeedback(path, displayName, save: false, ignoreExistence: true))
-                            count++;
-                        else
-                            skipped++;
-                    }
+                targetCollection.Add(newItem);
+                count++;
 
-                    // Recurse into children
-                    ProcessNode(node, displayName);
-                }
+                // Recurse into children
+                ProcessNode(node, newItem.Children);
             }
         }
 
-        ProcessNode(root, null);
+        Bookmarks.Clear();
+        ProcessNode(root, Bookmarks);
 
-        if (count > 0 || skipped > 0)
+        if (count > 0)
         {
             SaveBookmarks();
-            var message = $"Imported {count} bookmarks.";
-            if (skipped > 0)
-            {
-                message += $"\nSkipped {skipped} duplicates.";
-            }
-            MessageBox.Show(message, "Import Results", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"Imported {count} bookmarks hierarchically.", "Import Successful", MessageBoxButton.OK, MessageBoxImage.Information);
         }
-    }
-    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true, bool ignoreExistence = false)
+    }    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true, bool ignoreExistence = false)
     {
         if (!ignoreExistence && !_fileSystemService.DirectoryExists(path)) return false;
         if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return true; // Already exists
@@ -963,17 +979,18 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ExportBookmarks(string filePath)    {
+    private void ExportBookmarks(string filePath)
+    {
         if (string.IsNullOrWhiteSpace(filePath)) return;
 
         try
         {
             var payload = Bookmarks
-                .Select(static b => new BookmarkRecord(b.Name, b.Path))
+                .Select(MapBookmarkToRecord)
                 .ToList();
 
             File.WriteAllText(filePath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
-            MessageBox.Show($"Exported {payload.Count} bookmarks.", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"Exported {payload.Count} root bookmarks.", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -1011,7 +1028,7 @@ public partial class MainViewModel : ObservableObject
                 Directory.CreateDirectory(directory);
 
             var payload = Bookmarks
-                .Select(static b => new BookmarkRecord(b.Name, b.Path))
+                .Select(MapBookmarkToRecord)
                 .ToList();
 
             File.WriteAllText(bookmarksPath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
@@ -1022,7 +1039,31 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private sealed record BookmarkRecord(string Name, string Path);
+    private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
+    {
+        var item = new BookmarkItem
+        {
+            Name = record.Name,
+            Path = record.Path,
+            IsFolder = record.IsFolder
+        };
+        if (record.Children != null)
+        {
+            foreach (var childRecord in record.Children)
+            {
+                item.Children.Add(MapRecordToBookmark(childRecord));
+            }
+        }
+        return item;
+    }
+
+    private BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
+    {
+        var children = item.Children.Select(MapBookmarkToRecord).ToList();
+        return new BookmarkRecord(item.Name, item.Path, item.IsFolder, children.Count > 0 ? children : null);
+    }
+
+    private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
     private sealed record SavedSearchRecord(string Name, string Path, string Term);
 
     // --- Dual Pane ---

@@ -377,23 +377,52 @@
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
                     <!-- Recent -->
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="80" MinHeight="20" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition MinHeight="0">
+                        <RowDefinition.Style>
+                            <Style TargetType="RowDefinition">
+                                <Setter Property="Height" Value="120" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRecentFoldersVisible}" Value="False">
+                                        <Setter Property="Height" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RowDefinition.Style>
+                    </RowDefinition>
+                    <RowDefinition Height="Auto" /> <!-- Splitter -->
+                    
                     <!-- Bookmarks -->
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="100" MinHeight="20" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition MinHeight="0">
+                        <RowDefinition.Style>
+                            <Style TargetType="RowDefinition">
+                                <Setter Property="Height" Value="*" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBookmarksVisible}" Value="False">
+                                        <Setter Property="Height" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RowDefinition.Style>
+                    </RowDefinition>
+                    <RowDefinition Height="Auto" /> <!-- Splitter -->
+                    
                     <!-- Saved Searches -->
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="90" MinHeight="20" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition MinHeight="0">
+                        <RowDefinition.Style>
+                            <Style TargetType="RowDefinition">
+                                <Setter Property="Height" Value="120" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSavedSearchesVisible}" Value="False">
+                                        <Setter Property="Height" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RowDefinition.Style>
+                    </RowDefinition>
+                    <RowDefinition Height="Auto" /> <!-- Splitter -->
+                    
                     <!-- Folders -->
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="50" />
+                    <RowDefinition Height="2*" MinHeight="100" />
                 </Grid.RowDefinitions>
 
                 <!-- Recent Folders -->
@@ -427,14 +456,38 @@
                             Padding="6,2" />
                 </DockPanel>
                 <Border Grid.Row="5" Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
-                    <ListBox x:Name="BookmarkList"
-                             ItemsSource="{Binding Bookmarks}"
-                             SelectedItem="{Binding SelectedBookmark}"
-                             SelectionChanged="BookmarkList_SelectionChanged"
-                             MouseDoubleClick="BookmarkList_MouseDoubleClick"
-                             KeyDown="BookmarkList_KeyDown"
-                             DisplayMemberPath="Name"
-                             TabIndex="30" />
+                    <TreeView x:Name="BookmarkTree"
+                              ItemsSource="{Binding Bookmarks}"
+                              TabIndex="30">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                                <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_MouseDoubleClick" />
+                                <EventSetter Event="Selected" Handler="BookmarkItem_Selected" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate DataType="{x:Type models:BookmarkItem}" ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal" Margin="2">
+                                    <Image Source="{Binding Path, Converter={StaticResource ShellIconConverter}}"
+                                           Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                        <TreeView.Resources>
+                            <ContextMenu x:Key="BookmarkContextMenu">
+                                <MenuItem Header="Open" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                <MenuItem Header="Remove" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                            </ContextMenu>
+                        </TreeView.Resources>
+                    </TreeView>
                 </Border>
                 <GridSplitter Grid.Row="6" Height="3" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent"
                               Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}" />

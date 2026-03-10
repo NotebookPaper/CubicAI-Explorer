@@ -1,10 +1,23 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace CubicAIExplorer.Models;
 
-public sealed class BookmarkItem
+public partial class BookmarkItem : ObservableObject
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public required string Name { get; set; }
-    public required string Path { get; set; }
-    public bool IsFolder { get; set; }
-    public List<BookmarkItem> Children { get; set; } = [];
+
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private string _path = string.Empty;
+
+    [ObservableProperty]
+    private bool _isFolder;
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public ObservableCollection<BookmarkItem> Children { get; } = [];
 }

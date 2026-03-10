@@ -458,34 +458,23 @@ public partial class MainWindow : Window
         }
     }
 
-    private void BookmarkList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private void BookmarkItem_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ViewModel.SelectedBookmark is { } bookmark)
+        if (sender is TreeViewItem item && item.DataContext is BookmarkItem bookmark)
         {
-            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            if (!bookmark.IsFolder || !string.IsNullOrWhiteSpace(bookmark.Path))
+            {
+                ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+                e.Handled = true;
+            }
         }
     }
 
-    private void BookmarkList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void BookmarkItem_Selected(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.SelectedBookmark is { } bookmark)
+        if (e.OriginalSource is TreeViewItem item && item.DataContext is BookmarkItem bookmark)
         {
-            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
-        }
-    }
-
-    private void BookmarkList_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && ViewModel.SelectedBookmark is { } bookmark)
-        {
-            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key == Key.Delete && ViewModel.SelectedBookmark is { } selected)
-        {
-            ViewModel.RemoveBookmarkCommand.Execute(selected);
+            ViewModel.SelectedBookmark = bookmark;
             e.Handled = true;
         }
     }
