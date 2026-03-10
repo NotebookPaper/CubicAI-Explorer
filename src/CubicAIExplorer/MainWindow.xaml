@@ -179,7 +179,8 @@
                                  KeyDown="AddressBar_KeyDown"
                                  LostKeyboardFocus="AddressBar_LostFocus"
                                  TextChanged="AddressBar_TextChanged"
-                                 VerticalContentAlignment="Center" Padding="4,2" />
+                                 VerticalContentAlignment="Center" Padding="4,2"
+                                 TabIndex="10" />
                         <Popup x:Name="AddressAutoCompletePopup"
                                PlacementTarget="{Binding ElementName=AddressBar}"
                                Placement="Bottom"
@@ -282,9 +283,12 @@
                     </StackPanel>
                 </TextBlock>
                 <Border DockPanel.Dock="Top" Margin="4,2,4,4" Height="80" Style="{StaticResource ClassicPaneSurfaceStyle}">
-                    <ListBox ItemsSource="{Binding RecentFolders}"
+                    <ListBox x:Name="RecentFoldersList"
+                             ItemsSource="{Binding RecentFolders}"
                              SelectionChanged="RecentFolders_SelectionChanged"
-                             DisplayMemberPath="DisplayName" />
+                             KeyDown="RecentFolders_KeyDown"
+                             DisplayMemberPath="DisplayName"
+                             TabIndex="20" />
                 </Border>
 
                 <TextBlock DockPanel.Dock="Top" Text="Bookmarks" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
@@ -304,7 +308,9 @@
                              SelectedItem="{Binding SelectedBookmark}"
                              SelectionChanged="BookmarkList_SelectionChanged"
                              MouseDoubleClick="BookmarkList_MouseDoubleClick"
-                             DisplayMemberPath="Name" />
+                             KeyDown="BookmarkList_KeyDown"
+                             DisplayMemberPath="Name"
+                             TabIndex="30" />
                 </Border>
 
                 <TextBlock DockPanel.Dock="Top" Text="Folders" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
@@ -314,7 +320,8 @@
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
                               AllowDrop="True"
                               DragOver="FolderTree_DragOver"
-                              Drop="FolderTree_Drop">
+                              Drop="FolderTree_Drop"
+                              TabIndex="40">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -361,7 +368,8 @@
                             Click="ClearFilter_Click" />
                     <TextBox x:Name="FilterTextBox"
                              Text="{Binding CurrentPaneFileList.FilterText, UpdateSourceTrigger=PropertyChanged}"
-                             VerticalContentAlignment="Center" Padding="4,2" />
+                             VerticalContentAlignment="Center" Padding="4,2"
+                             TabIndex="50" />
                 </DockPanel>
 
                 <!-- Search Bar (Ctrl+E) -->
@@ -379,7 +387,8 @@
                     <TextBox x:Name="SearchTextBox"
                              Text="{Binding CurrentPaneFileList.SearchText, UpdateSourceTrigger=PropertyChanged}"
                              VerticalContentAlignment="Center" Padding="4,2"
-                             KeyDown="SearchTextBox_KeyDown" />
+                             KeyDown="SearchTextBox_KeyDown"
+                             TabIndex="60" />
                 </DockPanel>
 
                 <!-- Search Results Banner -->
@@ -426,7 +435,8 @@
                               Drop="FileList_Drop"
                               MouseDoubleClick="FileList_MouseDoubleClick"
                               ContextMenuOpening="FileList_ContextMenuOpening"
-                              GridViewColumnHeader.Click="FileListHeader_Click">
+                              GridViewColumnHeader.Click="FileListHeader_Click"
+                              TabIndex="70">
                         <ListView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
@@ -517,7 +527,8 @@
                                                      LostKeyboardFocus="RightPaneAddressBox_LostFocus"
                                                      TextChanged="RightPaneAddressBox_TextChanged"
                                                      VerticalContentAlignment="Center"
-                                                     Padding="4,1" />
+                                                     Padding="4,1"
+                                                     TabIndex="75" />
                                             <Popup x:Name="RightPaneAutoCompletePopup"
                                                    PlacementTarget="{Binding ElementName=RightPaneAddressBox}"
                                                    Placement="Bottom"
@@ -563,7 +574,8 @@
                                   Drop="RightPane_Drop"
                                   MouseDoubleClick="RightPane_MouseDoubleClick"
                                   ContextMenuOpening="RightPane_ContextMenuOpening"
-                                  GridViewColumnHeader.Click="RightPaneHeader_Click">
+                                  GridViewColumnHeader.Click="RightPaneHeader_Click"
+                                  TabIndex="80">
                             <ListView.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem x:Name="RightOpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
@@ -601,7 +613,8 @@
                                   VerticalAlignment="Stretch" Background="#96B3D8" />
 
                     <!-- Preview Panel -->
-                    <Border Grid.Column="4" Style="{StaticResource ClassicPaneSurfaceStyle}" Margin="0">
+                    <Border x:Name="PreviewPanel" Grid.Column="4" Style="{StaticResource ClassicPaneSurfaceStyle}" Margin="0"
+                            Focusable="True" KeyboardNavigation.TabIndex="90">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="{Binding PreviewFileName}"
                                        FontWeight="SemiBold" Padding="8,6,8,2"

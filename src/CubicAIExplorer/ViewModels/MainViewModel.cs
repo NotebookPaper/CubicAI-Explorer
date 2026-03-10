@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
+using System.Windows;
 using System.Text.Json;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -751,6 +753,14 @@ public partial class MainViewModel : ObservableObject
         {
             LoadImagePreviewAsync(item.FullPath, generation);
         }
+        else if (IsPdfExtension(ext))
+        {
+            LoadPdfPreviewAsync(item.FullPath, generation);
+        }
+        else if (IsMediaExtension(ext))
+        {
+            LoadMediaPreviewAsync(item.FullPath, generation);
+        }
         else if (IsTextExtension(ext))
         {
             if (item.Size > 1024 * 1024)
@@ -848,13 +858,59 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private async void LoadPdfPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var metadata = await Task.Run(() => ReadPdfMetadata(path));
+            if (_previewGeneration != generation) return;
+
+            var details = new List<string> { "PDF document" };
+            if (!string.IsNullOrWhiteSpace(metadata.Version))
+                details.Add($"Version: {metadata.Version}");
+            if (metadata.ApproxPageCount > 0)
+                details.Add($"Approx. pages: {metadata.ApproxPageCount}");
+            if (metadata.IsEncrypted)
+                details.Add("Encrypted: Yes");
+
+            PreviewStatusText = string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            ShowFileMetadata(path);
+        }
+    }
+
+    private async void LoadMediaPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var media = await TryReadMediaMetadataAsync(path);
+            if (_previewGeneration != generation) return;
+
+            var details = new List<string> { "Media file" };
+            if (media.Duration is { } duration && duration > TimeSpan.Zero)
+                details.Add($"Duration: {FormatDuration(duration)}");
+            if (media.Width > 0 && media.Height > 0)
+                details.Add($"Dimensions: {media.Width} x {media.Height}");
+
+            PreviewStatusText = string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            ShowFileMetadata(path);
+        }
+    }
+
     private void ShowFileMetadata(string path)
     {
         try
         {
-            var fi = new FileInfo(path);
-            PreviewStatusText = $"Created: {fi.CreationTime:g}\nModified: {fi.LastWriteTime:g}\nAccessed: {fi.LastAccessTime:g}";
-            if (fi.IsReadOnly) PreviewStatusText += "\nRead-only";
+            PreviewStatusText = GetBasicFileMetadata(path);
             HasPreviewStatus = true;
         }
         catch
@@ -864,9 +920,130 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private static string GetBasicFileMetadata(string path)
+    {
+        var fi = new FileInfo(path);
+        var text = $"Created: {fi.CreationTime:g}\nModified: {fi.LastWriteTime:g}\nAccessed: {fi.LastAccessTime:g}";
+        if (fi.IsReadOnly)
+            text += "\nRead-only";
+
+        return text;
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return duration.ToString(@"h\:mm\:ss");
+        return duration.ToString(@"m\:ss");
+    }
+
+    private static (string Version, int ApproxPageCount, bool IsEncrypted) ReadPdfMetadata(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        var versionBuffer = new byte[Math.Min(1024, (int)stream.Length)];
+        _ = stream.Read(versionBuffer, 0, versionBuffer.Length);
+        var header = Encoding.ASCII.GetString(versionBuffer);
+        var version = string.Empty;
+        var marker = "%PDF-";
+        var index = header.IndexOf(marker, StringComparison.Ordinal);
+        if (index >= 0)
+        {
+            var start = index + marker.Length;
+            var end = start;
+            while (end < header.Length && (char.IsDigit(header[end]) || header[end] == '.'))
+                end++;
+            version = header[start..end];
+        }
+
+        const int tailBytes = 2 * 1024 * 1024;
+        var readLength = (int)Math.Min(stream.Length, tailBytes);
+        stream.Seek(-readLength, SeekOrigin.End);
+        var tailBuffer = new byte[readLength];
+        _ = stream.Read(tailBuffer, 0, readLength);
+        var tailText = Encoding.ASCII.GetString(tailBuffer);
+
+        var pageCount = CountOccurrences(tailText, "/Type /Page")
+            + CountOccurrences(tailText, "/Type/Page");
+        var isEncrypted = tailText.Contains("/Encrypt", StringComparison.Ordinal);
+
+        return (version, pageCount, isEncrypted);
+    }
+
+    private static int CountOccurrences(string text, string token)
+    {
+        var count = 0;
+        var start = 0;
+        while (true)
+        {
+            var index = text.IndexOf(token, start, StringComparison.Ordinal);
+            if (index < 0)
+                break;
+            count++;
+            start = index + token.Length;
+        }
+
+        return count;
+    }
+
+    private static async Task<(TimeSpan? Duration, int Width, int Height)> TryReadMediaMetadataAsync(string path)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null)
+            return (null, 0, 0);
+
+        var tcs = new TaskCompletionSource<(TimeSpan? Duration, int Width, int Height)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            var player = new MediaPlayer();
+            var settled = false;
+
+            void Finish((TimeSpan? Duration, int Width, int Height) result)
+            {
+                if (settled) return;
+                settled = true;
+                player.MediaOpened -= MediaOpened;
+                player.MediaFailed -= MediaFailed;
+                player.Close();
+                tcs.TrySetResult(result);
+            }
+
+            void MediaOpened(object? _, EventArgs __)
+            {
+                var duration = player.NaturalDuration.HasTimeSpan
+                    ? player.NaturalDuration.TimeSpan
+                    : (TimeSpan?)null;
+                Finish((duration, player.NaturalVideoWidth, player.NaturalVideoHeight));
+            }
+
+            void MediaFailed(object? _, ExceptionEventArgs __)
+            {
+                Finish((null, 0, 0));
+            }
+
+            player.MediaOpened += MediaOpened;
+            player.MediaFailed += MediaFailed;
+            player.Open(new Uri(path));
+        });
+
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(2500)).ConfigureAwait(false);
+        if (completed != tcs.Task)
+            return (null, 0, 0);
+
+        return await tcs.Task.ConfigureAwait(false);
+    }
+
     private static bool IsImageExtension(string ext) => ext is
         ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".ico" or
         ".tiff" or ".tif" or ".webp";
+
+    private static bool IsPdfExtension(string ext) => ext is ".pdf";
+
+    private static bool IsMediaExtension(string ext) => ext is
+        ".mp3" or ".wav" or ".flac" or ".aac" or ".m4a" or ".ogg" or ".wma" or
+        ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".webm" or ".m4v";
 
     private static bool IsTextExtension(string ext) => ext is
         ".txt" or ".cs" or ".xml" or ".json" or ".md" or ".log" or

@@ -50,6 +50,52 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Ctrl+1: focus folder tree
+        if (e.Key == Key.D1 && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            FolderTree.Focus();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+2: focus left file pane
+        if (e.Key == Key.D2 && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            ViewModel.ActivateLeftPane();
+            FileListView.Focus();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+3: focus right file pane (or left pane when dual-pane is disabled)
+        if (e.Key == Key.D3 && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (ViewModel.IsDualPaneMode && ViewModel.RightPaneTab != null)
+            {
+                ViewModel.ActivateRightPane();
+                RightPaneListView.Focus();
+            }
+            else
+            {
+                ViewModel.ActivateLeftPane();
+                FileListView.Focus();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+4: focus preview panel
+        if (e.Key == Key.D4 && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (!ViewModel.IsPreviewVisible)
+                ViewModel.TogglePreviewCommand.Execute(null);
+
+            Dispatcher.BeginInvoke(() => PreviewPanel.Focus(),
+                System.Windows.Threading.DispatcherPriority.Input);
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+F: focus filter bar
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
@@ -59,10 +105,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Ctrl+L: switch to address bar edit mode
-        if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
+        // Ctrl+L / Alt+D: switch to address bar edit mode
+        if ((e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
+            || (e.Key == Key.D && Keyboard.Modifiers == ModifierKeys.Alt))
         {
             SwitchToEditMode();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+L: switch to right-pane address edit mode
+        if (e.Key == Key.L
+            && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)
+            && ViewModel.IsDualPaneMode && ViewModel.RightPaneTab != null)
+        {
+            SwitchToRightPaneAddressEditMode();
             e.Handled = true;
             return;
         }
@@ -252,6 +309,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RecentFolders_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (sender is not ListBox { SelectedItem: RecentFolderItem recent }) return;
+
+        ViewModel.NavigateCurrentPaneToPath(recent.FullPath);
+        e.Handled = true;
+    }
+
     private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
@@ -404,6 +470,22 @@ public partial class MainWindow : Window
         if (ViewModel.SelectedBookmark is { } bookmark)
         {
             ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+        }
+    }
+
+    private void BookmarkList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && ViewModel.SelectedBookmark is { } bookmark)
+        {
+            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete && ViewModel.SelectedBookmark is { } selected)
+        {
+            ViewModel.RemoveBookmarkCommand.Execute(selected);
+            e.Handled = true;
         }
     }
 

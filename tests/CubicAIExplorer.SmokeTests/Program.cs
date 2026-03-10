@@ -919,8 +919,15 @@ internal static class Program
         var folder = CreateCleanSubdir(root, "preview_states");
         var unsupportedFile = Path.Combine(folder, "archive.bin");
         var largeTextFile = Path.Combine(folder, "large.txt");
+        var pdfFile = Path.Combine(folder, "doc.pdf");
         File.WriteAllBytes(unsupportedFile, [1, 2, 3, 4]);
         File.WriteAllText(largeTextFile, new string('a', 1024 * 1024 + 32));
+        File.WriteAllText(pdfFile,
+            "%PDF-1.4\n" +
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n" +
+            "trailer\n<< /Root 1 0 R >>\n%%EOF");
 
         var vm = new MainViewModel(fs, clipboard);
         vm.NewTabCommand.Execute(null);
@@ -939,6 +946,11 @@ internal static class Program
         var largeTextItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "large.txt");
         vm.ActiveTab.FileList.SelectedItem = largeTextItem;
         Assert(vm.PreviewStatusText.Contains("1 MB"), "Large text files should show the preview size limit message.");
+
+        var pdfItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "doc.pdf");
+        vm.ActiveTab.FileList.SelectedItem = pdfItem;
+        WaitFor(() => vm.PreviewStatusText.Contains("PDF"), 1000);
+        Assert(vm.PreviewStatusText.Contains("PDF"), "PDF files should show PDF metadata preview.");
     }
 
     private static void TestAddressSuggestions(string root)
@@ -1073,8 +1085,10 @@ internal static class Program
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
         var appXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "App.xaml"));
+        var mainCodeBehind = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml.cs"));
         var main = File.ReadAllText(mainXaml);
         var app = File.ReadAllText(appXaml);
+        var mainCs = File.ReadAllText(mainCodeBehind);
 
         Assert(main.Contains("Key=\"F2\""), "F2 keybinding should exist.");
         Assert(main.Contains("Key=\"Z\""), "Ctrl+Z keybinding should exist.");
@@ -1107,6 +1121,8 @@ internal static class Program
         Assert(main.Contains("BreadcrumbSegments"), "Breadcrumb segments binding should exist.");
         Assert(main.Contains("BreadcrumbSegment_Click"), "Breadcrumb click handler should be wired.");
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
+        Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
+        Assert(main.Contains("BookmarkList_KeyDown"), "Bookmark keyboard handler should be wired.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
         Assert(main.Contains("Command=\"{Binding CopyCommand}\""), "Copy bindings should route through the main view model.");
@@ -1129,6 +1145,12 @@ internal static class Program
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");
         Assert(main.Contains("ToggleDualPaneCommand"), "Dual pane menu should invoke the dual pane command.");
         Assert(main.Contains("TogglePreviewCommand"), "Preview menu should invoke the preview command.");
+        Assert(main.Contains("PreviewPanel"), "Preview panel should be focusable for keyboard navigation.");
+        Assert(mainCs.Contains("Key.D1"), "Ctrl+1 shortcut should be handled.");
+        Assert(mainCs.Contains("Key.D2"), "Ctrl+2 shortcut should be handled.");
+        Assert(mainCs.Contains("Key.D3"), "Ctrl+3 shortcut should be handled.");
+        Assert(mainCs.Contains("Key.D4"), "Ctrl+4 shortcut should be handled.");
+        Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");
         Assert(!main.Contains("&#x25C0;"), "Unicode arrow symbols should be replaced with vector icons.");
