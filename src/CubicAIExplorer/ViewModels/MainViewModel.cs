@@ -915,7 +915,7 @@ public partial class MainViewModel : ObservableObject
 
                     if (!string.IsNullOrWhiteSpace(path))
                     {
-                        if (TryAddBookmarkWithFeedback(path, displayName, save: false))
+                        if (TryAddBookmarkWithFeedback(path, displayName, save: false, ignoreExistence: true))
                             count++;
                         else
                             skipped++;
@@ -935,14 +935,14 @@ public partial class MainViewModel : ObservableObject
             var message = $"Imported {count} bookmarks.";
             if (skipped > 0)
             {
-                message += $"\nSkipped {skipped} bookmarks (path not found on this PC).";
+                message += $"\nSkipped {skipped} duplicates.";
             }
             MessageBox.Show(message, "Import Results", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
-    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true)
+    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true, bool ignoreExistence = false)
     {
-        if (!_fileSystemService.DirectoryExists(path)) return false;
+        if (!ignoreExistence && !_fileSystemService.DirectoryExists(path)) return false;
         if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return true; // Already exists
 
         var name = string.IsNullOrWhiteSpace(displayName)
