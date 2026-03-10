@@ -30,6 +30,7 @@ internal static class Program
             Run("move collision keep both", failures, () => TestMoveCollisionKeepBoth(tempRoot));
             Run("copy collision replace", failures, () => TestCopyCollisionReplace(tempRoot));
             Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
+            Run("clipboard drop effect byte array", failures, TestClipboardDropEffectByteArray);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -402,6 +403,17 @@ internal static class Program
         Assert(results[0].Status == FileTransferStatus.Skipped, "Move skip should report the collision as skipped.");
         Assert(File.Exists(source), "Move skip should leave the source file in place.");
         Assert(File.ReadAllText(destination) == "existing", "Move skip should preserve the destination file.");
+    }
+
+    private static void TestClipboardDropEffectByteArray()
+    {
+        var moveBytes = BitConverter.GetBytes((uint)2);
+        var copyBytes = BitConverter.GetBytes((uint)5);
+        var invalidBytes = new byte[] { 1, 2, 3 };
+
+        Assert(ClipboardService.ReadDropEffectValue(moveBytes) == 2, "Byte-array move drop effect should parse correctly.");
+        Assert(ClipboardService.ReadDropEffectValue(copyBytes) == 5, "Byte-array copy drop effect should parse correctly.");
+        Assert(ClipboardService.ReadDropEffectValue(invalidBytes) == 5, "Invalid drop-effect payload should fall back to copy.");
     }
 
     private static void TestRedoCopy(string root)
