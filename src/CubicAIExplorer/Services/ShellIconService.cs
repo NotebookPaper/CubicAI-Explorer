@@ -14,6 +14,7 @@ public sealed class ShellIconService : IShellIconService
     private const uint SHGFI_SMALLICON = 0x000000001;
     private const uint SHGFI_LARGEICON = 0x000000000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
+    private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
@@ -34,6 +35,11 @@ public sealed class ShellIconService : IShellIconService
             return $"file:{extension}:{sizeKey}";
         }
 
+        if (itemType == FileSystemItemType.Bookmark)
+        {
+            return $"bookmark:{path}:{sizeKey}";
+        }
+
         return $"path:{path}:{sizeKey}";
     }
 
@@ -48,9 +54,23 @@ public sealed class ShellIconService : IShellIconService
             shellPath = string.IsNullOrWhiteSpace(Path.GetExtension(path)) ? ".txt" : Path.GetExtension(path);
             flags |= SHGFI_USEFILEATTRIBUTES;
         }
-        else if (itemType == FileSystemItemType.Directory || itemType == FileSystemItemType.Drive)
+        else if (itemType == FileSystemItemType.Directory || itemType == FileSystemItemType.Drive || itemType == FileSystemItemType.Bookmark)
         {
             fileAttributes = FILE_ATTRIBUTE_DIRECTORY;
+            
+            if (itemType == FileSystemItemType.Bookmark)
+            {
+                flags |= SHGFI_LINKOVERLAY;
+            }
+
+            // If the directory doesn't exist, or if we want a guaranteed folder icon regardless of path extension,
+            // we use SHGFI_USEFILEATTRIBUTES.
+            if (!Directory.Exists(path) || itemType == FileSystemItemType.Bookmark)
+            {
+                flags |= SHGFI_USEFILEATTRIBUTES;
+                // Use a dummy path if we are using attributes to avoid shell getting confused by the real path's potential extension
+                shellPath = "C:\\dummy_folder"; 
+            }
         }
 
         var fileInfo = new SHFILEINFO();
@@ -60,6 +80,18 @@ public sealed class ShellIconService : IShellIconService
             ref fileInfo,
             (uint)Marshal.SizeOf<SHFILEINFO>(),
             flags);
+
+        // Fallback
+        if ((result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero) && (flags & SHGFI_USEFILEATTRIBUTES) == 0)
+        {
+            flags |= SHGFI_USEFILEATTRIBUTES;
+            result = SHGetFileInfo(
+                "C:\\dummy_folder",
+                FILE_ATTRIBUTE_DIRECTORY,
+                ref fileInfo,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                flags);
+        }
 
         if (result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero)
             return null;

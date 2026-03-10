@@ -6,7 +6,8 @@ public enum FileSystemItemType
 {
     Drive,
     Directory,
-    File
+    File,
+    Bookmark
 }
 
 public sealed class FileSystemItem

@@ -455,7 +455,7 @@ public partial class MainViewModel : ObservableObject
         {
             Name = record.Name,
             Path = record.Path,
-            IsFolder = record.IsFolder
+            IsFolder = true // All bookmarks should be folders
         };
         if (record.Children != null)
         {
@@ -1178,7 +1178,7 @@ public partial class MainViewModel : ObservableObject
                 {
                     Name = name,
                     Path = path,
-                    IsFolder = isCategory || string.IsNullOrWhiteSpace(path)
+                    IsFolder = true // Bookmarks in CubicExplorer XML are folders
                 };
 
                 targetCollection.Add(newItem);

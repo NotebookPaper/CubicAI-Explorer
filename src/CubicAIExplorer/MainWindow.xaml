@@ -444,6 +444,18 @@
                                   DragOver="BookmarkTree_DragOver"
                                   Drop="BookmarkTree_Drop"
                                   TabIndex="30">
+                            <TreeView.Resources>
+                                <ContextMenu x:Key="BookmarkContextMenu">
+                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Open in New Tab" Command="{Binding DataContext.OpenBookmarkInNewTabCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Open in Other Pane" Command="{Binding DataContext.OpenBookmarkInOtherPaneCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="New Folder" Command="{Binding DataContext.AddBookmarkFolderCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Rename" Command="{Binding DataContext.RenameBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="Remove" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                </ContextMenu>
+                            </TreeView.Resources>
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -457,7 +469,8 @@
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
-                            </TreeView.ItemContainerStyle>                            <TreeView.ItemTemplate>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate DataType="{x:Type models:BookmarkItem}" ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal" Margin="2">
                                         <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
@@ -466,18 +479,6 @@
                                     </StackPanel>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
-                            <TreeView.Resources>
-                                <ContextMenu x:Key="BookmarkContextMenu">
-                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <MenuItem Header="Open in New Tab" Command="{Binding DataContext.OpenBookmarkInNewTabCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <MenuItem Header="Open in Other Pane" Command="{Binding DataContext.OpenBookmarkInOtherPaneCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <Separator />
-                                    <MenuItem Header="New Folder" Command="{Binding DataContext.AddBookmarkFolderCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <MenuItem Header="Rename" Command="{Binding DataContext.RenameBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <Separator />
-                                    <MenuItem Header="Remove" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                </ContextMenu>
-                            </TreeView.Resources>
                         </TreeView>
                     </Border>
                 </DockPanel>
