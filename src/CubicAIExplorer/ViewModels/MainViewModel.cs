@@ -96,6 +96,31 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isRightPaneSuggestionsOpen;
 
+    // UI Visibility
+    [ObservableProperty]
+    private bool _isToolbarVisible = true;
+
+    [ObservableProperty]
+    private bool _isAddressBarVisible = true;
+
+    [ObservableProperty]
+    private bool _isStatusBarVisible = true;
+
+    [ObservableProperty]
+    private bool _isDrivesVisible = true;
+
+    [ObservableProperty]
+    private bool _isTabsVisible = true;
+
+    [ObservableProperty]
+    private bool _isRecentFoldersVisible = true;
+
+    [ObservableProperty]
+    private bool _isBookmarksVisible = true;
+
+    [ObservableProperty]
+    private bool _isSavedSearchesVisible = true;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FileSystemItem> Drives { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
@@ -148,6 +173,17 @@ public partial class MainViewModel : ObservableObject
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
         _settingsService = settingsService;
         _userSettings = userSettings ?? new Models.UserSettings();
+
+        // Initialize UI visibility from settings
+        _isToolbarVisible = _userSettings.ShowToolbar;
+        _isAddressBarVisible = _userSettings.ShowAddressBar;
+        _isStatusBarVisible = _userSettings.ShowStatusBar;
+        _isDrivesVisible = _userSettings.ShowDrives;
+        _isTabsVisible = _userSettings.ShowTabs;
+        _isRecentFoldersVisible = _userSettings.ShowRecentFolders;
+        _isBookmarksVisible = _userSettings.ShowBookmarks;
+        _isSavedSearchesVisible = _userSettings.ShowSavedSearches;
+
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
         LoadBookmarks();
         LoadRecentFolders();
@@ -1664,4 +1700,13 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SavedSearches));
         SaveSavedSearches();
     }
+
+    partial void OnIsToolbarVisibleChanged(bool value) { _userSettings.ShowToolbar = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsAddressBarVisibleChanged(bool value) { _userSettings.ShowAddressBar = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsStatusBarVisibleChanged(bool value) { _userSettings.ShowStatusBar = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsDrivesVisibleChanged(bool value) { _userSettings.ShowDrives = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsTabsVisibleChanged(bool value) { _userSettings.ShowTabs = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsRecentFoldersVisibleChanged(bool value) { _userSettings.ShowRecentFolders = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsBookmarksVisibleChanged(bool value) { _userSettings.ShowBookmarks = value; _settingsService?.Save(_userSettings); }
+    partial void OnIsSavedSearchesVisibleChanged(bool value) { _userSettings.ShowSavedSearches = value; _settingsService?.Save(_userSettings); }
 }
