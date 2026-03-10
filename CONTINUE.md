@@ -2,16 +2,16 @@
 
 > Last updated: 2026-03-10
 > Branch: `master`
-> HEAD: `c6b0d3e` - `Reduce MainViewModel command forwarding duplication`
-> Status: local uncommitted feature work is present and verified; `master` itself still points at `c6b0d3e`
+> HEAD: `e636845` - `Add archive browser and queue progress UX`
+> Status: `master` is pushed through `e636845`; only local-only untracked helper/artifact folders remain
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
-- The repo has a cohesive local feature slice on top of `c6b0d3e`, but none of it is committed yet.
-- The active local work covers queue progress/cancel UX, queue last-result retention, archive browse/extract dialogs, saved-search rename behavior, and related smoke tests.
-- `IMPLEMENTATION_PLAN.md` generally matches the local feature set, but its header says `Current with master`; that is misleading because the described work is still uncommitted.
+- `origin/master` now includes `e636845`, which adds the archive browser/extraction UX, queue progress/cancel UX, saved-search rename behavior, README, and updated planning docs.
+- The tracked worktree is clean after the push.
+- Remaining untracked paths are local-only (`.claude/` and `obj_verify` folders) and are not part of the shipped project state.
 
 ## Completed
 
@@ -27,11 +27,14 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - `SavedSearchItem` is observable, rename persists, and saved searches run explicitly instead of firing on single selection.
   - Text preview status now includes detected encoding and line-count metadata.
   - Media preview status distinguishes audio vs video; ZIP preview status now calls out that only the first 8 entries are shown.
+- Docs:
+  - Added `README.md`.
+  - Refreshed `IMPLEMENTATION_PLAN.md` to match the current shipped feature set.
 
 ## In Progress
 
-- No obvious half-implemented code paths showed up in the current diff.
-- The remaining work before commit is mainly manual UX validation and deciding whether the current interaction copy/layout is acceptable.
+- No tracked in-progress code is left in the worktree.
+- The next work is a product decision/validation step, not unfinished implementation from the last slice.
 
 ## Next Steps
 
@@ -40,11 +43,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
    - archive browser filtering and folders-only mode on larger ZIPs
    - extraction dialog defaults and optional open-folder flow
    - saved-search rename, keyboard behavior, and discoverability
-2. If the UX is acceptable, commit the current feature slice together, including the new archive dialog files and updated docs.
-3. After commit, take the next roadmap slice:
+2. If the UX looks solid, start the next roadmap slice:
    - richer archive actions beyond browse/filter/extract
    - broader preview/metadata support
    - deeper queue history or per-item failure reporting
+3. Keep `CONTINUE.md` and `IMPLEMENTATION_PLAN.md` aligned when the next material feature slice lands.
 
 ## Key Files
 
@@ -66,33 +69,13 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Worktree
 
-Tracked modified files:
+Tracked worktree state:
 
-- `CONTINUE.md`
-- `IMPLEMENTATION_PLAN.md`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
-- `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
-Untracked feature files:
-
-- `src/CubicAIExplorer/Models/ArchiveBrowseRequest.cs`
-- `src/CubicAIExplorer/Views/ArchiveBrowserDialog.xaml`
-- `src/CubicAIExplorer/Views/ArchiveBrowserDialog.xaml.cs`
-- `src/CubicAIExplorer/Views/ExtractArchiveDialog.xaml`
-- `src/CubicAIExplorer/Views/ExtractArchiveDialog.xaml.cs`
+- clean
 
 Untracked local-only paths:
 
 - `.claude/`
-- `README.md`
 - `src/CubicAIExplorer/obj_verify/`
 - `tests/CubicAIExplorer.SmokeTests/obj_verify/`
 
