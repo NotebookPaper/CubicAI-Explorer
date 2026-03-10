@@ -457,14 +457,21 @@
                                         <EasingColorKeyFrame KeyTime="0:0:1.8" Value="#FFFF00" />
                                         <EasingColorKeyFrame KeyTime="0:0:2.4" Value="#3366AA" />
                                     </ColorAnimationUsingKeyFrames>
-                                </Storyboard>                                <ContextMenu x:Key="BookmarkContextMenu">                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                </Storyboard>                                <ContextMenu x:Key="BookmarkContextMenu">
+                                    <MenuItem Header="Open" FontWeight="Bold" Command="{Binding DataContext.NavigateBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <MenuItem Header="Open in New Tab" Command="{Binding DataContext.OpenBookmarkInNewTabCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Open All in Tabs" Command="{Binding DataContext.OpenAllInTabsCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <MenuItem Header="Open in Other Pane" Command="{Binding DataContext.OpenBookmarkInOtherPaneCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <Separator />
-                                    <MenuItem Header="New Folder" Command="{Binding DataContext.AddBookmarkFolderCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
-                                    <MenuItem Header="Rename" Command="{Binding DataContext.RenameBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Add Category" Command="{Binding DataContext.AddBookmarkFolderCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Add Bookmark" Command="{Binding DataContext.AddBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                                    <MenuItem Header="Add Session" Command="{Binding DataContext.AddSessionCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
                                     <Separator />
-                                    <MenuItem Header="Remove" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Properties..." Command="{Binding DataContext.ShowBookmarkPropertiesCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Rename" Command="{Binding DataContext.RenameBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <MenuItem Header="Delete" Command="{Binding DataContext.RemoveBookmarkCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" CommandParameter="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="Refresh" Command="{Binding DataContext.RefreshBookmarksCommand, RelativeSource={RelativeSource AncestorType=TreeView}}" />
                                 </ContextMenu>
                             </TreeView.Resources>
                             <TreeView.ItemContainerStyle>

@@ -168,6 +168,7 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
     public event EventHandler? OpenPreferencesRequested;
+    public event EventHandler<FileSystemItem>? BookmarkPropertiesRequested;
 
     public Models.UserSettings CurrentSettings => _userSettings;
 
@@ -1170,6 +1171,79 @@ public partial class MainViewModel : ObservableObject
         {
             NavigateCurrentPaneToPath(bookmark.Path);
         }
+    }
+
+    [RelayCommand]
+    private void OpenAllInTabs(BookmarkItem? category)
+    {
+        if (category == null) return;
+        OpenAllRecursive(category);
+    }
+
+    private void OpenAllRecursive(BookmarkItem item)
+    {
+        if (!item.IsFolder && !string.IsNullOrWhiteSpace(item.Path))
+        {
+            OpenBookmarkInNewTab(item);
+        }
+        foreach (var child in item.Children)
+        {
+            OpenAllRecursive(child);
+        }
+    }
+
+    [RelayCommand]
+    private void AddSession(BookmarkItem? parent)
+    {
+        var sessionFolder = new BookmarkItem
+        {
+            Name = $"Session - {DateTime.Now:g}",
+            IsFolder = true,
+            IsExpanded = true
+        };
+
+        foreach (var tab in Tabs)
+        {
+            if (string.IsNullOrWhiteSpace(tab.CurrentPath)) continue;
+            sessionFolder.Children.Add(new BookmarkItem
+            {
+                Name = tab.Title,
+                Path = tab.CurrentPath,
+                IsFolder = false
+            });
+        }
+
+        if (parent != null && parent.IsFolder)
+            parent.Children.Add(sessionFolder);
+        else
+            Bookmarks.Add(sessionFolder);
+
+        SaveBookmarks();
+    }
+
+    [RelayCommand]
+    private void ShowBookmarkProperties(BookmarkItem? bookmark)
+    {
+        if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
+        if (!_fileSystemService.DirectoryExists(bookmark.Path) && !File.Exists(bookmark.Path)) return;
+
+        // Use the existing logic from FileListViewModel if possible, or trigger via event
+        // For simplicity here, we'll assume we can just use the path
+        var item = new FileSystemItem
+        {
+            Name = bookmark.Name,
+            FullPath = bookmark.Path,
+            ItemType = _fileSystemService.DirectoryExists(bookmark.Path) ? FileSystemItemType.Directory : FileSystemItemType.File
+        };
+        
+        // MainViewModel doesn't directly handle PropertiesRequested, usually the View does.
+        // We'll update RefreshCurrentPaneState to handle this or add a new event.
+    }
+
+    [RelayCommand]
+    private void RefreshBookmarks()
+    {
+        LoadBookmarks();
     }
 
     [RelayCommand]

@@ -921,6 +921,7 @@ public partial class MainWindow : Window
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
             _boundViewModel.ScrollToSelectedRequested -= MainWindow_ScrollToSelectedRequested;
+            _boundViewModel.BookmarkPropertiesRequested -= ViewModel_BookmarkPropertiesRequested;
         }
 
         _boundViewModel = e.NewValue as MainViewModel;
@@ -931,6 +932,7 @@ public partial class MainWindow : Window
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
             _boundViewModel.ScrollToSelectedRequested += MainWindow_ScrollToSelectedRequested;
+            _boundViewModel.BookmarkPropertiesRequested += ViewModel_BookmarkPropertiesRequested;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
             UpdatePaneHighlight();
@@ -1312,12 +1314,19 @@ public partial class MainWindow : Window
 
     private void ViewModel_OpenPreferencesRequested(object? sender, EventArgs e)
     {
-        if (_boundViewModel == null) return;
-        var dialog = new PreferencesWindow(_boundViewModel.CurrentSettings) { Owner = this };
+        var dialog = new PreferencesWindow(ViewModel.CurrentSettings);
+        dialog.Owner = this;
         if (dialog.ShowDialog() == true)
         {
-            _boundViewModel.ApplyAndSaveSettings(dialog.Settings);
+            ViewModel.ApplyAndSaveSettings(dialog.Settings);
         }
+    }
+
+    private void ViewModel_BookmarkPropertiesRequested(object? sender, FileSystemItem item)
+    {
+        var dialog = new Views.PropertiesDialog(item);
+        dialog.Owner = this;
+        dialog.Show();
     }
 
     private void RightPane_MouseDoubleClick(object sender, MouseButtonEventArgs e)
