@@ -32,6 +32,15 @@ public partial class MainViewModel : ObservableObject
     private TabViewModel? _activeTab;
 
     [ObservableProperty]
+    private double _sidebarWidth = 250;
+
+    [ObservableProperty]
+    private double _previewWidth = 300;
+
+    private readonly FileSystemWatcher? _bookmarkWatcher;
+    private DateTime _lastBookmarkWrite;
+
+    [ObservableProperty]
     private FolderTreeNodeViewModel? _selectedTreeNode;
 
     [ObservableProperty]
@@ -185,11 +194,93 @@ public partial class MainViewModel : ObservableObject
         _isBookmarksVisible = _userSettings.ShowBookmarks;
         _isSavedSearchesVisible = _userSettings.ShowSavedSearches;
 
+        // Initialize Window state
+        _sidebarWidth = _userSettings.SidebarWidth;
+        _previewWidth = _userSettings.PreviewWidth;
+
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
+
+        if (_settingsService != null)
+            _settingsService.SettingsChanged += OnExternalSettingsChanged;
+
+        // Setup bookmark watcher
+        var bookmarkPath = GetBookmarksPath();
+        var bookmarkDir = Path.GetDirectoryName(bookmarkPath);
+        if (!string.IsNullOrWhiteSpace(bookmarkDir) && Directory.Exists(bookmarkDir))
+        {
+            _bookmarkWatcher = new FileSystemWatcher(bookmarkDir, Path.GetFileName(bookmarkPath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+            _bookmarkWatcher.Changed += OnBookmarkFileChanged;
+        }
+
         LoadBookmarks();
         LoadRecentFolders();
         LoadSavedSearches();
         LoadDrives();
+
+        InitializeTabsFromSettings();
+    }
+
+    private void InitializeTabsFromSettings()
+    {
+        if (_userSettings.OpenTabs is { Count: > 0 })
+        {
+            foreach (var path in _userSettings.OpenTabs)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !_fileSystemService.DirectoryExists(path)) continue;
+                var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+                AttachTab(tab);
+                Tabs.Add(tab);
+                tab.NavigateTo(path);
+            }
+        }
+
+        if (Tabs.Count == 0)
+        {
+            NewTab();
+        }
+        else
+        {
+            var index = Math.Clamp(_userSettings.ActiveTabIndex, 0, Tabs.Count - 1);
+            ActiveTab = Tabs[index];
+        }
+
+        if (!string.IsNullOrWhiteSpace(_userSettings.RightPanePath) && _fileSystemService.DirectoryExists(_userSettings.RightPanePath))
+        {
+            if (!IsDualPaneMode) ToggleDualPane();
+            _rightPaneTab?.NavigateTo(_userSettings.RightPanePath);
+        }
+    }
+
+    private void OnExternalSettingsChanged(object? sender, Models.UserSettings newSettings)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            // Update visibility and window state only - don't force-reload tabs while user is working
+            IsToolbarVisible = newSettings.ShowToolbar;
+            IsAddressBarVisible = newSettings.ShowAddressBar;
+            IsStatusBarVisible = newSettings.ShowStatusBar;
+            IsDrivesVisible = newSettings.ShowDrives;
+            IsTabsVisible = newSettings.ShowTabs;
+            IsRecentFoldersVisible = newSettings.ShowRecentFolders;
+            IsBookmarksVisible = newSettings.ShowBookmarks;
+            IsSavedSearchesVisible = newSettings.ShowSavedSearches;
+            SidebarWidth = newSettings.SidebarWidth;
+            PreviewWidth = newSettings.PreviewWidth;
+        });
+    }
+
+    private void OnBookmarkFileChanged(object sender, FileSystemEventArgs e)
+    {
+        var currentWrite = File.GetLastWriteTime(e.FullPath);
+        if (currentWrite > _lastBookmarkWrite.AddMilliseconds(500))
+        {
+            _lastBookmarkWrite = currentWrite;
+            Application.Current.Dispatcher.Invoke(LoadBookmarks);
+        }
     }
 
     public void ActivateLeftPane() => IsRightPaneActive = false;
@@ -2021,12 +2112,26 @@ public partial class MainViewModel : ObservableObject
         SaveSavedSearches();
     }
 
-    partial void OnIsToolbarVisibleChanged(bool value) { _userSettings.ShowToolbar = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsAddressBarVisibleChanged(bool value) { _userSettings.ShowAddressBar = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsStatusBarVisibleChanged(bool value) { _userSettings.ShowStatusBar = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsDrivesVisibleChanged(bool value) { _userSettings.ShowDrives = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsTabsVisibleChanged(bool value) { _userSettings.ShowTabs = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsRecentFoldersVisibleChanged(bool value) { _userSettings.ShowRecentFolders = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsBookmarksVisibleChanged(bool value) { _userSettings.ShowBookmarks = value; _settingsService?.Save(_userSettings); }
-    partial void OnIsSavedSearchesVisibleChanged(bool value) { _userSettings.ShowSavedSearches = value; _settingsService?.Save(_userSettings); }
+    partial void OnSidebarWidthChanged(double value) { _userSettings.SidebarWidth = value; SaveSettings(); }
+    partial void OnPreviewWidthChanged(double value) { _userSettings.PreviewWidth = value; SaveSettings(); }
+
+    private void SaveSettings()
+    {
+        if (Tabs.Count > 0)
+        {
+            _userSettings.OpenTabs = Tabs.Select(t => t.CurrentPath).ToList();
+            _userSettings.ActiveTabIndex = ActiveTab != null ? Tabs.IndexOf(ActiveTab) : 0;
+        }
+        _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;
+        _settingsService?.Save(_userSettings);
+    }
+
+    partial void OnIsToolbarVisibleChanged(bool value) { _userSettings.ShowToolbar = value; SaveSettings(); }
+    partial void OnIsAddressBarVisibleChanged(bool value) { _userSettings.ShowAddressBar = value; SaveSettings(); }
+    partial void OnIsStatusBarVisibleChanged(bool value) { _userSettings.ShowStatusBar = value; SaveSettings(); }
+    partial void OnIsDrivesVisibleChanged(bool value) { _userSettings.ShowDrives = value; SaveSettings(); }
+    partial void OnIsTabsVisibleChanged(bool value) { _userSettings.ShowTabs = value; SaveSettings(); }
+    partial void OnIsRecentFoldersVisibleChanged(bool value) { _userSettings.ShowRecentFolders = value; SaveSettings(); }
+    partial void OnIsBookmarksVisibleChanged(bool value) { _userSettings.ShowBookmarks = value; SaveSettings(); }
+    partial void OnIsSavedSearchesVisibleChanged(bool value) { _userSettings.ShowSavedSearches = value; SaveSettings(); }
 }

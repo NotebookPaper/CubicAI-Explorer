@@ -4,11 +4,42 @@ using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Services;
 
-public sealed class SettingsService
+public sealed class SettingsService : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private readonly FileSystemWatcher? _watcher;
+    private DateTime _lastWriteTime;
 
-    private static string GetSettingsPath()
+    public event EventHandler<UserSettings>? SettingsChanged;
+
+    public SettingsService()
+    {
+        var path = GetSettingsPath();
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+        {
+            _watcher = new FileSystemWatcher(dir, Path.GetFileName(path))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+            _watcher.Changed += OnFileChanged;
+        }
+    }
+
+    private void OnFileChanged(object sender, FileSystemEventArgs e)
+    {
+        // Debounce and check if we actually have a new write
+        var currentWrite = File.GetLastWriteTime(e.FullPath);
+        if (currentWrite > _lastWriteTime.AddMilliseconds(500))
+        {
+            _lastWriteTime = currentWrite;
+            var settings = Load();
+            SettingsChanged?.Invoke(this, settings);
+        }
+    }
+
+    public static string GetSettingsPath()
     {
         var overridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
@@ -20,18 +51,28 @@ public sealed class SettingsService
 
     public UserSettings Load()
     {
-        try
-        {
-            var path = GetSettingsPath();
-            if (!File.Exists(path)) return new UserSettings();
+        var path = GetSettingsPath();
+        if (!File.Exists(path)) return new UserSettings();
 
-            var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
-        }
-        catch
+        for (int i = 0; i < 3; i++) // Retry a few times if file is busy (syncing)
         {
-            return new UserSettings();
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var json = reader.ReadToEnd();
+                return JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(100);
+            }
+            catch
+            {
+                break;
+            }
         }
+        return new UserSettings();
     }
 
     public void Save(UserSettings settings)
@@ -43,11 +84,35 @@ public sealed class SettingsService
             if (!string.IsNullOrWhiteSpace(dir))
                 Directory.CreateDirectory(dir);
 
-            File.WriteAllText(path, JsonSerializer.Serialize(settings, JsonOptions));
+            // Disable watcher while writing to avoid self-trigger
+            if (_watcher != null) _watcher.EnableRaisingEvents = false;
+
+            var json = JsonSerializer.Serialize(settings, JsonOptions);
+            for (int i = 0; i < 3; i++)
+            {
+                try
+                {
+                    using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+                    using var writer = new StreamWriter(stream);
+                    writer.Write(json);
+                    _lastWriteTime = File.GetLastWriteTime(path);
+                    break;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(100);
+                }
+            }
         }
-        catch
+        catch { /* Non-critical */ }
+        finally
         {
-            // Non-critical.
+            if (_watcher != null) _watcher.EnableRaisingEvents = true;
         }
+    }
+
+    public void Dispose()
+    {
+        _watcher?.Dispose();
     }
 }

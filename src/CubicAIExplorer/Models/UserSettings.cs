@@ -17,4 +17,11 @@ public sealed class UserSettings
     public bool ShowRecentFolders { get; set; } = true;
     public bool ShowBookmarks { get; set; } = true;
     public bool ShowSavedSearches { get; set; } = true;
+
+    // Window State
+    public double SidebarWidth { get; set; } = 250;
+    public double PreviewWidth { get; set; } = 300;
+    public List<string> OpenTabs { get; set; } = [];
+    public int ActiveTabIndex { get; set; } = 0;
+    public string RightPanePath { get; set; } = string.Empty;
 }
