@@ -439,6 +439,7 @@
                         <TreeView x:Name="BookmarkTree"
                                   ItemsSource="{Binding Bookmarks}"
                                   AllowDrop="True"
+                                  PreviewMouseLeftButtonDown="BookmarkTree_PreviewMouseLeftButtonDown"
                                   MouseMove="BookmarkTree_MouseMove"
                                   DragOver="BookmarkTree_DragOver"
                                   Drop="BookmarkTree_Drop"

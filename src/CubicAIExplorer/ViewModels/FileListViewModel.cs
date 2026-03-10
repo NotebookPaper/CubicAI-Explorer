@@ -106,7 +106,7 @@ public partial class FileListViewModel : ObservableObject
             "Duplicate Error",
             FileTransferCollisionResolution.Rename);
 
-        if (transferResults.Count > 0)
+        if (transferResults.Any())
         {
             var successfulTransfers = GetSuccessfulTransfers(transferResults);
             RegisterCopyUndo(successfulTransfers);

@@ -8,7 +8,8 @@ public enum FileTransferCollisionResolution
 {
     KeepBoth,
     Replace,
-    Skip
+    Skip,
+    Rename
 }
 
 public enum FileTransferStatus

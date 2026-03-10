@@ -4,7 +4,17 @@ namespace CubicAIExplorer.Views;
 
 public partial class NewFolderDialog : Window
 {
-    public string FolderName => FolderNameTextBox.Text.Trim();
+    public string FolderName
+    {
+        get => FolderNameTextBox.Text.Trim();
+        set => FolderNameTextBox.Text = value;
+    }
+
+    public string Message
+    {
+        get => MessageLabel.Text;
+        set => MessageLabel.Text = value;
+    }
 
     public NewFolderDialog()
     {

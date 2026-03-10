@@ -479,6 +479,11 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BookmarkTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _bookmarkDragStart = e.GetPosition(BookmarkTree);
+    }
+
     private Point _bookmarkDragStart;
     private const string BookmarkDragFormat = "CubicAIExplorer_BookmarkDrag";
 

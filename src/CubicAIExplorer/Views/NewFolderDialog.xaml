@@ -14,7 +14,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Folder name:" Margin="0,0,0,6" />
+        <TextBlock x:Name="MessageLabel" Text="Folder name:" Margin="0,0,0,6" />
         <TextBox x:Name="FolderNameTextBox"
                  Grid.Row="1"
                  MinWidth="360"
