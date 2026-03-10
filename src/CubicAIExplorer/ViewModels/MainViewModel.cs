@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
@@ -846,6 +847,106 @@ public partial class MainViewModel : ObservableObject
         if (_fileSystemService.DirectoryExists(bookmark.Path))
         {
             NavigateCurrentPaneToPath(bookmark.Path);
+        }
+    }
+
+    [RelayCommand]
+    private void ImportBookmarks(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+
+        try
+        {
+            var extension = Path.GetExtension(filePath).ToLowerInvariant();
+            if (extension == ".xml")
+            {
+                ImportCubicExplorerXmlBookmarks(filePath);
+            }
+            else
+            {
+                var json = File.ReadAllText(filePath);
+                var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
+                if (records != null)
+                {
+                    foreach (var record in records)
+                    {
+                        TryAddBookmark(record.Path, record.Name, save: false);
+                    }
+                    SaveBookmarks();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to import bookmarks: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ImportCubicExplorerXmlBookmarks(string filePath)
+    {
+        var doc = XDocument.Load(filePath);
+        var root = doc.Root;
+        if (root == null) return;
+
+        // Old CubicExplorer format: <Bookmarks><Category Name="..."><Bookmark Name="..." Path="..."/></Category></Bookmarks>
+        // Or flat: <Bookmarks><Bookmark Name="..." Path="..."/></Bookmarks>
+        
+        var count = 0;
+        
+        // Handle categories (folders)
+        foreach (var category in root.Descendants("Category"))
+        {
+            var catName = category.Attribute("Name")?.Value;
+            foreach (var bookmark in category.Elements("Bookmark"))
+            {
+                var name = bookmark.Attribute("Name")?.Value;
+                var path = bookmark.Attribute("Path")?.Value;
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    // Prefix name with category if available to preserve some structure in the flat list
+                    var displayName = !string.IsNullOrWhiteSpace(catName) ? $"{catName} - {name}" : name;
+                    TryAddBookmark(path, displayName, save: false);
+                    count++;
+                }
+            }
+        }
+
+        // Handle flat bookmarks
+        foreach (var bookmark in root.Elements("Bookmark"))
+        {
+            var name = bookmark.Attribute("Name")?.Value;
+            var path = bookmark.Attribute("Path")?.Value;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                TryAddBookmark(path, name, save: false);
+                count++;
+            }
+        }
+
+        if (count > 0)
+        {
+            SaveBookmarks();
+            MessageBox.Show($"Imported {count} bookmarks.", "Import Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    [RelayCommand]
+    private void ExportBookmarks(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return;
+
+        try
+        {
+            var payload = Bookmarks
+                .Select(static b => new BookmarkRecord(b.Name, b.Path))
+                .ToList();
+
+            File.WriteAllText(filePath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
+            MessageBox.Show($"Exported {payload.Count} bookmarks.", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to export bookmarks: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

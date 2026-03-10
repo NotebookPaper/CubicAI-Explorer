@@ -490,6 +490,35 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ImportBookmarks_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import Bookmarks",
+            Filter = "Cubic Explorer Bookmarks (*.xml)|*.xml|JSON Bookmarks (*.json)|*.json|All Files (*.*)|*.*"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            ViewModel.ImportBookmarksCommand.Execute(dialog.FileName);
+        }
+    }
+
+    private void ExportBookmarks_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export Bookmarks",
+            Filter = "JSON Bookmarks (*.json)|*.json|All Files (*.*)|*.*",
+            FileName = "bookmarks.json"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            ViewModel.ExportBookmarksCommand.Execute(dialog.FileName);
+        }
+    }
+
     private void SavedSearchList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (ViewModel.SelectedSavedSearch is { } savedSearch)
