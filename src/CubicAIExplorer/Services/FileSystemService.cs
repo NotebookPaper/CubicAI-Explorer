@@ -146,14 +146,17 @@ public sealed class FileSystemService : IFileSystemService
         {
             operationContext?.CancellationToken.ThrowIfCancellationRequested();
 
+            FileTransferResult result;
             if (File.Exists(source))
-            {
-                results.Add(CopyFile(source, destination, collisionResolution));
-            }
+                result = CopyFile(source, destination, collisionResolution);
             else if (Directory.Exists(source))
-            {
-                results.Add(CopyDirectory(source, destination, collisionResolution));
-            }
+                result = CopyDirectory(source, destination, collisionResolution);
+            else
+                result = new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Failed, "Source not found");
+
+            results.Add(result);
+            if (result.Status == FileTransferStatus.Failed)
+                operationContext?.ReportItemFailure(Path.GetFileName(source.TrimEnd('\\')), result.ErrorMessage ?? "Unknown error");
 
             processedCount++;
             operationContext?.ReportProgress(
@@ -187,6 +190,7 @@ public sealed class FileSystemService : IFileSystemService
             operationContext?.CancellationToken.ThrowIfCancellationRequested();
             processedCount++;
 
+            FileTransferResult? result = null;
             if (File.Exists(source))
             {
                 var sourceDir = Path.GetDirectoryName(source);
@@ -200,7 +204,8 @@ public sealed class FileSystemService : IFileSystemService
                     continue;
                 }
 
-                results.Add(MoveFile(source, destination, collisionResolution));
+                result = MoveFile(source, destination, collisionResolution);
+                results.Add(result);
             }
             else if (Directory.Exists(source))
             {
@@ -215,8 +220,12 @@ public sealed class FileSystemService : IFileSystemService
                     continue;
                 }
 
-                results.Add(MoveDirectoryEntry(source, destination, collisionResolution));
+                result = MoveDirectoryEntry(source, destination, collisionResolution);
+                results.Add(result);
             }
+
+            if (result?.Status == FileTransferStatus.Failed)
+                operationContext?.ReportItemFailure(Path.GetFileName(source.TrimEnd('\\')), result.ErrorMessage ?? "Unknown error");
 
             operationContext?.ReportProgress(
                 processedCount,
@@ -239,23 +248,31 @@ public sealed class FileSystemService : IFileSystemService
         {
             operationContext?.CancellationToken.ThrowIfCancellationRequested();
             var sanitized = sanitizedPaths[i];
+            var itemName = Path.GetFileName(sanitized.TrimEnd('\\'));
 
-            if (File.Exists(sanitized))
+            try
             {
-                FileSystem.DeleteFile(
-                    sanitized,
-                    UIOption.OnlyErrorDialogs,
-                    permanentDelete ? RecycleOption.DeletePermanently : RecycleOption.SendToRecycleBin);
+                if (File.Exists(sanitized))
+                {
+                    FileSystem.DeleteFile(
+                        sanitized,
+                        UIOption.OnlyErrorDialogs,
+                        permanentDelete ? RecycleOption.DeletePermanently : RecycleOption.SendToRecycleBin);
+                }
+                else if (Directory.Exists(sanitized))
+                {
+                    FileSystem.DeleteDirectory(
+                        sanitized,
+                        UIOption.OnlyErrorDialogs,
+                        permanentDelete ? RecycleOption.DeletePermanently : RecycleOption.SendToRecycleBin);
+                }
             }
-            else if (Directory.Exists(sanitized))
+            catch (Exception ex)
             {
-                FileSystem.DeleteDirectory(
-                    sanitized,
-                    UIOption.OnlyErrorDialogs,
-                    permanentDelete ? RecycleOption.DeletePermanently : RecycleOption.SendToRecycleBin);
+                operationContext?.ReportItemFailure(itemName, ex.Message);
             }
 
-            operationContext?.ReportProgress(i + 1, sanitizedPaths.Length, Path.GetFileName(sanitized.TrimEnd('\\')));
+            operationContext?.ReportProgress(i + 1, sanitizedPaths.Length, itemName);
         }
     }
 
@@ -371,7 +388,14 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            ExtractEntry(entry, targetPath, conflictMode);
+            try
+            {
+                ExtractEntry(entry, targetPath, conflictMode);
+            }
+            catch (Exception ex)
+            {
+                operationContext?.ReportItemFailure(entry.Name, ex.Message);
+            }
             operationContext?.ReportProgress(i + 1, archive.Entries.Count, entry.FullName);
         }
     }
@@ -424,7 +448,14 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            ExtractEntry(entry, targetPath, conflictMode);
+            try
+            {
+                ExtractEntry(entry, targetPath, conflictMode);
+            }
+            catch (Exception ex)
+            {
+                operationContext?.ReportItemFailure(entry.Name, ex.Message);
+            }
             operationContext?.ReportProgress(i + 1, matchingEntries.Count, entry.FullName);
         }
     }

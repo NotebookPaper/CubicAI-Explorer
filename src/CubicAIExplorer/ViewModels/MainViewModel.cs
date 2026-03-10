@@ -126,6 +126,9 @@ public partial class MainViewModel : ObservableObject
     public string FileOperationQueueLastCompletedOperationText => _fileOperationQueueService.LastCompletedOperationText;
     public string FileOperationQueueLastCompletedStatusText => _fileOperationQueueService.LastCompletedStatusText;
     public bool CanCancelFileOperationQueue => _fileOperationQueueService.CanCancel;
+    public System.Collections.ObjectModel.ReadOnlyObservableCollection<Models.QueueHistoryEntry> FileOperationQueueHistory
+        => _fileOperationQueueService.History;
+    public bool HasFileOperationQueueHistory => _fileOperationQueueService.History.Count > 0;
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
 
@@ -235,7 +238,8 @@ public partial class MainViewModel : ObservableObject
             || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationTotalSteps)
             || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationDetailText)
             || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedOperationText)
-            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedStatusText))
+            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedStatusText)
+            || e.PropertyName == nameof(IFileOperationQueueService.History))
         {
             OnPropertyChanged(nameof(FileOperationQueueStatusText));
             OnPropertyChanged(nameof(CanShowQueueDetails));
@@ -249,6 +253,7 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(FileOperationQueuePendingCount));
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedOperationText));
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedStatusText));
+            OnPropertyChanged(nameof(HasFileOperationQueueHistory));
         }
     }
 

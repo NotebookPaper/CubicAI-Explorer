@@ -938,6 +938,15 @@ public partial class MainWindow : Window
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
+    private void QueueHistoryFailuresButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: Models.QueueHistoryEntry entry })
+        {
+            var dialog = new Views.QueueFailureDetailsDialog(entry) { Owner = this };
+            dialog.ShowDialog();
+        }
+    }
+
     private void FileListViewModel_ArchiveBrowseRequested(object? sender, ArchiveBrowseRequest request)
     {
         var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.SourceFileList, request.FileSystemService) { Owner = this };

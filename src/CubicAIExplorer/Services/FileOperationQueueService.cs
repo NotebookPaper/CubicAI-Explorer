@@ -1,14 +1,26 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Services;
 
 public sealed partial class FileOperationQueueService : ObservableObject, IFileOperationQueueService
 {
+    private const int MaxHistoryCount = 50;
+
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly object _stateLock = new();
     private int _pendingCount;
     private CancellationTokenSource? _currentCancellationTokenSource;
+
+    private readonly ObservableCollection<QueueHistoryEntry> _historyInner = [];
+    public ReadOnlyObservableCollection<QueueHistoryEntry> History { get; }
+
+    public FileOperationQueueService()
+    {
+        History = new ReadOnlyObservableCollection<QueueHistoryEntry>(_historyInner);
+    }
 
     [ObservableProperty]
     private bool _isBusy;
@@ -107,23 +119,30 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
             PendingCount -= 1;
         }
 
+        FileOperationContext? context = null;
         try
         {
             using var cancellationTokenSource = new CancellationTokenSource();
             SetBusyState(description, cancellationTokenSource, isBusy: true);
-            var context = new FileOperationContext(this, cancellationTokenSource.Token);
+            context = new FileOperationContext(this, cancellationTokenSource.Token);
             var result = await Task.Run(() => operation(context), cancellationTokenSource.Token).ConfigureAwait(false);
-            SetCompletionState(description, $"{description} completed.");
+            var failures = context.TakeItemFailures();
+            var statusText = failures.Count > 0
+                ? $"{description} completed ({failures.Count} failure(s))."
+                : $"{description} completed.";
+            SetCompletionState(description, statusText, QueueHistoryStatus.Completed, failures);
             return result;
         }
         catch (OperationCanceledException)
         {
-            SetCompletionState(description, $"{description} canceled.");
+            var failures = context?.TakeItemFailures() ?? [];
+            SetCompletionState(description, $"{description} canceled.", QueueHistoryStatus.Canceled, failures);
             throw;
         }
         catch (Exception ex)
         {
-            SetCompletionState(description, $"{description} failed: {ex.Message}");
+            var failures = context?.TakeItemFailures() ?? [];
+            SetCompletionState(description, $"{description} failed: {ex.Message}", QueueHistoryStatus.Failed, failures);
             throw;
         }
         finally
@@ -183,13 +202,21 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
         RunOnUiThread(() => OnPropertyChanged(propertyName));
     }
 
-    private void SetCompletionState(string description, string statusText)
+    private void SetCompletionState(
+        string description,
+        string statusText,
+        QueueHistoryStatus historyStatus,
+        IReadOnlyList<QueueItemFailure> itemFailures)
     {
         RunOnUiThread(() =>
         {
             LastCompletedOperationText = description;
             LastCompletedStatusText = statusText;
             HasRecentActivity = true;
+
+            _historyInner.Insert(0, new QueueHistoryEntry(description, historyStatus, DateTime.Now, itemFailures));
+            while (_historyInner.Count > MaxHistoryCount)
+                _historyInner.RemoveAt(_historyInner.Count - 1);
         });
     }
 
@@ -218,6 +245,7 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
     private sealed class FileOperationContext : IFileOperationContext
     {
         private readonly FileOperationQueueService _owner;
+        private readonly List<QueueItemFailure> _itemFailures = [];
 
         public FileOperationContext(FileOperationQueueService owner, CancellationToken cancellationToken)
         {
@@ -229,5 +257,15 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
 
         public void ReportProgress(int completedSteps, int totalSteps, string? detailText = null)
             => _owner.ReportProgress(completedSteps, totalSteps, detailText);
+
+        public void ReportItemFailure(string itemName, string errorMessage)
+            => _itemFailures.Add(new QueueItemFailure(itemName, errorMessage));
+
+        public IReadOnlyList<QueueItemFailure> TakeItemFailures()
+        {
+            var copy = _itemFailures.ToList();
+            _itemFailures.Clear();
+            return copy;
+        }
     }
 }

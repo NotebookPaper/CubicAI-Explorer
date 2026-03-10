@@ -268,6 +268,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
@@ -305,6 +306,45 @@
                                      Maximum="1"
                                      Value="{Binding FileOperationQueueCurrentOperationProgressFraction, Mode=OneWay}"
                                      Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2"
+                                Margin="0,8,0,0"
+                                Visibility="{Binding HasFileOperationQueueHistory, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="History" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <ScrollViewer MaxHeight="110"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding FileOperationQueueHistory}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,2">
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="{Binding FailureSummary}"
+                                                    Padding="6,1"
+                                                    Margin="8,0,0,0"
+                                                    Foreground="DarkRed"
+                                                    Visibility="{Binding HasFailures, Converter={StaticResource BoolToVisibility}}"
+                                                    Tag="{Binding}"
+                                                    Click="QueueHistoryFailuresButton_Click" />
+                                            <TextBlock DockPanel.Dock="Right"
+                                                       Text="{Binding TimeText}"
+                                                       Foreground="#5A6F89"
+                                                       VerticalAlignment="Center"
+                                                       Margin="8,0,0,0" />
+                                            <TextBlock DockPanel.Dock="Left"
+                                                       Text="{Binding StatusIcon}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"
+                                                       FontSize="11" />
+                                            <TextBlock Text="{Binding Description}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </StackPanel>
                 </Grid>
             </Grid>

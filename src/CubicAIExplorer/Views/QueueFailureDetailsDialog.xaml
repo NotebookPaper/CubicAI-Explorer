@@ -1,0 +1,38 @@
+<Window x:Class="CubicAIExplorer.Views.QueueFailureDetailsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Operation Failures"
+        Width="600"
+        Height="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="OperationTextBlock"
+                   FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,10" />
+
+        <ListView x:Name="FailureListView" Grid.Row="1">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Item" Width="230" DisplayMemberBinding="{Binding ItemName}" />
+                    <GridViewColumn Header="Error" Width="340" DisplayMemberBinding="{Binding ErrorMessage}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <Button Grid.Row="2"
+                Content="Close"
+                Width="90"
+                HorizontalAlignment="Right"
+                Margin="0,10,0,0"
+                IsDefault="True"
+                IsCancel="True" />
+    </Grid>
+</Window>
