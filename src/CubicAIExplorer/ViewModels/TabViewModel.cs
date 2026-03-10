@@ -7,6 +7,7 @@ namespace CubicAIExplorer.ViewModels;
 public partial class TabViewModel : ObservableObject
 {
     private readonly NavigationService _navigation = new();
+    private readonly IFileOperationQueueService _fileOperationQueueService;
 
     [ObservableProperty]
     private string _title = "New Tab";
@@ -27,9 +28,13 @@ public partial class TabViewModel : ObservableObject
     public Guid Id { get; } = Guid.NewGuid();
     public FileListViewModel FileList { get; }
 
-    public TabViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
+    public TabViewModel(
+        IFileSystemService fileSystemService,
+        IClipboardService clipboardService,
+        IFileOperationQueueService? fileOperationQueueService = null)
     {
-        FileList = new FileListViewModel(fileSystemService, clipboardService);
+        _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
+        FileList = new FileListViewModel(fileSystemService, clipboardService, _fileOperationQueueService);
         FileList.NavigateRequested += (_, path) => NavigateTo(path);
         _navigation.Navigated += (_, path) => OnNavigated(path);
     }

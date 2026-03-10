@@ -29,9 +29,15 @@ public partial class App : Application
 
         var fileSystemService = new FileSystemService();
         var clipboardService = new ClipboardService();
+        var fileOperationQueueService = new FileOperationQueueService();
         var shellIconService = new ShellIconService();
         ShellIconConverter.IconService = shellIconService;
-        var mainViewModel = new MainViewModel(fileSystemService, clipboardService, settingsService, settings);
+        var mainViewModel = new MainViewModel(
+            fileSystemService,
+            clipboardService,
+            settingsService,
+            settings,
+            fileOperationQueueService);
         mainViewModel.NewTabCommand.Execute(null);
 
         var mainWindow = new MainWindow

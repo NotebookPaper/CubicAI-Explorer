@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CubicAIExplorer.Models;
@@ -13,6 +14,7 @@ public partial class FileListViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
     private readonly Stack<HistoryOperation> _undoStack = [];
     private readonly Stack<HistoryOperation> _redoStack = [];
     private bool _isApplyingHistory;
@@ -71,6 +73,8 @@ public partial class FileListViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSearching;
 
+    public bool IsFileOperationQueueBusy => _fileOperationQueueService.IsBusy;
+    public string FileOperationQueueStatus => _fileOperationQueueService.StatusText;
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
 
@@ -81,16 +85,30 @@ public partial class FileListViewModel : ObservableObject
     public event EventHandler<FileSystemItem>? PropertiesRequested;
     public event EventHandler? SearchPanelOpened;
 
-    public FileListViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService)
+    public FileListViewModel(
+        IFileSystemService fileSystemService,
+        IClipboardService clipboardService,
+        IFileOperationQueueService? fileOperationQueueService = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
+        _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
         _undoStagingPath = Path.Combine(
             Path.GetTempPath(),
             "CubicAIExplorer",
             "UndoStaging",
             Environment.ProcessId.ToString());
         Directory.CreateDirectory(_undoStagingPath);
+        _fileOperationQueueService.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(IFileOperationQueueService.IsBusy))
+                OnPropertyChanged(nameof(IsFileOperationQueueBusy));
+            if (e.PropertyName == nameof(IFileOperationQueueService.StatusText)
+                || e.PropertyName == nameof(IFileOperationQueueService.IsBusy)
+                || e.PropertyName == nameof(IFileOperationQueueService.PendingCount)
+                || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
+                OnPropertyChanged(nameof(FileOperationQueueStatus));
+        };
     }
 
     public void LoadDirectory(string path)
@@ -155,7 +173,7 @@ public partial class FileListViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Paste()
+    private async Task Paste()
     {
         if (string.IsNullOrWhiteSpace(CurrentPath) || !_fileSystemService.DirectoryExists(CurrentPath))
             return;
@@ -167,13 +185,13 @@ public partial class FileListViewModel : ObservableObject
         if (collisionResolution == null)
             return;
 
-        if (TransferFiles(
+        var transferResults = await TransferFilesAsync(
                 paths,
                 CurrentPath,
                 moveFiles: isCut,
                 "Paste Error",
-                collisionResolution.Value,
-                out var transferResults))
+                collisionResolution.Value);
+        if (transferResults.Count > 0)
         {
             var successfulTransfers = GetSuccessfulTransfers(transferResults);
 
@@ -191,15 +209,15 @@ public partial class FileListViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Delete()
+    private Task Delete()
     {
-        DeleteSelected(permanentDelete: false);
+        return DeleteSelectedAsync(permanentDelete: false);
     }
 
     [RelayCommand]
-    private void PermanentDelete()
+    private Task PermanentDelete()
     {
-        DeleteSelected(permanentDelete: true);
+        return DeleteSelectedAsync(permanentDelete: true);
     }
 
     [RelayCommand]
@@ -559,9 +577,9 @@ public partial class FileListViewModel : ObservableObject
         return SelectedItems.Count == 0 ? SelectedItem : null;
     }
 
-    private void DeleteSelected(bool permanentDelete)
+    private Task DeleteSelectedAsync(bool permanentDelete)
     {
-        DeletePaths(GetSelectedPaths(), permanentDelete, promptUser: true);
+        return DeletePathsAsync(GetSelectedPaths(), permanentDelete, promptUser: true);
     }
 
     public void RenameItem(FileSystemItem item, string newName)
@@ -594,13 +612,18 @@ public partial class FileListViewModel : ObservableObject
 
     public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
     {
-        if (!TransferFiles(
+        ImportDroppedFilesAsync(paths, destinationPath, moveFiles).GetAwaiter().GetResult();
+    }
+
+    public async Task ImportDroppedFilesAsync(IEnumerable<string> paths, string destinationPath, bool moveFiles)
+    {
+        var transferResults = await TransferFilesAsync(
                 paths,
                 destinationPath,
                 moveFiles,
                 "Drop Error",
-                FileTransferCollisionResolution.KeepBoth,
-                out var transferResults))
+                FileTransferCollisionResolution.KeepBoth);
+        if (transferResults.Count == 0)
             return;
 
         var successfulTransfers = GetSuccessfulTransfers(transferResults);
@@ -617,17 +640,15 @@ public partial class FileListViewModel : ObservableObject
 
     public IReadOnlyList<string> GetSelectedPathsForTransfer() => GetSelectedPaths();
 
-    private bool TransferFiles(
+    private async Task<IReadOnlyList<FileTransferResult>> TransferFilesAsync(
         IEnumerable<string> sourcePaths,
         string destinationPath,
         bool moveFiles,
         string errorTitle,
-        FileTransferCollisionResolution collisionResolution,
-        out IReadOnlyList<FileTransferResult> transferResults)
+        FileTransferCollisionResolution collisionResolution)
     {
-        transferResults = [];
         if (string.IsNullOrWhiteSpace(destinationPath) || !_fileSystemService.DirectoryExists(destinationPath))
-            return false;
+            return [];
 
         var distinctPaths = sourcePaths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -635,23 +656,23 @@ public partial class FileListViewModel : ObservableObject
             .ToArray();
 
         if (distinctPaths.Length == 0)
-            return false;
+            return [];
 
         try
         {
-            if (moveFiles)
-            {
-                transferResults = _fileSystemService.MoveFiles(distinctPaths, destinationPath, collisionResolution);
-            }
-            else
-            {
-                transferResults = _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution);
-            }
+            var operationText = $"{(moveFiles ? "Moving" : "Copying")} {distinctPaths.Length} item(s)";
+            var transferResults = await _fileOperationQueueService.EnqueueAsync(
+                operationText,
+                () => moveFiles
+                    ? _fileSystemService.MoveFiles(distinctPaths, destinationPath, collisionResolution)
+                    : _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution));
 
             SetTransferSummary(BuildTransferSummary(moveFiles ? "Moved" : "Copied", transferResults));
             ShowTransferIssues(transferResults, errorTitle);
             Refresh();
-            return transferResults.Any(static result => result.Status == FileTransferStatus.Success);
+            return transferResults.Any(static result => result.Status == FileTransferStatus.Success)
+                ? transferResults
+                : [];
         }
         catch (Exception ex)
         {
@@ -660,7 +681,7 @@ public partial class FileListViewModel : ObservableObject
                 errorTitle,
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            return false;
+            return [];
         }
     }
 
@@ -848,6 +869,11 @@ public partial class FileListViewModel : ObservableObject
 
     public void DeletePaths(IEnumerable<string> paths, bool permanentDelete, bool promptUser)
     {
+        DeletePathsAsync(paths, permanentDelete, promptUser).GetAwaiter().GetResult();
+    }
+
+    public async Task DeletePathsAsync(IEnumerable<string> paths, bool permanentDelete, bool promptUser)
+    {
         var deletePaths = paths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -873,14 +899,22 @@ public partial class FileListViewModel : ObservableObject
         {
             if (permanentDelete)
             {
-                var stagedItems = _fileSystemService.MoveFiles(deletePaths, _undoStagingPath);
+                var stagedItems = await _fileOperationQueueService.EnqueueAsync(
+                    $"Permanently deleting {deletePaths.Length} item(s)",
+                    () => _fileSystemService.MoveFiles(deletePaths, _undoStagingPath));
                 SetTransferSummary(BuildTransferSummary("Permanently deleted", stagedItems));
                 ShowTransferIssues(stagedItems, "Delete Error");
                 RegisterPermanentDeleteUndo(GetSuccessfulTransfers(stagedItems));
             }
             else
             {
-                _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false);
+                await _fileOperationQueueService.EnqueueAsync(
+                    $"Deleting {deletePaths.Length} item(s)",
+                    () =>
+                    {
+                        _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false);
+                        return true;
+                    });
                 SetTransferSummary($"Deleted {deletePaths.Length} item(s)");
             }
 
@@ -892,7 +926,7 @@ public partial class FileListViewModel : ObservableObject
                 $"Delete failed: {ex.Message}",
                 "Delete Error",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            MessageBoxImage.Error);
         }
     }
 

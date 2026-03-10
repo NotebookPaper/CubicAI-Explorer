@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Text.Json;
+using System.ComponentModel;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -21,6 +22,7 @@ public partial class MainViewModel : ObservableObject
 
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
     private readonly Services.SettingsService? _settingsService;
     private readonly Models.UserSettings _userSettings;
 
@@ -101,6 +103,8 @@ public partial class MainViewModel : ObservableObject
     public string CurrentPaneLabel => IsRightPaneActive && IsDualPaneMode ? "Right Pane" : "Left Pane";
     public string LeftPaneStatusText => ActiveTab?.FileList.StatusText ?? "Ready";
     public string RightPaneStatusText => _rightPaneTab?.FileList.StatusText ?? "Ready";
+    public bool IsFileOperationQueueBusy => _fileOperationQueueService.IsBusy;
+    public string FileOperationQueueStatusText => _fileOperationQueueService.StatusText;
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
 
@@ -113,12 +117,16 @@ public partial class MainViewModel : ObservableObject
     private const int MaxRecentFolders = 15;
 
     public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService,
-        Services.SettingsService? settingsService = null, Models.UserSettings? userSettings = null)
+        Services.SettingsService? settingsService = null,
+        Models.UserSettings? userSettings = null,
+        IFileOperationQueueService? fileOperationQueueService = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
+        _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
         _settingsService = settingsService;
         _userSettings = userSettings ?? new Models.UserSettings();
+        _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
         LoadBookmarks();
         LoadRecentFolders();
         LoadDrives();
@@ -193,6 +201,18 @@ public partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(ActiveRedoDescription));
                 break;
         }
+    }
+
+    private void OnFileOperationQueuePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IFileOperationQueueService.IsBusy))
+            OnPropertyChanged(nameof(IsFileOperationQueueBusy));
+
+        if (e.PropertyName == nameof(IFileOperationQueueService.StatusText)
+            || e.PropertyName == nameof(IFileOperationQueueService.IsBusy)
+            || e.PropertyName == nameof(IFileOperationQueueService.PendingCount)
+            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
+            OnPropertyChanged(nameof(FileOperationQueueStatusText));
     }
 
     private void RefreshCurrentPaneState()
@@ -284,7 +304,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NewTab()
     {
-        var tab = new TabViewModel(_fileSystemService, _clipboardService);
+        var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
         AttachTab(tab);
         Tabs.Add(tab);
         ActiveTab = tab;
@@ -681,7 +701,7 @@ public partial class MainViewModel : ObservableObject
         IsDualPaneMode = !IsDualPaneMode;
         if (IsDualPaneMode && _rightPaneTab == null)
         {
-            _rightPaneTab = new TabViewModel(_fileSystemService, _clipboardService);
+            _rightPaneTab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
             AttachTab(_rightPaneTab);
             OnPropertyChanged(nameof(RightPaneTab));
 

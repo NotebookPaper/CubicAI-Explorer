@@ -255,6 +255,10 @@
                            MaxWidth="600" />
             </StatusBarItem>
             <Separator />
+            <StatusBarItem Visibility="{Binding IsFileOperationQueueBusy, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding FileOperationQueueStatusText, Mode=OneWay}" />
+            </StatusBarItem>
+            <Separator Visibility="{Binding IsFileOperationQueueBusy, Converter={StaticResource BoolToVisibility}}" />
             <StatusBarItem Visibility="{Binding IsDualPaneMode, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock>
                     <Run Text="Left: " />

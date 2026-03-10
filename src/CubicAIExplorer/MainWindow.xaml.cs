@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -517,9 +518,9 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void FileList_Drop(object sender, DragEventArgs e)
+    private async void FileList_Drop(object sender, DragEventArgs e)
     {
-        HandleDrop(e, ViewModel.ActiveTab?.FileList);
+        await HandleDropAsync(e, ViewModel.ActiveTab?.FileList);
     }
 
     private void FileListHeader_Click(object sender, RoutedEventArgs e)
@@ -1178,12 +1179,12 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void RightPane_Drop(object sender, DragEventArgs e)
+    private async void RightPane_Drop(object sender, DragEventArgs e)
     {
-        HandleDrop(e, ViewModel.RightPaneTab?.FileList);
+        await HandleDropAsync(e, ViewModel.RightPaneTab?.FileList);
     }
 
-    private void HandleDrop(DragEventArgs e, FileListViewModel? fileList)
+    private async Task HandleDropAsync(DragEventArgs e, FileListViewModel? fileList)
     {
         if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
             return;
@@ -1195,7 +1196,7 @@ public partial class MainWindow : Window
         var destination = ResolveDropDestination(e.OriginalSource as DependencyObject) ?? fileList.CurrentPath;
         var moveFiles = ShouldMove(e);
 
-        fileList.ImportDroppedFiles(droppedPaths, destination, moveFiles);
+        await fileList.ImportDroppedFilesAsync(droppedPaths, destination, moveFiles);
         e.Handled = true;
     }
 

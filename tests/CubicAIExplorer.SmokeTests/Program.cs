@@ -31,6 +31,7 @@ internal static class Program
             Run("copy collision replace", failures, () => TestCopyCollisionReplace(tempRoot));
             Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
             Run("clipboard drop effect byte array", failures, TestClipboardDropEffectByteArray);
+            Run("file operation queue service", failures, TestFileOperationQueueService);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -414,6 +415,40 @@ internal static class Program
         Assert(ClipboardService.ReadDropEffectValue(moveBytes) == 2, "Byte-array move drop effect should parse correctly.");
         Assert(ClipboardService.ReadDropEffectValue(copyBytes) == 5, "Byte-array copy drop effect should parse correctly.");
         Assert(ClipboardService.ReadDropEffectValue(invalidBytes) == 5, "Invalid drop-effect payload should fall back to copy.");
+    }
+
+    private static void TestFileOperationQueueService()
+    {
+        var queue = new FileOperationQueueService();
+        using var firstStarted = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        var secondStarted = false;
+
+        var firstTask = queue.EnqueueAsync("First op", () =>
+        {
+            firstStarted.Set();
+            releaseFirst.Wait(2000);
+            return 1;
+        });
+
+        WaitFor(() => firstStarted.IsSet && queue.IsBusy);
+
+        var secondTask = queue.EnqueueAsync("Second op", () =>
+        {
+            secondStarted = true;
+            return 2;
+        });
+
+        WaitFor(() => queue.PendingCount == 1);
+        Assert(queue.StatusText.Contains("First op"), "Queue should report the running operation.");
+        Assert(queue.StatusText.Contains("queued"), "Queue should report queued work while busy.");
+
+        releaseFirst.Set();
+        Task.WaitAll(firstTask, secondTask);
+
+        Assert(secondStarted, "Queued operation should run after the first completes.");
+        Assert(!queue.IsBusy, "Queue should become idle after all work completes.");
+        Assert(queue.PendingCount == 0, "Queue should clear pending work after completion.");
     }
 
     private static void TestRedoCopy(string root)
@@ -801,6 +836,7 @@ internal static class Program
 
         clipboard.SetFiles([leftFile], isCut: false);
         vm.PasteCommand.Execute(null);
+        WaitFor(() => File.Exists(Path.Combine(rightFolder, "left.txt")));
         Assert(File.Exists(Path.Combine(rightFolder, "left.txt")),
             "Paste should target the active right pane directory.");
 
@@ -1259,6 +1295,7 @@ internal static class Program
         Assert(main.Contains("RightPaneStatusText"), "Right pane header/status text should be bound.");
         Assert(main.Contains("PreviewStatusText"), "Preview panel should bind a fallback status message.");
         Assert(main.Contains("CurrentPanePath"), "Status bar should reflect the current active pane path.");
+        Assert(main.Contains("FileOperationQueueStatusText"), "Status bar should expose background file operation status.");
         Assert(main.Contains("ContextMenuOpening=\"RightPane_ContextMenuOpening\""), "Right pane context menu handler should be wired.");
         Assert(main.Contains("GridViewColumnHeader.Click=\"RightPaneHeader_Click\""), "Right pane sort handler should be wired.");
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");
