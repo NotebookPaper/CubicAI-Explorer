@@ -947,6 +947,7 @@ public partial class MainWindow : Window
         if (boundField != null)
         {
             boundField.SelectAllRequested -= FileListViewModel_SelectAllRequested;
+            boundField.InvertSelectionRequested -= FileListViewModel_InvertSelectionRequested;
             boundField.InlineRenameRequested -= FileListViewModel_InlineRenameRequested;
             boundField.ViewModeChanged -= FileListViewModel_ViewModeChanged;
             boundField.PropertiesRequested -= FileListViewModel_PropertiesRequested;
@@ -958,6 +959,7 @@ public partial class MainWindow : Window
         if (boundField != null)
         {
             boundField.SelectAllRequested += FileListViewModel_SelectAllRequested;
+            boundField.InvertSelectionRequested += FileListViewModel_InvertSelectionRequested;
             boundField.InlineRenameRequested += FileListViewModel_InlineRenameRequested;
             boundField.ViewModeChanged += FileListViewModel_ViewModeChanged;
             boundField.PropertiesRequested += FileListViewModel_PropertiesRequested;
@@ -978,6 +980,20 @@ public partial class MainWindow : Window
         else
         {
             FileListView.SelectAll();
+        }
+    }
+
+    private void FileListViewModel_InvertSelectionRequested(object? sender, EventArgs e)
+    {
+        var targetListView = sender == _boundRightFileListViewModel ? RightPaneListView : FileListView;
+        var selected = targetListView.SelectedItems.Cast<object>().ToList();
+        targetListView.SelectedItems.Clear();
+        foreach (var item in targetListView.Items)
+        {
+            if (!selected.Contains(item))
+            {
+                targetListView.SelectedItems.Add(item);
+            }
         }
     }
 

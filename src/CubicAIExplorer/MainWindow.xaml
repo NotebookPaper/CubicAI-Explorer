@@ -14,19 +14,22 @@
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding NewTabCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
-        <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
+        <KeyBinding Key="B" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding RedoCommand}" />
         <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding CopyCommand}" />
         <KeyBinding Key="X" Modifiers="Ctrl" Command="{Binding CutCommand}" />
         <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding PasteCommand}" />
+        <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CurrentPaneFileList.DuplicateCommand}" />
+        <KeyBinding Key="R" Modifiers="Ctrl" Command="{Binding CurrentPaneFileList.CopyPathCommand}" />
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
         <KeyBinding Key="Delete" Modifiers="Shift" Command="{Binding PermanentDeleteCommand}" />
         <KeyBinding Key="F2" Command="{Binding RenameCommand}" />
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
-        <KeyBinding Key="N" Modifiers="Ctrl+Shift" Command="{Binding NewFolderCommand}" />
+        <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewFolderCommand}" />
         <KeyBinding Key="A" Modifiers="Ctrl" Command="{Binding SelectAllCommand}" />
+        <KeyBinding Key="A" Modifiers="Ctrl+Shift" Command="{Binding CurrentPaneFileList.InvertSelectionCommand}" />
         <KeyBinding Key="BrowserBack" Command="{Binding GoBackCommand}" />
         <KeyBinding Key="BrowserForward" Command="{Binding GoForwardCommand}" />
         <KeyBinding Key="Back" Command="{Binding NavigateUpCommand}" />
@@ -46,10 +49,32 @@
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
             </MenuItem>
             <MenuItem Header="_Edit">
+                <MenuItem Header="_Copy" InputGestureText="Ctrl+C" Command="{Binding CopyCommand}" />
+                <MenuItem Header="Cu_t" InputGestureText="Ctrl+X" Command="{Binding CutCommand}" />
+                <MenuItem Header="_Paste" InputGestureText="Ctrl+V" Command="{Binding PasteCommand}" />
+                <MenuItem Header="_Duplicate" InputGestureText="Ctrl+D" Command="{Binding CurrentPaneFileList.DuplicateCommand}" />
+                <MenuItem Header="Copy _Path" InputGestureText="Ctrl+R">
+                    <MenuItem Header="Full _Path" Command="{Binding CurrentPaneFileList.CopyPathCommand}" />
+                    <MenuItem Header="_Name Only" Command="{Binding CurrentPaneFileList.CopyNameCommand}" />
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="_Delete" InputGestureText="Del" Command="{Binding DeleteCommand}" />
+                <MenuItem Header="_Rename" InputGestureText="F2" Command="{Binding RenameCommand}" />
+                <Separator />
                 <MenuItem Header="{Binding ActiveUndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding UndoCommand}" />
-                <MenuItem Header="{Binding ActiveRedoDescription}" InputGestureText="Ctrl+Y" Command="{Binding RedoCommand}" />
+                <Separator />
+                <MenuItem Header="_New">
+                    <MenuItem Header="_Folder" InputGestureText="Ctrl+N" Command="{Binding NewFolderCommand}" />
+                    <MenuItem Header="_File" Command="{Binding CurrentPaneFileList.NewFileCommand}" />
+                </MenuItem>
+                <MenuItem Header="Create _Symbolic Link" Command="{Binding CurrentPaneFileList.CreateSymbolicLinkCommand}" />
+                <Separator />
+                <MenuItem Header="_Select All" InputGestureText="Ctrl+A" Command="{Binding SelectAllCommand}" />
+                <MenuItem Header="_Invert Selection" InputGestureText="Ctrl+Shift+A" Command="{Binding CurrentPaneFileList.InvertSelectionCommand}" />
                 <Separator />
                 <MenuItem Header="Clear History" Command="{Binding ClearHistoryCommand}" />
+                <Separator />
+                <MenuItem Header="_Properties..." InputGestureText="Alt+Enter" Command="{Binding ShowPropertiesCommand}" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="_Details" Click="ViewMode_Details_Click" />

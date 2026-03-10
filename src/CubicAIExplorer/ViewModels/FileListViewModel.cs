@@ -79,12 +79,108 @@ public partial class FileListViewModel : ObservableObject
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
 
     public event EventHandler<string>? NavigateRequested;
+    public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
+    public event EventHandler? InvertSelectionRequested;
     public event EventHandler<FileSystemItem>? InlineRenameRequested;
     public event EventHandler<string>? ViewModeChanged;
     public event EventHandler<FileSystemItem>? PropertiesRequested;
     public event EventHandler? SearchPanelOpened;
     public event EventHandler<ArchiveBrowseRequest>? ArchiveBrowseRequested;
+
+    [RelayCommand]
+    private void InvertSelection()
+    {
+        InvertSelectionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private async Task Duplicate()
+    {
+        var paths = GetSelectedPaths();
+        if (paths.Count == 0) return;
+
+        var transferResults = await TransferFilesAsync(
+            paths,
+            CurrentPath,
+            moveFiles: false,
+            "Duplicate Error",
+            FileTransferCollisionResolution.Rename);
+
+        if (transferResults.Count > 0)
+        {
+            var successfulTransfers = GetSuccessfulTransfers(transferResults);
+            RegisterCopyUndo(successfulTransfers);
+        }
+    }
+
+    [RelayCommand]
+    private void CopyPath()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null) return;
+        Clipboard.SetText(item.FullPath);
+    }
+
+    [RelayCommand]
+    private void CopyName()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null) return;
+        Clipboard.SetText(item.Name);
+    }
+
+    [RelayCommand]
+    private void NewFile()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath)) return;
+
+        var dialog = new NewFolderDialog { Title = "New File", Message = "Enter file name:" };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var createdPath = _fileSystemService.CreateFile(CurrentPath, dialog.FolderName);
+            var parentPath = Path.GetDirectoryName(createdPath) ?? CurrentPath;
+            var fileName = Path.GetFileName(createdPath);
+            PushHistory(
+                "Undo New File",
+                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true),
+                "Redo New File",
+                () => _fileSystemService.CreateFile(parentPath, fileName));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Create file failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void CreateSymbolicLink()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null) return;
+
+        var dialog = new NewFolderDialog { Title = "Create Symbolic Link", Message = "Enter link name:", FolderName = item.Name + " - Link" };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var linkPath = Path.Combine(CurrentPath, dialog.FolderName);
+            _fileSystemService.CreateSymbolicLink(linkPath, item.FullPath);
+            PushHistory(
+                "Undo Create Link",
+                () => _fileSystemService.DeleteFiles([linkPath], permanentDelete: true),
+                "Redo Create Link",
+                () => _fileSystemService.CreateSymbolicLink(linkPath, item.FullPath));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Create link failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     public FileListViewModel(
         IFileSystemService fileSystemService,
