@@ -97,6 +97,7 @@ public partial class MainViewModel : ObservableObject
     private bool _isRightPaneSuggestionsOpen;
 
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
+    public ObservableCollection<FileSystemItem> Drives { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
@@ -321,12 +322,23 @@ public partial class MainViewModel : ObservableObject
 
     private void LoadDrives()
     {
+        Drives.Clear();
         FolderTreeRoots.Clear();
         var drives = _fileSystemService.GetDrives();
         foreach (var drive in drives)
         {
+            Drives.Add(drive);
             FolderTreeRoots.Add(FolderTreeNodeViewModel.CreateDriveNode(
                 _fileSystemService, drive.Name, drive.FullPath));
+        }
+    }
+
+    [RelayCommand]
+    private void NavigateToDrive(FileSystemItem? drive)
+    {
+        if (drive != null)
+        {
+            NavigateCurrentPaneToPath(drive.FullPath);
         }
     }
 
