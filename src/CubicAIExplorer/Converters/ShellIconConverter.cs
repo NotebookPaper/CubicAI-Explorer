@@ -20,6 +20,7 @@ public sealed class ShellIconConverter : IValueConverter
         {
             FileSystemItem item => IconService.GetIcon(item.FullPath, item.ItemType),
             FolderTreeNodeViewModel node => IconService.GetIcon(node.FullPath, GetTreeNodeType(node.FullPath)),
+            BookmarkItem bookmark => IconService.GetIcon(bookmark.Path, bookmark.IsFolder ? FileSystemItemType.Directory : FileSystemItemType.File),
             string path => IconService.GetIcon(path, Directory.Exists(path) ? FileSystemItemType.Directory : FileSystemItemType.File),
             _ => null
         };

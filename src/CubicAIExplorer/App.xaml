@@ -72,6 +72,7 @@
 
         <converters:FileSizeConverter x:Key="FileSizeConverter" />
         <converters:ShellIconConverter x:Key="ShellIconConverter" />
+        <converters:GridLengthConverter x:Key="GridLengthConverter" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
         <!-- Toolbar Icon Resources (vector, resolution-independent) -->
