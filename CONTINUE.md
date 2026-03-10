@@ -3,15 +3,15 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: `a625885` - `Enhance Edit menu with Duplicate, Copy Path options, New File, Invert Selection and Symbolic Link support`
-> Status: named session manager is implemented locally but not yet committed/pushed from this checkout; tracked worktree also includes planning/history refreshes plus local-only helper folders
+> Status: richer filter/search model is now implemented locally and verified; next roadmap work is view-style and column customization.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
-- Local `master` still tracks GitHub at `a625885`, but this checkout now has uncommitted named-session-manager work on top.
+- Local `master` still tracks GitHub at `a625885`, but this checkout now has uncommitted richer-filter/search work on top.
 - The branch builds and the smoke harness passes again.
-- Spec `001-named-session-manager.md` is now complete in this checkout.
+- Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are now complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
@@ -21,16 +21,21 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - added File > Sessions UI for save-as, update, load, delete, and startup-session selection
   - startup now restores a configured named session before falling back to generic last-state restore
   - smoke coverage now verifies named session save/load/delete/startup behavior
+- Richer filter/search model:
+  - added `Contains`, `Wildcard`, and `Exact` match modes for inline filters and recursive search
+  - saved searches now persist and replay their chosen match mode
+  - filter history now persists through settings and is reusable from the main window
+  - users can opt into clearing inline filters automatically when changing folders
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
 
 ## Next Steps
 
-1. Move to the next roadmap item: richer filter and search model.
-   - add stronger wildcard/strict filter semantics
-   - consider filter history or quick reuse
-   - tighten the relationship between inline filters, recursive search, and saved searches
+1. Move to the next roadmap item: view-style and column customization.
+   - persist column widths/order/visibility
+   - add optional auto-size or richer detail-column behavior where practical
+   - decide whether grouping/arrange-by is worth doing before any thumbs-style work
 2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
    - do not delete the existing target before the incoming transfer succeeds
    - prefer a stage/rename-backup flow so failed replacements preserve the original destination
@@ -45,19 +50,21 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Key Files
 
 - `src/CubicAIExplorer/Models/NamedSession.cs`
+- `src/CubicAIExplorer/Models/NameMatchMode.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/Services/SettingsService.cs`
+- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ## Worktree
 
 Tracked worktree state:
 
-- named session manager implementation and verification updates are local and uncommitted in this checkout
-- planning/history/spec docs were refreshed to mark spec 001 complete
+- richer filter/search implementation and verification updates are local and uncommitted in this checkout
+- planning/history/spec docs were refreshed to mark specs 001 and 002 complete
 
 Untracked local-only paths:
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -59,10 +60,19 @@ public partial class FileListViewModel : ObservableObject
     private string _filterText = string.Empty;
 
     [ObservableProperty]
+    private NameMatchMode _filterMatchMode = NameMatchMode.Contains;
+
+    [ObservableProperty]
+    private bool _clearFilterOnFolderChange;
+
+    [ObservableProperty]
     private bool _isSearchVisible;
 
     [ObservableProperty]
     private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    private NameMatchMode _searchMatchMode = NameMatchMode.Contains;
 
     [ObservableProperty]
     private bool _isShowingSearchResults;
@@ -77,6 +87,8 @@ public partial class FileListViewModel : ObservableObject
     public string FileOperationQueueStatus => _fileOperationQueueService.StatusText;
     public ObservableCollection<FileSystemItem> Items { get; } = [];
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
+    public ObservableCollection<string> FilterHistory { get; } = [];
+    public IReadOnlyList<NameMatchMode> AvailableMatchModes { get; } = Enum.GetValues<NameMatchMode>();
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
@@ -86,11 +98,18 @@ public partial class FileListViewModel : ObservableObject
     public event EventHandler<FileSystemItem>? PropertiesRequested;
     public event EventHandler? SearchPanelOpened;
     public event EventHandler<ArchiveBrowseRequest>? ArchiveBrowseRequested;
+    public event EventHandler<string>? FilterHistoryEntryAdded;
 
     [RelayCommand]
     private void InvertSelection()
     {
         InvertSelectionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private void AddCurrentFilterToHistory()
+    {
+        AddFilterHistoryEntry(FilterText);
     }
 
     [RelayCommand]
@@ -210,6 +229,10 @@ public partial class FileListViewModel : ObservableObject
     public void LoadDirectory(string path)
     {
         if (!_fileSystemService.DirectoryExists(path)) return;
+
+        var pathChanged = !string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase);
+        if (pathChanged && ClearFilterOnFolderChange && !string.IsNullOrWhiteSpace(FilterText))
+            FilterText = string.Empty;
 
         CurrentPath = path;
         Items.Clear();
@@ -515,11 +538,12 @@ public partial class FileListViewModel : ObservableObject
         IsSearching = true;
         var searchTerm = SearchText;
         var searchPath = CurrentPath;
+        var searchMode = SearchMatchMode;
 
         try
         {
             var results = await Task.Run(() =>
-                SearchFilesRecursive(searchPath, searchTerm, ShowHiddenFiles));
+                SearchFilesRecursive(searchPath, searchTerm, searchMode, ShowHiddenFiles));
 
             ApplySearchResults(results, searchTerm);
         }
@@ -542,11 +566,11 @@ public partial class FileListViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(SearchText) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
-        var results = SearchFilesRecursive(CurrentPath, SearchText, ShowHiddenFiles);
+        var results = SearchFilesRecursive(CurrentPath, SearchText, SearchMatchMode, ShowHiddenFiles);
         ApplySearchResults(results, SearchText);
     }
 
-    public void ApplySavedSearch(string searchPath, string searchTerm)
+    public void ApplySavedSearch(string searchPath, string searchTerm, NameMatchMode matchMode = NameMatchMode.Contains)
     {
         if (string.IsNullOrWhiteSpace(searchPath) || string.IsNullOrWhiteSpace(searchTerm))
             return;
@@ -554,9 +578,22 @@ public partial class FileListViewModel : ObservableObject
         if (!string.Equals(CurrentPath, searchPath, StringComparison.OrdinalIgnoreCase))
             LoadDirectory(searchPath);
 
+        SearchMatchMode = matchMode;
         SearchText = searchTerm;
         IsSearchVisible = true;
         ExecuteSearchSync();
+    }
+
+    public void SetFilterHistory(IEnumerable<string> entries)
+    {
+        FilterHistory.Clear();
+        foreach (var entry in entries
+                     .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+                     .Select(static entry => entry.Trim())
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            FilterHistory.Add(entry);
+        }
     }
 
     public static bool IsArchiveItem(FileSystemItem? item)
@@ -682,7 +719,7 @@ public partial class FileListViewModel : ObservableObject
         LoadDirectory(CurrentPath);
     }
 
-    private List<FileSystemItem> SearchFilesRecursive(string rootPath, string searchTerm, bool showHidden)
+    private List<FileSystemItem> SearchFilesRecursive(string rootPath, string searchTerm, NameMatchMode matchMode, bool showHidden)
     {
         var results = new List<FileSystemItem>();
         var stack = new Stack<string>();
@@ -701,7 +738,7 @@ public partial class FileListViewModel : ObservableObject
                     if (!showHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (file.Attributes.HasFlag(FileAttributes.System)) continue;
 
-                    if (file.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    if (IsNameMatch(file.Name, searchTerm, matchMode))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -722,7 +759,7 @@ public partial class FileListViewModel : ObservableObject
                     if (!showHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (dir.Attributes.HasFlag(FileAttributes.System)) continue;
 
-                    if (dir.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    if (IsNameMatch(dir.Name, searchTerm, matchMode))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -771,7 +808,7 @@ public partial class FileListViewModel : ObservableObject
         Items.Clear();
         var filtered = string.IsNullOrWhiteSpace(FilterText)
             ? _allItems
-            : _allItems.Where(i => i.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase)).ToList();
+            : _allItems.Where(i => IsNameMatch(i.Name, FilterText, FilterMatchMode)).ToList();
 
         foreach (var item in filtered)
             Items.Add(item);
@@ -814,6 +851,46 @@ public partial class FileListViewModel : ObservableObject
         < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
         _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
     };
+
+    private void AddFilterHistoryEntry(string? entry)
+    {
+        var normalized = entry?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        for (var i = FilterHistory.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(FilterHistory[i], normalized, StringComparison.OrdinalIgnoreCase))
+                FilterHistory.RemoveAt(i);
+        }
+
+        FilterHistory.Insert(0, normalized);
+        while (FilterHistory.Count > 15)
+            FilterHistory.RemoveAt(FilterHistory.Count - 1);
+
+        FilterHistoryEntryAdded?.Invoke(this, normalized);
+    }
+
+    private static bool IsNameMatch(string candidate, string pattern, NameMatchMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return true;
+
+        return mode switch
+        {
+            NameMatchMode.Exact => string.Equals(candidate, pattern, StringComparison.OrdinalIgnoreCase),
+            NameMatchMode.Wildcard => IsWildcardMatch(candidate, pattern),
+            _ => candidate.Contains(pattern, StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    private static bool IsWildcardMatch(string candidate, string pattern)
+    {
+        var regexPattern = "^" + Regex.Escape(pattern.Trim())
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+        return Regex.IsMatch(candidate, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
 
     private List<string> GetSelectedPaths()
     {

@@ -286,7 +286,12 @@ public partial class MainViewModel : ObservableObject
             PreviewWidth = newSettings.PreviewWidth;
             _userSettings.NamedSessions = newSettings.NamedSessions ?? [];
             _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
+            _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
+            _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
+            _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
+            _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
             RefreshNamedSessionsFromSettings();
+            ApplyFilterPreferencesToAllTabs();
             if (!string.IsNullOrWhiteSpace(CurrentNamedSessionName)
                 && FindNamedSession(CurrentNamedSessionName) == null)
             {
@@ -526,12 +531,15 @@ public partial class MainViewModel : ObservableObject
 
     private void AttachTab(TabViewModel tab)
     {
+        ApplyFilterPreferences(tab.FileList);
+        tab.FileList.FilterHistoryEntryAdded += OnFilterHistoryEntryAdded;
         tab.PropertyChanged += OnTabPropertyChanged;
         tab.FileList.PropertyChanged += OnFileListPropertyChanged;
     }
 
     private void DetachTab(TabViewModel tab)
     {
+        tab.FileList.FilterHistoryEntryAdded -= OnFilterHistoryEntryAdded;
         tab.PropertyChanged -= OnTabPropertyChanged;
         tab.FileList.PropertyChanged -= OnFileListPropertyChanged;
     }
@@ -570,6 +578,15 @@ public partial class MainViewModel : ObservableObject
             case nameof(FileListViewModel.StatusText):
                 StatusText = fileList.StatusText;
                 RaiseCurrentPaneCommandProperties();
+                break;
+            case nameof(FileListViewModel.FilterMatchMode):
+                UpdateFilterPreferences(fileList.FilterMatchMode, fileList.SearchMatchMode, fileList.ClearFilterOnFolderChange);
+                break;
+            case nameof(FileListViewModel.SearchMatchMode):
+                UpdateFilterPreferences(fileList.FilterMatchMode, fileList.SearchMatchMode, fileList.ClearFilterOnFolderChange);
+                break;
+            case nameof(FileListViewModel.ClearFilterOnFolderChange):
+                UpdateFilterPreferences(fileList.FilterMatchMode, fileList.SearchMatchMode, fileList.ClearFilterOnFolderChange);
                 break;
             case nameof(FileListViewModel.SelectedItem):
             case nameof(FileListViewModel.CurrentPath):
@@ -612,6 +629,75 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedOperationText));
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedStatusText));
         }
+    }
+
+    private void OnFilterHistoryEntryAdded(object? sender, string entry)
+    {
+        var normalized = entry.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        var history = GetFilterHistorySnapshot();
+        history.RemoveAll(existing => string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase));
+        history.Insert(0, normalized);
+        while (history.Count > 15)
+            history.RemoveAt(history.Count - 1);
+
+        _userSettings.FilterHistory = history;
+        ApplyFilterHistoryToAllTabs(history);
+        SaveSettings();
+    }
+
+    private void ApplyFilterPreferences(FileListViewModel fileList)
+    {
+        fileList.FilterMatchMode = _userSettings.FilterMatchMode;
+        fileList.SearchMatchMode = _userSettings.SearchMatchMode;
+        fileList.ClearFilterOnFolderChange = _userSettings.ClearFilterOnFolderChange;
+        fileList.SetFilterHistory(_userSettings.FilterHistory ?? []);
+    }
+
+    private void ApplyFilterPreferencesToAllTabs()
+    {
+        foreach (var tab in Tabs)
+            ApplyFilterPreferences(tab.FileList);
+
+        if (_rightPaneTab != null)
+            ApplyFilterPreferences(_rightPaneTab.FileList);
+    }
+
+    private void ApplyFilterHistoryToAllTabs(IReadOnlyCollection<string> history)
+    {
+        foreach (var tab in Tabs)
+            tab.FileList.SetFilterHistory(history);
+
+        _rightPaneTab?.FileList.SetFilterHistory(history);
+    }
+
+    private void UpdateFilterPreferences(NameMatchMode filterMatchMode, NameMatchMode searchMatchMode, bool clearFilterOnFolderChange)
+    {
+        var changed = _userSettings.FilterMatchMode != filterMatchMode
+            || _userSettings.SearchMatchMode != searchMatchMode
+            || _userSettings.ClearFilterOnFolderChange != clearFilterOnFolderChange;
+        if (!changed)
+            return;
+
+        _userSettings.FilterMatchMode = filterMatchMode;
+        _userSettings.SearchMatchMode = searchMatchMode;
+        _userSettings.ClearFilterOnFolderChange = clearFilterOnFolderChange;
+        ApplyFilterPreferencesToAllTabs();
+        SaveSettings();
+    }
+
+    private List<string> GetFilterHistorySnapshot()
+    {
+        if (_rightPaneTab?.FileList.FilterHistory.Count > 0)
+            return _rightPaneTab.FileList.FilterHistory.ToList();
+
+        var source = Tabs.Select(static tab => tab.FileList)
+            .FirstOrDefault(static fileList => fileList.FilterHistory.Count > 0)
+            ?? CurrentPaneFileList;
+
+        return source?.FilterHistory.ToList() ?? (_userSettings.FilterHistory ?? []);
     }
 
     private void RefreshCurrentPaneState()
@@ -1018,7 +1104,8 @@ public partial class MainViewModel : ObservableObject
         var name = $"{GetDisplayName(CurrentPanePath)}: {searchTerm}";
         var existing = SavedSearches.FirstOrDefault(saved =>
             string.Equals(saved.SearchPath, CurrentPanePath, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(saved.SearchTerm, searchTerm, StringComparison.OrdinalIgnoreCase));
+            && string.Equals(saved.SearchTerm, searchTerm, StringComparison.OrdinalIgnoreCase)
+            && saved.MatchMode == fileList.SearchMatchMode);
         if (existing != null)
         {
             SelectedSavedSearch = existing;
@@ -1029,7 +1116,8 @@ public partial class MainViewModel : ObservableObject
         {
             Name = name,
             SearchPath = CurrentPanePath,
-            SearchTerm = searchTerm
+            SearchTerm = searchTerm,
+            MatchMode = fileList.SearchMatchMode
         };
         SavedSearches.Insert(0, item);
         SelectedSavedSearch = item;
@@ -1070,7 +1158,7 @@ public partial class MainViewModel : ObservableObject
             return;
 
         NavigateCurrentPaneToPath(savedSearch.SearchPath);
-        CurrentPaneFileList?.ApplySavedSearch(savedSearch.SearchPath, savedSearch.SearchTerm);
+        CurrentPaneFileList?.ApplySavedSearch(savedSearch.SearchPath, savedSearch.SearchTerm, savedSearch.MatchMode);
     }
 
     [RelayCommand]
@@ -1693,7 +1781,13 @@ public partial class MainViewModel : ObservableObject
     }
 
     private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
-    private sealed record SavedSearchRecord(string Name, string Path, string Term);
+    private sealed class SavedSearchRecord
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string Term { get; set; } = string.Empty;
+        public NameMatchMode MatchMode { get; set; } = NameMatchMode.Contains;
+    }
 
     // --- Dual Pane ---
 
@@ -1751,6 +1845,11 @@ public partial class MainViewModel : ObservableObject
         _userSettings.StartupFolder = newSettings.StartupFolder;
         _userSettings.StartInDualPane = newSettings.StartInDualPane;
         _userSettings.StartWithPreview = newSettings.StartWithPreview;
+        _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
+        _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
+        _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
+        _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
+        ApplyFilterPreferencesToAllTabs();
         _settingsService?.Save(_userSettings);
     }
 
@@ -2471,7 +2570,8 @@ public partial class MainViewModel : ObservableObject
                 {
                     Name = string.IsNullOrWhiteSpace(savedSearch.Name) ? savedSearch.Term : savedSearch.Name,
                     SearchPath = savedSearch.Path,
-                    SearchTerm = savedSearch.Term
+                    SearchTerm = savedSearch.Term,
+                    MatchMode = savedSearch.MatchMode
                 });
             }
         }
@@ -2491,7 +2591,13 @@ public partial class MainViewModel : ObservableObject
                 Directory.CreateDirectory(dir);
 
             var payload = SavedSearches
-                .Select(static s => new SavedSearchRecord(s.Name, s.SearchPath, s.SearchTerm))
+                .Select(static s => new SavedSearchRecord
+                {
+                    Name = s.Name,
+                    Path = s.SearchPath,
+                    Term = s.SearchTerm,
+                    MatchMode = s.MatchMode
+                })
                 .ToList();
             File.WriteAllText(path, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
         }
@@ -2523,6 +2629,7 @@ public partial class MainViewModel : ObservableObject
         }
         _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;
         _userSettings.NamedSessions = NamedSessions.Select(CloneNamedSession).ToList();
+        _userSettings.FilterHistory = GetFilterHistorySnapshot();
         _settingsService?.Save(_userSettings);
     }
 

@@ -49,6 +49,8 @@ internal static class Program
             Run("selection status text", failures, () => TestSelectionStatus(tempRoot));
             Run("transfer status summary", failures, () => TestTransferStatusSummary(tempRoot));
             Run("filter text", failures, () => TestFilterText(tempRoot));
+            Run("filter match modes", failures, () => TestFilterMatchModes(tempRoot));
+            Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
             Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
@@ -56,8 +58,10 @@ internal static class Program
             Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
+            Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("saved searches", failures, () => TestSavedSearches(tempRoot));
+            Run("saved search match mode", failures, () => TestSavedSearchMatchMode(tempRoot));
             Run("rename saved search", failures, () => TestRenameSavedSearch(tempRoot));
             Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
             Run("active pane command routing", failures, () => TestActivePaneCommandRouting(tempRoot));
@@ -804,6 +808,53 @@ internal static class Program
         Assert(vm.Items.Count == 3, "Clearing filter should show all files.");
     }
 
+    private static void TestFilterMatchModes(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "filter_modes");
+        File.WriteAllText(Path.Combine(folder, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "alphabet.txt"), "b");
+        File.WriteAllText(Path.Combine(folder, "beta.log"), "c");
+
+        vm.LoadDirectory(folder);
+
+        vm.FilterMatchMode = NameMatchMode.Exact;
+        vm.FilterText = "alpha.txt";
+        Assert(vm.Items.Count == 1, "Exact filter should only match the exact file name.");
+
+        vm.FilterMatchMode = NameMatchMode.Wildcard;
+        vm.FilterText = "alpha*";
+        Assert(vm.Items.Count == 2, "Wildcard filter should match both alpha-prefixed files.");
+
+        vm.FilterText = "*.log";
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "beta.log", "Wildcard extension filter should match log files.");
+    }
+
+    private static void TestFilterHistoryAndClearOnNavigation(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var first = CreateCleanSubdir(root, "filter_history_first");
+        var second = CreateCleanSubdir(root, "filter_history_second");
+        File.WriteAllText(Path.Combine(first, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(second, "beta.txt"), "b");
+
+        vm.LoadDirectory(first);
+        vm.FilterText = "alpha";
+        vm.AddCurrentFilterToHistoryCommand.Execute(null);
+
+        Assert(vm.FilterHistory.Count == 1, "Saving a filter should add it to history.");
+        Assert(vm.FilterHistory[0] == "alpha", "Saved filter history should preserve the current text.");
+
+        vm.ClearFilterOnFolderChange = true;
+        vm.LoadDirectory(second);
+
+        Assert(string.IsNullOrEmpty(vm.FilterText), "Folder navigation should clear the filter when the option is enabled.");
+    }
+
     private static void TestPropertiesCommand(string root)
     {
         var fs = new FileSystemService();
@@ -972,6 +1023,30 @@ internal static class Program
         Assert(vm.SearchResultsText.Contains("match"), "Search results text should contain query.");
     }
 
+    private static void TestSearchMatchModes(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "search_modes");
+        File.WriteAllText(Path.Combine(folder, "report.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "report-final.txt"), "b");
+        File.WriteAllText(Path.Combine(folder, "report.log"), "c");
+
+        vm.LoadDirectory(folder);
+        vm.SearchInFolderCommand.Execute(null);
+
+        vm.SearchMatchMode = NameMatchMode.Exact;
+        vm.SearchText = "report.txt";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "report.txt", "Exact search mode should only match the exact file name.");
+
+        vm.SearchMatchMode = NameMatchMode.Wildcard;
+        vm.SearchText = "report*";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 3, "Wildcard search mode should match all report-prefixed items.");
+    }
+
     private static void TestSearchCloseAndClear(string root)
     {
         var fs = new FileSystemService();
@@ -1030,6 +1105,51 @@ internal static class Program
 
             Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved search should show search results.");
             Assert(reloaded.CurrentPaneFileList.Items.Any(i => i.Name == "needle-folder"), "Running a saved search should reproduce results.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", null);
+        }
+    }
+
+    private static void TestSavedSearchMatchMode(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "saved_search_match_mode_root");
+        File.WriteAllText(Path.Combine(folder, "report.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "report-final.txt"), "b");
+        File.WriteAllText(Path.Combine(folder, "notes.log"), "c");
+        var savedSearchesPath = Path.Combine(root, "saved-searches-match-mode.json");
+        Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", savedSearchesPath);
+        TryDelete(savedSearchesPath);
+
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
+            vm.SearchInFolderCommand.Execute(null);
+            vm.CurrentPaneFileList!.SearchMatchMode = NameMatchMode.Wildcard;
+            vm.CurrentPaneFileList.SearchText = "report*";
+            vm.CurrentPaneFileList.ExecuteSearchSync();
+
+            vm.AddCurrentSearchCommand.Execute(null);
+
+            Assert(vm.SavedSearches.Count == 1, "Saving a wildcard search should create one saved-search entry.");
+            Assert(vm.SavedSearches[0].MatchMode == NameMatchMode.Wildcard, "Saved searches should persist their match mode.");
+
+            var reloaded = new MainViewModel(fs, clipboard);
+            reloaded.NewTabCommand.Execute(null);
+            var saved = reloaded.SavedSearches[0];
+
+            Assert(saved.MatchMode == NameMatchMode.Wildcard, "Reloaded saved searches should retain wildcard mode.");
+
+            reloaded.NavigateToPath(folder);
+            reloaded.RunSavedSearchCommand.Execute(saved);
+
+            Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved search should still show search results.");
+            Assert(reloaded.CurrentPaneFileList.Items.Count == 2, "Running a wildcard saved search should reproduce wildcard results.");
         }
         finally
         {
@@ -1520,6 +1640,10 @@ internal static class Program
         Assert(string.IsNullOrEmpty(settings.StartupFolder), "Startup folder should default to empty.");
         Assert(!settings.StartInDualPane, "Dual-pane startup should be off by default.");
         Assert(!settings.StartWithPreview, "Preview startup should be off by default.");
+        Assert(settings.FilterMatchMode == NameMatchMode.Contains, "Filter mode should default to contains.");
+        Assert(settings.SearchMatchMode == NameMatchMode.Contains, "Search mode should default to contains.");
+        Assert(!settings.ClearFilterOnFolderChange, "Clear-on-navigation should be off by default.");
+        Assert(settings.FilterHistory.Count == 0, "Filter history should default to empty.");
     }
 
     private static void TestSettingsServiceRoundTrip(string root)
@@ -1542,6 +1666,10 @@ internal static class Program
                 StartupFolder = root,
                 StartInDualPane = true,
                 StartWithPreview = true,
+                FilterMatchMode = NameMatchMode.Wildcard,
+                SearchMatchMode = NameMatchMode.Exact,
+                ClearFilterOnFolderChange = true,
+                FilterHistory = ["*.txt", "report*"],
                 StartupSessionName = "Morning",
                 NamedSessions =
                 [
@@ -1564,6 +1692,10 @@ internal static class Program
             Assert(reloaded.StartupFolder == root, "Settings round-trip should persist startup folder.");
             Assert(reloaded.StartInDualPane, "Settings round-trip should persist dual-pane startup.");
             Assert(reloaded.StartWithPreview, "Settings round-trip should persist preview startup.");
+            Assert(reloaded.FilterMatchMode == NameMatchMode.Wildcard, "Settings round-trip should persist filter match mode.");
+            Assert(reloaded.SearchMatchMode == NameMatchMode.Exact, "Settings round-trip should persist search match mode.");
+            Assert(reloaded.ClearFilterOnFolderChange, "Settings round-trip should persist clear-on-navigation.");
+            Assert(reloaded.FilterHistory.Count == 2, "Settings round-trip should persist filter history.");
             Assert(reloaded.StartupSessionName == "Morning", "Settings round-trip should persist startup session.");
             Assert(reloaded.NamedSessions.Count == 1, "Settings round-trip should persist named sessions.");
             Assert(reloaded.NamedSessions[0].IsDualPaneMode, "Settings round-trip should persist dual-pane session state.");
@@ -1585,7 +1717,11 @@ internal static class Program
         {
             DefaultViewMode = "Tiles",
             ShowHiddenFiles = true,
-            StartupFolder = startupFolder
+            StartupFolder = startupFolder,
+            FilterMatchMode = NameMatchMode.Wildcard,
+            SearchMatchMode = NameMatchMode.Exact,
+            ClearFilterOnFolderChange = true,
+            FilterHistory = ["*.txt"]
         };
 
         var vm = new MainViewModel(fs, clipboard, userSettings: settings);
@@ -1595,6 +1731,10 @@ internal static class Program
         Assert(vm.ActiveTab!.CurrentPath == startupFolder, "Startup folder setting should control first tab path.");
         Assert(vm.ActiveTab.FileList.ViewMode == "Tiles", "Default view mode setting should apply to new tabs.");
         Assert(vm.ActiveTab.FileList.ShowHiddenFiles, "ShowHiddenFiles setting should apply to new tabs.");
+        Assert(vm.ActiveTab.FileList.FilterMatchMode == NameMatchMode.Wildcard, "Filter mode setting should apply to new tabs.");
+        Assert(vm.ActiveTab.FileList.SearchMatchMode == NameMatchMode.Exact, "Search mode setting should apply to new tabs.");
+        Assert(vm.ActiveTab.FileList.ClearFilterOnFolderChange, "Clear-on-navigation should apply to new tabs.");
+        Assert(vm.ActiveTab.FileList.FilterHistory.SequenceEqual(["*.txt"]), "Filter history should apply to new tabs.");
     }
 
     private static void TestNamedSessionSave(string root)
@@ -1776,6 +1916,10 @@ internal static class Program
         Assert(app.Contains("ListViewItemTemplate"), "List view template should be in resources.");
         Assert(app.Contains("TileViewItemTemplate"), "Tile view template should be in resources.");
         Assert(main.Contains("FilterTextBox"), "Filter text box should be in MainWindow.");
+        Assert(main.Contains("AddCurrentFilterToHistoryCommand"), "Filter history save command should be wired.");
+        Assert(main.Contains("CurrentPaneFileList.FilterHistory"), "Filter history dropdown should bind to the active pane.");
+        Assert(main.Contains("CurrentPaneFileList.FilterMatchMode"), "Filter mode selector should bind to the active pane.");
+        Assert(main.Contains("CurrentPaneFileList.ClearFilterOnFolderChange"), "Clear-on-navigation toggle should bind to the active pane.");
         Assert(main.Contains("PropertiesMenuItem"), "Properties menu item should be in context menu.");
         Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
         Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
@@ -1791,6 +1935,7 @@ internal static class Program
         Assert(main.Contains("BookmarkTree_MouseMove"), "Bookmark drag/drop handler should be wired.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
+        Assert(main.Contains("CurrentPaneFileList.SearchMatchMode"), "Search mode selector should bind to the active pane.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
         Assert(main.Contains("AddCurrentSearchCommand"), "Saved-search add command should exist.");
         Assert(main.Contains("RenameSavedSearchCommand"), "Saved-search rename command should exist.");

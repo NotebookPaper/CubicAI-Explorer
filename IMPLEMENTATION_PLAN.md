@@ -39,6 +39,23 @@ Primary files:
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### Richer filter and search model
+
+- added explicit `Contains`, `Wildcard`, and `Exact` match modes for inline filter and recursive search workflows
+- saved searches now persist their selected match mode and replay with the same semantics
+- filter history is reusable from the main window and persisted in existing settings
+- users can opt into clearing inline filters automatically when navigating to a different folder
+
+Primary files:
+
+- `src/CubicAIExplorer/Models/NameMatchMode.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Edit menu and advanced operations
 
 - added full original CubicExplorer Edit menu parity
@@ -107,28 +124,7 @@ Smoke coverage explicitly includes:
 
 The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
 
-### 1. Richer filter and search model
-
-Why this matters:
-
-- the original exposed filtering as a stronger first-class workflow, including stricter filter behavior and filter-history style affordances
-- the current rewrite has good basics, but it still feels lighter than CubicExplorer in day-to-day file-list narrowing
-
-Scope:
-
-- add wildcard/strict filter mode and clearer filter semantics
-- consider separate filename mask vs free-text search modes
-- add filter history / quick reuse and optional "clear filter on folder change" behavior
-- improve search result UX so saved searches, recursive search, and inline filters feel like one coherent system
-
-Likely files:
-
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
-### 2. View-style and column customization
+### 1. View-style and column customization
 
 Why this matters:
 
@@ -149,7 +145,7 @@ Likely files:
 - `src/CubicAIExplorer/Models/UserSettings.cs`
 - `src/CubicAIExplorer/Services/FileSystemService.cs`
 
-### 3. Tab-management parity
+### 2. Tab-management parity
 
 Why this matters:
 
@@ -169,7 +165,7 @@ Likely files:
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
-### 4. Deeper shell integration
+### 3. Deeper shell integration
 
 Why this matters:
 

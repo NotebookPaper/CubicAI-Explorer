@@ -17,6 +17,10 @@ public sealed class UserSettings
     public bool ShowRecentFolders { get; set; } = true;
     public bool ShowBookmarks { get; set; } = true;
     public bool ShowSavedSearches { get; set; } = true;
+    public NameMatchMode FilterMatchMode { get; set; } = NameMatchMode.Contains;
+    public NameMatchMode SearchMatchMode { get; set; } = NameMatchMode.Contains;
+    public bool ClearFilterOnFolderChange { get; set; }
+    public List<string> FilterHistory { get; set; } = [];
 
     // Window State
     public double SidebarWidth { get; set; } = 250;
