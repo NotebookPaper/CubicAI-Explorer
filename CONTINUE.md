@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: `a625885` - `Enhance Edit menu with Duplicate, Copy Path options, New File, Invert Selection and Symbolic Link support`
-> Status: richer filter/search model is now implemented locally and verified; next roadmap work is view-style and column customization.
+> Status: persistent details-column customization is now implemented locally and verified; next roadmap work is tab-management parity.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -11,7 +11,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - Local `master` still tracks GitHub at `a625885`, but this checkout now has uncommitted richer-filter/search work on top.
 - The branch builds and the smoke harness passes again.
-- Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are now complete in this checkout.
+- Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are complete in this checkout.
+- The next completed roadmap slice after those specs is persistent details-column customization for the details view.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
@@ -26,16 +27,21 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - saved searches now persist and replay their chosen match mode
   - filter history now persists through settings and is reusable from the main window
   - users can opt into clearing inline filters automatically when changing folders
+- Details-column customization:
+  - added persisted details-column settings for width, visibility, and order in `UserSettings`
+  - the View menu now exposes column show/hide, move-left/right, auto-size, and reset actions
+  - both panes rebuild the details view from the saved layout so settings survive restart and view-mode switches
+  - smoke coverage now verifies column-layout defaults, normalized saves, and settings-service round-trip persistence
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
 
 ## Next Steps
 
-1. Move to the next roadmap item: view-style and column customization.
-   - persist column widths/order/visibility
-   - add optional auto-size or richer detail-column behavior where practical
-   - decide whether grouping/arrange-by is worth doing before any thumbs-style work
+1. Move to the next roadmap item: tab-management parity.
+   - add close tabs on left / right
+   - decide whether to reuse already-open tabs for navigation instead of duplicating
+   - evaluate whether tab overflow or a more-tabs affordance is needed once command parity lands
 2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
    - do not delete the existing target before the incoming transfer succeeds
    - prefer a stage/rename-backup flow so failed replacements preserve the original destination
@@ -49,6 +55,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Key Files
 
+- `src/CubicAIExplorer/Models/DetailsColumnId.cs`
+- `src/CubicAIExplorer/Models/DetailsColumnSetting.cs`
 - `src/CubicAIExplorer/Models/NamedSession.cs`
 - `src/CubicAIExplorer/Models/NameMatchMode.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`

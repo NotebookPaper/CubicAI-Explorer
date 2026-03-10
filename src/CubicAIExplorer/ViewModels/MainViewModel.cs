@@ -176,6 +176,7 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler<FileSystemItem>? BookmarkPropertiesRequested;
 
     public Models.UserSettings CurrentSettings => _userSettings;
+    public IReadOnlyList<DetailsColumnSetting> DetailsColumnSettings => _userSettings.DetailsColumns;
 
     private const int MaxRecentFolders = 15;
 
@@ -290,8 +291,10 @@ public partial class MainViewModel : ObservableObject
             _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
             _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
             _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
+            _userSettings.DetailsColumns = CloneDetailsColumnSettings(newSettings.DetailsColumns);
             RefreshNamedSessionsFromSettings();
             ApplyFilterPreferencesToAllTabs();
+            OnPropertyChanged(nameof(DetailsColumnSettings));
             if (!string.IsNullOrWhiteSpace(CurrentNamedSessionName)
                 && FindNamedSession(CurrentNamedSessionName) == null)
             {
@@ -671,6 +674,83 @@ public partial class MainViewModel : ObservableObject
             tab.FileList.SetFilterHistory(history);
 
         _rightPaneTab?.FileList.SetFilterHistory(history);
+    }
+
+    public IReadOnlyList<DetailsColumnSetting> GetDetailsColumnSettings()
+    {
+        var settings = CloneDetailsColumnSettings(_userSettings.DetailsColumns);
+        if (settings.Count == 0)
+            settings = CreateDefaultDetailsColumnSettings();
+
+        return settings
+            .OrderBy(static setting => setting.DisplayOrder)
+            .ToList();
+    }
+
+    public void SaveDetailsColumnSettings(IEnumerable<DetailsColumnSetting> settings)
+    {
+        _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(settings);
+        OnPropertyChanged(nameof(DetailsColumnSettings));
+        SaveSettings();
+    }
+
+    private static List<DetailsColumnSetting> CreateDefaultDetailsColumnSettings()
+    {
+        return
+        [
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Name, Width = 350, IsVisible = true, DisplayOrder = 0 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Size, Width = 100, IsVisible = true, DisplayOrder = 1 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Type, Width = 120, IsVisible = true, DisplayOrder = 2 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.DateModified, Width = 160, IsVisible = true, DisplayOrder = 3 }
+        ];
+    }
+
+    private static List<DetailsColumnSetting> CloneDetailsColumnSettings(IEnumerable<DetailsColumnSetting>? settings)
+    {
+        return (settings ?? [])
+            .Select(static setting => new DetailsColumnSetting
+            {
+                ColumnId = setting.ColumnId,
+                Width = setting.Width,
+                IsVisible = setting.IsVisible,
+                DisplayOrder = setting.DisplayOrder
+            })
+            .ToList();
+    }
+
+    private static List<DetailsColumnSetting> NormalizeDetailsColumnSettings(IEnumerable<DetailsColumnSetting>? settings)
+    {
+        var incoming = CloneDetailsColumnSettings(settings);
+        var defaults = CreateDefaultDetailsColumnSettings();
+        var byId = incoming
+            .GroupBy(static setting => setting.ColumnId)
+            .ToDictionary(static group => group.Key, static group => group.First());
+
+        var normalized = new List<DetailsColumnSetting>(defaults.Count);
+        for (var i = 0; i < defaults.Count; i++)
+        {
+            var fallback = defaults[i];
+            if (!byId.TryGetValue(fallback.ColumnId, out var candidate))
+                candidate = fallback;
+
+            normalized.Add(new DetailsColumnSetting
+            {
+                ColumnId = fallback.ColumnId,
+                Width = candidate.Width > 24 ? candidate.Width : fallback.Width,
+                IsVisible = candidate.IsVisible,
+                DisplayOrder = candidate.DisplayOrder
+            });
+        }
+
+        var ordered = normalized
+            .OrderBy(static setting => setting.DisplayOrder)
+            .ThenBy(static setting => setting.ColumnId)
+            .ToList();
+
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].DisplayOrder = i;
+
+        return ordered;
     }
 
     private void UpdateFilterPreferences(NameMatchMode filterMatchMode, NameMatchMode searchMatchMode, bool clearFilterOnFolderChange)
@@ -1849,7 +1929,9 @@ public partial class MainViewModel : ObservableObject
         _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
         _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
         _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
+        _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(newSettings.DetailsColumns);
         ApplyFilterPreferencesToAllTabs();
+        OnPropertyChanged(nameof(DetailsColumnSettings));
         _settingsService?.Save(_userSettings);
     }
 
@@ -2630,6 +2712,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;
         _userSettings.NamedSessions = NamedSessions.Select(CloneNamedSession).ToList();
         _userSettings.FilterHistory = GetFilterHistorySnapshot();
+        _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(_userSettings.DetailsColumns);
         _settingsService?.Save(_userSettings);
     }
 

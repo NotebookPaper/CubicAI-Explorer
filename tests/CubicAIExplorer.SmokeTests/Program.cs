@@ -79,6 +79,8 @@ internal static class Program
             Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
             Run("user settings defaults", failures, TestUserSettingsDefaults);
             Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
+            Run("details column defaults", failures, TestDetailsColumnDefaults);
+            Run("details column settings save", failures, TestDetailsColumnSettingsSave);
             Run("named session save", failures, () => TestNamedSessionSave(tempRoot));
             Run("named session load", failures, () => TestNamedSessionLoad(tempRoot));
             Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
@@ -1644,6 +1646,7 @@ internal static class Program
         Assert(settings.SearchMatchMode == NameMatchMode.Contains, "Search mode should default to contains.");
         Assert(!settings.ClearFilterOnFolderChange, "Clear-on-navigation should be off by default.");
         Assert(settings.FilterHistory.Count == 0, "Filter history should default to empty.");
+        Assert(settings.DetailsColumns.Count == 0, "Column settings should default to empty so the app can supply defaults.");
     }
 
     private static void TestSettingsServiceRoundTrip(string root)
@@ -1682,6 +1685,24 @@ internal static class Program
                         IsDualPaneMode = true
                     }
                 ]
+                ,
+                DetailsColumns =
+                [
+                    new DetailsColumnSetting
+                    {
+                        ColumnId = DetailsColumnId.Name,
+                        Width = 420,
+                        IsVisible = true,
+                        DisplayOrder = 1
+                    },
+                    new DetailsColumnSetting
+                    {
+                        ColumnId = DetailsColumnId.Size,
+                        Width = 90,
+                        IsVisible = false,
+                        DisplayOrder = 0
+                    }
+                ]
             };
 
             service.Save(expected);
@@ -1699,12 +1720,67 @@ internal static class Program
             Assert(reloaded.StartupSessionName == "Morning", "Settings round-trip should persist startup session.");
             Assert(reloaded.NamedSessions.Count == 1, "Settings round-trip should persist named sessions.");
             Assert(reloaded.NamedSessions[0].IsDualPaneMode, "Settings round-trip should persist dual-pane session state.");
+            Assert(reloaded.DetailsColumns.Count == 2, "Settings round-trip should persist details column settings.");
+            Assert(reloaded.DetailsColumns.Any(c => c.ColumnId == DetailsColumnId.Name && c.Width == 420),
+                "Settings round-trip should preserve details column widths.");
+            Assert(reloaded.DetailsColumns.Any(c => c.ColumnId == DetailsColumnId.Size && !c.IsVisible),
+                "Settings round-trip should preserve details column visibility.");
         }
         finally
         {
             Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
             TryDelete(settingsPath);
         }
+    }
+
+    private static void TestDetailsColumnDefaults()
+    {
+        var vm = new MainViewModel(new FileSystemService(), new FakeClipboardService());
+        var settings = vm.GetDetailsColumnSettings().ToList();
+
+        Assert(settings.Count == 4, "Default details layout should expose all four columns.");
+        Assert(settings.All(static setting => setting.IsVisible), "Default details layout should show all columns.");
+        Assert(settings.Select(static setting => setting.ColumnId).SequenceEqual(
+            [DetailsColumnId.Name, DetailsColumnId.Size, DetailsColumnId.Type, DetailsColumnId.DateModified]),
+            "Default details layout should preserve the expected column order.");
+    }
+
+    private static void TestDetailsColumnSettingsSave()
+    {
+        var vm = new MainViewModel(new FileSystemService(), new FakeClipboardService());
+        vm.SaveDetailsColumnSettings(
+        [
+            new DetailsColumnSetting
+            {
+                ColumnId = DetailsColumnId.Type,
+                Width = 180,
+                IsVisible = true,
+                DisplayOrder = 0
+            },
+            new DetailsColumnSetting
+            {
+                ColumnId = DetailsColumnId.Name,
+                Width = 400,
+                IsVisible = true,
+                DisplayOrder = 1
+            },
+            new DetailsColumnSetting
+            {
+                ColumnId = DetailsColumnId.Size,
+                Width = 80,
+                IsVisible = false,
+                DisplayOrder = 2
+            }
+        ]);
+
+        var saved = vm.GetDetailsColumnSettings().ToList();
+        Assert(saved.Count == 4, "Saved details layout should normalize missing columns.");
+        Assert(saved[0].ColumnId == DetailsColumnId.Type, "Saved details layout should preserve custom order.");
+        Assert(saved[1].ColumnId == DetailsColumnId.Name, "Saved details layout should preserve subsequent column order.");
+        Assert(saved.Any(c => c.ColumnId == DetailsColumnId.Size && !c.IsVisible),
+            "Saved details layout should preserve hidden columns.");
+        Assert(saved.Any(c => c.ColumnId == DetailsColumnId.DateModified),
+            "Saved details layout should reintroduce unspecified columns with defaults.");
     }
 
     private static void TestNewTabAppliesSettings(string root)
@@ -1955,6 +2031,10 @@ internal static class Program
         Assert(main.Contains("CurrentPaneLabel"), "Status bar should include the current pane label.");
         Assert(main.Contains("CurrentPaneLabel, Mode=OneWay"), "CurrentPaneLabel should be OneWay-bound (read-only source).");
         Assert(main.Contains("CurrentPanePath, Mode=OneWay"), "CurrentPanePath should be OneWay-bound (read-only source).");
+        Assert(main.Contains("Header=\"_Columns\""), "View menu should expose details column customization.");
+        Assert(main.Contains("DetailsColumnVisibility_Click"), "Column visibility toggles should be wired.");
+        Assert(main.Contains("AutoSizeVisibleColumns_Click"), "Auto-size columns action should be wired.");
+        Assert(main.Contains("ResetDetailsColumns_Click"), "Reset columns action should be wired.");
         Assert(main.Contains("LeftPaneStatusText, Mode=OneWay"), "LeftPaneStatusText should be OneWay-bound (read-only source).");
         Assert(main.Contains("RightPaneStatusText, Mode=OneWay"), "RightPaneStatusText should be OneWay-bound (read-only source).");
         Assert(main.Contains("RightPaneHeader_MouseLeftButtonDown"), "Right pane header activation should be wired.");

@@ -2,6 +2,7 @@ namespace CubicAIExplorer.Models;
 
 public sealed class UserSettings
 {
+    public List<DetailsColumnSetting> DetailsColumns { get; set; } = [];
     public string DefaultViewMode { get; set; } = "Details";
     public bool ShowHiddenFiles { get; set; }
     public string StartupFolder { get; set; } = string.Empty;

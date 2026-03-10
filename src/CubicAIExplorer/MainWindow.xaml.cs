@@ -13,6 +13,14 @@ namespace CubicAIExplorer;
 
 public partial class MainWindow : Window
 {
+    private static readonly DetailsColumnId[] DetailsColumnOrder =
+    [
+        DetailsColumnId.Name,
+        DetailsColumnId.Size,
+        DetailsColumnId.Type,
+        DetailsColumnId.DateModified
+    ];
+
     private MainViewModel ViewModel => (MainViewModel)DataContext;
 
     private GridViewColumnHeader? _lastHeaderClicked;
@@ -29,6 +37,7 @@ public partial class MainWindow : Window
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
     private bool _suppressRightPaneAutoComplete;
+    private bool _isApplyingDetailsLayout;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
     private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
@@ -47,6 +56,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContextChanged += MainWindow_DataContextChanged;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        Closing += MainWindow_Closing;
     }
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -812,8 +822,96 @@ public partial class MainWindow : Window
 
     private void SetViewMode(string mode)
     {
+        PersistDetailsColumnLayout(saveImmediately: false);
         if (ViewModel.CurrentPaneFileList != null)
             ViewModel.CurrentPaneFileList.ViewMode = mode;
+    }
+
+    private void DetailsColumnsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        var settings = GetDetailsColumnSettings();
+        NameColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Name && setting.IsVisible);
+        SizeColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Size && setting.IsVisible);
+        TypeColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Type && setting.IsVisible);
+        DateModifiedColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.DateModified && setting.IsVisible);
+    }
+
+    private void DetailsColumnVisibility_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string rawColumnId })
+            return;
+        if (!Enum.TryParse<DetailsColumnId>(rawColumnId, ignoreCase: true, out var columnId))
+            return;
+
+        PersistDetailsColumnLayout(saveImmediately: false);
+        var settings = GetDetailsColumnSettings().ToList();
+        var target = settings.FirstOrDefault(setting => setting.ColumnId == columnId);
+        if (target == null)
+            return;
+
+        var visibleCount = settings.Count(static setting => setting.IsVisible);
+        if (target.IsVisible && visibleCount == 1)
+        {
+            DetailsColumnsMenu_SubmenuOpened(sender, e);
+            MessageBox.Show(
+                "At least one details column must remain visible.",
+                "Columns",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        target.IsVisible = !target.IsVisible;
+        ViewModel.SaveDetailsColumnSettings(settings);
+        ApplyDetailsLayoutToBothPanes();
+        DetailsColumnsMenu_SubmenuOpened(sender, e);
+    }
+
+    private void AutoSizeVisibleColumns_Click(object sender, RoutedEventArgs e)
+    {
+        AutoSizeVisibleColumns(FileListView);
+        AutoSizeVisibleColumns(RightPaneListView);
+        PersistDetailsColumnLayout(saveImmediately: true);
+    }
+
+    private void MoveDetailsColumn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string rawTag })
+            return;
+
+        var parts = rawTag.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+            return;
+        if (!Enum.TryParse<DetailsColumnId>(parts[0], ignoreCase: true, out var columnId))
+            return;
+        if (!int.TryParse(parts[1], out var delta))
+            return;
+
+        PersistDetailsColumnLayout(saveImmediately: false);
+        var settings = GetDetailsColumnSettings().ToList();
+        var index = settings.FindIndex(setting => setting.ColumnId == columnId);
+        if (index < 0)
+            return;
+
+        var targetIndex = Math.Clamp(index + delta, 0, settings.Count - 1);
+        if (targetIndex == index)
+            return;
+
+        var moved = settings[index];
+        settings.RemoveAt(index);
+        settings.Insert(targetIndex, moved);
+        for (var i = 0; i < settings.Count; i++)
+            settings[i].DisplayOrder = i;
+
+        ViewModel.SaveDetailsColumnSettings(settings);
+        ApplyDetailsLayoutToBothPanes();
+    }
+
+    private void ResetDetailsColumns_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.SaveDetailsColumnSettings([]);
+        ApplyDetailsLayoutToBothPanes();
+        DetailsColumnsMenu_SubmenuOpened(sender, e);
     }
 
     private void FolderTree_DragOver(object sender, DragEventArgs e)
@@ -1093,8 +1191,14 @@ public partial class MainWindow : Window
             _boundViewModel.BookmarkPropertiesRequested += ViewModel_BookmarkPropertiesRequested;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
+            ApplyDetailsLayoutToBothPanes();
             UpdatePaneHighlight();
         }
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        PersistDetailsColumnLayout(saveImmediately: true);
     }
 
     private void MainWindow_ScrollToSelectedRequested(object? sender, FolderTreeNodeViewModel node)
@@ -1189,6 +1293,10 @@ public partial class MainWindow : Window
         {
             HookRightFileListViewModel(_boundViewModel?.RightPaneTab?.FileList);
         }
+        else if (e.PropertyName == nameof(MainViewModel.DetailsColumnSettings))
+        {
+            ApplyDetailsLayoutToBothPanes();
+        }
 
         if (e.PropertyName == nameof(MainViewModel.IsRightPaneActive)
             || e.PropertyName == nameof(MainViewModel.IsDualPaneMode))
@@ -1229,9 +1337,7 @@ public partial class MainWindow : Window
             boundField.PropertiesRequested += FileListViewModel_PropertiesRequested;
             boundField.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
             boundField.ArchiveBrowseRequested += FileListViewModel_ArchiveBrowseRequested;
-            // Only apply non-default view modes; Details is already set in XAML
-            if (boundField.ViewMode != "Details")
-                ApplyViewMode(targetListView, boundField.ViewMode);
+            ApplyViewMode(targetListView, boundField.ViewMode);
         }
     }
 
@@ -1311,7 +1417,7 @@ public partial class MainWindow : Window
         switch (mode)
         {
             case "Details":
-                listView.View = CreateDetailsGridView(listView == RightPaneListView);
+                listView.View = CreateDetailsGridView();
                 listView.ItemTemplate = null;
                 listView.ItemsPanel = null;
                 break;
@@ -1328,37 +1434,183 @@ public partial class MainWindow : Window
         }
     }
 
-    private GridView CreateDetailsGridView(bool compact)
+    private GridView CreateDetailsGridView()
     {
         var gridView = new GridView();
-
-        var nameColumn = new GridViewColumn { Header = "Name", Width = compact ? 250 : 350 };
-        nameColumn.CellTemplate = (DataTemplate)FindResource("DetailsNameCellTemplate");
-        gridView.Columns.Add(nameColumn);
-
-        gridView.Columns.Add(new GridViewColumn
-        {
-            Header = "Size",
-            Width = compact ? 80 : 100,
-            DisplayMemberBinding = new System.Windows.Data.Binding("DisplaySize")
-        });
-        gridView.Columns.Add(new GridViewColumn
-        {
-            Header = "Type",
-            Width = compact ? 100 : 120,
-            DisplayMemberBinding = new System.Windows.Data.Binding("TypeDescription")
-        });
-        gridView.Columns.Add(new GridViewColumn
-        {
-            Header = "Date Modified",
-            Width = compact ? 140 : 160,
-            DisplayMemberBinding = new System.Windows.Data.Binding("DateModified")
-            {
-                StringFormat = "{0:yyyy-MM-dd HH:mm}"
-            }
-        });
+        foreach (var setting in GetDetailsColumnSettings().Where(static setting => setting.IsVisible))
+            gridView.Columns.Add(CreateDetailsColumn(setting));
 
         return gridView;
+    }
+
+    private GridViewColumn CreateDetailsColumn(DetailsColumnSetting setting)
+    {
+        return setting.ColumnId switch
+        {
+            DetailsColumnId.Name => new GridViewColumn
+            {
+                Header = "Name",
+                Width = setting.Width,
+                CellTemplate = (DataTemplate)FindResource("DetailsNameCellTemplate")
+            },
+            DetailsColumnId.Size => new GridViewColumn
+            {
+                Header = "Size",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("DisplaySize")
+            },
+            DetailsColumnId.Type => new GridViewColumn
+            {
+                Header = "Type",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("TypeDescription")
+            },
+            DetailsColumnId.DateModified => new GridViewColumn
+            {
+                Header = "Date Modified",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("DateModified")
+                {
+                    StringFormat = "{0:yyyy-MM-dd HH:mm}"
+                }
+            },
+            _ => throw new InvalidOperationException($"Unsupported details column: {setting.ColumnId}")
+        };
+    }
+
+    private IReadOnlyList<DetailsColumnSetting> GetDetailsColumnSettings()
+    {
+        return _boundViewModel?.GetDetailsColumnSettings()
+            ?? ViewModel.GetDetailsColumnSettings();
+    }
+
+    private void ApplyDetailsLayoutToBothPanes()
+    {
+        if (_isApplyingDetailsLayout)
+            return;
+
+        try
+        {
+            _isApplyingDetailsLayout = true;
+            if (_boundFileListViewModel?.ViewMode == "Details")
+                ApplyViewMode(FileListView, "Details");
+            if (_boundRightFileListViewModel?.ViewMode == "Details")
+                ApplyViewMode(RightPaneListView, "Details");
+        }
+        finally
+        {
+            _isApplyingDetailsLayout = false;
+        }
+    }
+
+    private void PersistDetailsColumnLayout(bool saveImmediately)
+    {
+        if (_isApplyingDetailsLayout || _boundViewModel == null)
+            return;
+
+        var snapshot = CaptureDetailsColumnSettings(FileListView)
+            ?? CaptureDetailsColumnSettings(RightPaneListView);
+        if (snapshot == null)
+            return;
+
+        if (saveImmediately)
+        {
+            _boundViewModel.SaveDetailsColumnSettings(snapshot);
+            return;
+        }
+
+        _boundViewModel.CurrentSettings.DetailsColumns = snapshot.ToList();
+    }
+
+    private IReadOnlyList<DetailsColumnSetting>? CaptureDetailsColumnSettings(ListView listView)
+    {
+        if (listView.View is not GridView gridView)
+            return null;
+        if (!ReferenceEquals(listView.ItemTemplate, null) || listView.ItemsPanel != null)
+            return null;
+
+        var existing = GetDetailsColumnSettings()
+            .ToDictionary(static setting => setting.ColumnId, static setting => new DetailsColumnSetting
+            {
+                ColumnId = setting.ColumnId,
+                Width = setting.Width,
+                IsVisible = setting.IsVisible,
+                DisplayOrder = setting.DisplayOrder
+            });
+
+        var visibleOrder = 0;
+        foreach (var column in gridView.Columns)
+        {
+            if (!TryGetColumnId(column, out var columnId))
+                continue;
+
+            existing[columnId] = new DetailsColumnSetting
+            {
+                ColumnId = columnId,
+                Width = GetPersistedColumnWidth(column, existing[columnId].Width),
+                IsVisible = true,
+                DisplayOrder = visibleOrder++
+            };
+        }
+
+        foreach (var columnId in DetailsColumnOrder)
+        {
+            if (!existing.TryGetValue(columnId, out var current))
+                continue;
+            if (current.IsVisible)
+                continue;
+
+            current.DisplayOrder = visibleOrder++;
+        }
+
+        return existing.Values
+            .OrderBy(static setting => setting.DisplayOrder)
+            .ToList();
+    }
+
+    private static double GetPersistedColumnWidth(GridViewColumn column, double fallbackWidth)
+    {
+        if (!double.IsNaN(column.Width) && column.Width > 24)
+            return column.Width;
+
+        return column.ActualWidth > 24 ? column.ActualWidth : fallbackWidth;
+    }
+
+    private static bool TryGetColumnId(GridViewColumn column, out DetailsColumnId columnId)
+    {
+        var headerText = column.Header?.ToString()?.TrimEnd(" \u25B2\u25BC".ToCharArray());
+        return headerText switch
+        {
+            "Name" => SetColumnId(DetailsColumnId.Name, out columnId),
+            "Size" => SetColumnId(DetailsColumnId.Size, out columnId),
+            "Type" => SetColumnId(DetailsColumnId.Type, out columnId),
+            "Date Modified" => SetColumnId(DetailsColumnId.DateModified, out columnId),
+            _ => SetColumnId(default, out columnId, false)
+        };
+    }
+
+    private static bool SetColumnId(DetailsColumnId id, out DetailsColumnId columnId, bool result = true)
+    {
+        columnId = id;
+        return result;
+    }
+
+    private void AutoSizeVisibleColumns(ListView listView)
+    {
+        if (listView.View is not GridView gridView)
+            return;
+
+        listView.UpdateLayout();
+        foreach (var column in gridView.Columns)
+        {
+            var currentWidth = column.Width;
+            column.Width = double.NaN;
+            listView.UpdateLayout();
+            if (double.IsNaN(column.ActualWidth) || column.ActualWidth <= 24)
+                column.Width = currentWidth;
+            else
+                column.Width = column.ActualWidth;
+        }
     }
 
     private void BeginInlineRename(FileSystemItem item, ListView listView, FileListViewModel? fileListViewModel)

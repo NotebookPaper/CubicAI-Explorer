@@ -92,6 +92,31 @@
                 <MenuItem Header="_Details" Click="ViewMode_Details_Click" />
                 <MenuItem Header="_List" Click="ViewMode_List_Click" />
                 <MenuItem Header="_Tiles" Click="ViewMode_Tiles_Click" />
+                <MenuItem Header="_Columns" SubmenuOpened="DetailsColumnsMenu_SubmenuOpened">
+                    <MenuItem x:Name="NameColumnMenuItem" Header="_Name" IsCheckable="True" Tag="Name"
+                              Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="SizeColumnMenuItem" Header="_Size" IsCheckable="True" Tag="Size"
+                              Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="TypeColumnMenuItem" Header="_Type" IsCheckable="True" Tag="Type"
+                              Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="DateModifiedColumnMenuItem" Header="_Date Modified" IsCheckable="True" Tag="DateModified"
+                              Click="DetailsColumnVisibility_Click" />
+                    <Separator />
+                    <MenuItem Header="Move Left">
+                        <MenuItem Header="_Name" Tag="Name:-1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Size" Tag="Size:-1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Type" Tag="Type:-1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Date Modified" Tag="DateModified:-1" Click="MoveDetailsColumn_Click" />
+                    </MenuItem>
+                    <MenuItem Header="Move Right">
+                        <MenuItem Header="_Name" Tag="Name:1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Size" Tag="Size:1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Type" Tag="Type:1" Click="MoveDetailsColumn_Click" />
+                        <MenuItem Header="_Date Modified" Tag="DateModified:1" Click="MoveDetailsColumn_Click" />
+                    </MenuItem>
+                    <MenuItem Header="Auto Size Visible Columns" Click="AutoSizeVisibleColumns_Click" />
+                    <MenuItem Header="_Reset Columns" Click="ResetDetailsColumns_Click" />
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="_Toolbars">
                     <MenuItem Header="_Toolbar" IsCheckable="True" IsChecked="{Binding IsToolbarVisible}" />

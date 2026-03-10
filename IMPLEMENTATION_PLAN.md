@@ -56,6 +56,23 @@ Primary files:
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### View-style and column customization
+
+- added persisted details-column layout settings for width, visibility, and order inside the existing settings file
+- the View menu now exposes column toggles, explicit move-left/move-right commands, auto-size, and reset actions
+- both panes recreate the details view from the persisted layout so the same configuration survives restart and mode switches
+- smoke coverage now verifies default column layout behavior, normalized saves, and settings round-trip persistence
+
+Primary files:
+
+- `src/CubicAIExplorer/Models/DetailsColumnId.cs`
+- `src/CubicAIExplorer/Models/DetailsColumnSetting.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Edit menu and advanced operations
 
 - added full original CubicExplorer Edit menu parity
@@ -124,28 +141,7 @@ Smoke coverage explicitly includes:
 
 The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
 
-### 1. View-style and column customization
-
-Why this matters:
-
-- this is one of the clearest areas where the rewrite still feels simpler than the original
-- the original offered deeper control over columns, sorting visibility, and view behavior than the current fixed `GridView` setup
-
-Scope:
-
-- persist per-view or global column widths/order/visibility
-- support richer shell/detail columns where practical
-- add optional auto-size / always-show-sort-column behavior
-- evaluate whether grouping / arrange-by is worth implementing before thumbs-style work
-
-Likely files:
-
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-
-### 2. Tab-management parity
+### 1. Tab-management parity
 
 Why this matters:
 
@@ -165,7 +161,7 @@ Likely files:
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
-### 3. Deeper shell integration
+### 2. Deeper shell integration
 
 Why this matters:
 
