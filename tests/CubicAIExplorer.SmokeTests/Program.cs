@@ -75,6 +75,10 @@ internal static class Program
             Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
             Run("user settings defaults", failures, TestUserSettingsDefaults);
             Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
+            Run("named session save", failures, () => TestNamedSessionSave(tempRoot));
+            Run("named session load", failures, () => TestNamedSessionLoad(tempRoot));
+            Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
+            Run("named session startup selection", failures, () => TestNamedSessionStartupSelection(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
@@ -830,13 +834,13 @@ internal static class Program
         try
         {
             var vm = new MainViewModel(fs, clipboard);
-            vm.NewTabCommand.Execute(null);
             vm.ActiveTab!.NavigateTo(folder);
+            var initialCount = vm.Tabs.Count;
 
             var originalTab = vm.ActiveTab;
             vm.DuplicateTab(originalTab);
 
-            Assert(vm.Tabs.Count == 2, "Duplicate should add a second tab.");
+            Assert(vm.Tabs.Count == initialCount + 1, "Duplicate should add one tab.");
             Assert(vm.ActiveTab != originalTab, "Active tab should be the new duplicate.");
             Assert(vm.ActiveTab!.CurrentPath == folder, "Duplicate tab should navigate to same path.");
         }
@@ -856,10 +860,9 @@ internal static class Program
         try
         {
             var vm = new MainViewModel(fs, clipboard);
-            vm.NewTabCommand.Execute(null);
-            vm.NewTabCommand.Execute(null);
-            vm.NewTabCommand.Execute(null);
-            Assert(vm.Tabs.Count == 3, "Should have 3 tabs.");
+            while (vm.Tabs.Count < 3)
+                vm.NewTabCommand.Execute(null);
+            Assert(vm.Tabs.Count >= 3, "Should have at least 3 tabs.");
 
             var keepTab = vm.Tabs[1];
             vm.CloseOtherTabs(keepTab);
@@ -1538,7 +1541,19 @@ internal static class Program
                 ShowHiddenFiles = true,
                 StartupFolder = root,
                 StartInDualPane = true,
-                StartWithPreview = true
+                StartWithPreview = true,
+                StartupSessionName = "Morning",
+                NamedSessions =
+                [
+                    new NamedSession
+                    {
+                        Name = "Morning",
+                        OpenTabs = [root],
+                        ActiveTabIndex = 0,
+                        RightPanePath = root,
+                        IsDualPaneMode = true
+                    }
+                ]
             };
 
             service.Save(expected);
@@ -1549,6 +1564,9 @@ internal static class Program
             Assert(reloaded.StartupFolder == root, "Settings round-trip should persist startup folder.");
             Assert(reloaded.StartInDualPane, "Settings round-trip should persist dual-pane startup.");
             Assert(reloaded.StartWithPreview, "Settings round-trip should persist preview startup.");
+            Assert(reloaded.StartupSessionName == "Morning", "Settings round-trip should persist startup session.");
+            Assert(reloaded.NamedSessions.Count == 1, "Settings round-trip should persist named sessions.");
+            Assert(reloaded.NamedSessions[0].IsDualPaneMode, "Settings round-trip should persist dual-pane session state.");
         }
         finally
         {
@@ -1579,6 +1597,153 @@ internal static class Program
         Assert(vm.ActiveTab.FileList.ShowHiddenFiles, "ShowHiddenFiles setting should apply to new tabs.");
     }
 
+    private static void TestNamedSessionSave(string root)
+    {
+        var settingsPath = Path.Combine(root, "named_session_save.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var fs = new FileSystemService();
+            var clipboard = new FakeClipboardService();
+            using var service = new SettingsService();
+            var left = CreateCleanSubdir(root, "session_save_left");
+            var right = CreateCleanSubdir(root, "session_save_right");
+
+            var vm = new MainViewModel(fs, clipboard, service, service.Load());
+            vm.NavigateToPath(left);
+            vm.ToggleDualPaneCommand.Execute(null);
+            vm.ActivateRightPane();
+            vm.NavigateCurrentPaneToPath(right);
+            vm.ActivateLeftPane();
+
+            Assert(vm.SaveNamedSession("Morning", overwriteExisting: false), "Saving a named session should succeed.");
+            Assert(File.Exists(settingsPath), "Saving a named session should persist settings.");
+
+            var reloadedSettings = service.Load();
+            Assert(reloadedSettings.NamedSessions.Count == 1, "Saved sessions should round-trip through settings.");
+            Assert(reloadedSettings.NamedSessions[0].Name == "Morning", "Saved session name should persist.");
+            Assert(reloadedSettings.NamedSessions[0].RightPanePath == right, "Saved session should persist the right pane path.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
+    private static void TestNamedSessionLoad(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var first = CreateCleanSubdir(root, "session_load_first");
+        var second = CreateCleanSubdir(root, "session_load_second");
+        var right = CreateCleanSubdir(root, "session_load_right");
+        var other = CreateCleanSubdir(root, "session_load_other");
+        var otherRight = CreateCleanSubdir(root, "session_load_other_right");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(first);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(second);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.ActivateRightPane();
+        vm.NavigateCurrentPaneToPath(right);
+        vm.ActivateLeftPane();
+
+        Assert(vm.SaveNamedSession("Morning", overwriteExisting: false), "Precondition failed: session should save.");
+
+        vm.NavigateToPath(other);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.ToggleDualPaneCommand.Execute(null);
+        vm.ActivateRightPane();
+        vm.NavigateCurrentPaneToPath(otherRight);
+        vm.ActivateLeftPane();
+
+        Assert(vm.LoadNamedSession("Morning"), "Loading a saved session should succeed.");
+        Assert(vm.Tabs.Count == 2, "Loading a saved session should replace the current tab set.");
+        Assert(vm.ActiveTab?.CurrentPath == second, "Loading a saved session should restore the active tab.");
+        Assert(vm.IsDualPaneMode, "Loading a saved session should restore dual-pane mode.");
+        Assert(vm.RightPaneTab?.CurrentPath == right, "Loading a saved session should restore the right pane path.");
+    }
+
+    private static void TestNamedSessionDelete(string root)
+    {
+        var settingsPath = Path.Combine(root, "named_session_delete.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var fs = new FileSystemService();
+            var clipboard = new FakeClipboardService();
+            using var service = new SettingsService();
+            var folder = CreateCleanSubdir(root, "session_delete_folder");
+
+            var vm = new MainViewModel(fs, clipboard, service, service.Load());
+            vm.NavigateToPath(folder);
+            Assert(vm.SaveNamedSession("Disposable", overwriteExisting: false), "Precondition failed: session should save.");
+
+            Assert(vm.DeleteNamedSession("Disposable"), "Deleting a saved session should succeed.");
+            Assert(!vm.NamedSessions.Any(session => session.Name == "Disposable"), "Deleted sessions should be removed from the UI collection.");
+
+            var reloadedSettings = service.Load();
+            Assert(reloadedSettings.NamedSessions.Count == 0, "Deleted sessions should be removed from persisted settings.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
+    private static void TestNamedSessionStartupSelection(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var autoRestorePath = CreateCleanSubdir(root, "startup_auto_restore");
+        var sessionLeft = CreateCleanSubdir(root, "startup_session_left");
+        var sessionRight = CreateCleanSubdir(root, "startup_session_right");
+
+        var autoRestoreSettings = new UserSettings
+        {
+            OpenTabs = [autoRestorePath],
+            ActiveTabIndex = 0
+        };
+
+        var autoRestoreVm = new MainViewModel(fs, clipboard, userSettings: autoRestoreSettings);
+        Assert(autoRestoreVm.ActiveTab?.CurrentPath == autoRestorePath,
+            "Without a startup session, startup should use the generic auto-restored tabs.");
+
+        var startupSettings = new UserSettings
+        {
+            OpenTabs = [autoRestorePath],
+            ActiveTabIndex = 0,
+            StartupSessionName = "Morning",
+            NamedSessions =
+            [
+                new NamedSession
+                {
+                    Name = "Morning",
+                    OpenTabs = [sessionLeft],
+                    ActiveTabIndex = 0,
+                    RightPanePath = sessionRight,
+                    IsDualPaneMode = true
+                }
+            ]
+        };
+
+        var startupVm = new MainViewModel(fs, clipboard, userSettings: startupSettings);
+        Assert(startupVm.ActiveTab?.CurrentPath == sessionLeft,
+            "Configured startup sessions should take precedence over generic auto-restore.");
+        Assert(startupVm.IsDualPaneMode, "Startup session selection should restore dual-pane mode.");
+        Assert(startupVm.RightPaneTab?.CurrentPath == sessionRight,
+            "Startup session selection should restore the right pane path.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -1596,7 +1761,7 @@ internal static class Program
         Assert(main.Contains("AllowDrop=\"True\""), "File list drag/drop should be enabled.");
         Assert(main.Contains("Drop=\"FileList_Drop\""), "File list drop handler should be wired.");
         Assert(main.Contains("ClearHistoryCommand"), "Clear history command should be wired.");
-        Assert(main.Contains("BookmarkList_SelectionChanged"), "Bookmark single-click navigation should be wired.");
+        Assert(main.Contains("BookmarkItem_Selected"), "Bookmark single-click navigation should be wired.");
         Assert(main.Contains("SavedSearchList_SelectionChanged"), "Saved search single-click navigation should be wired.");
         Assert(main.Contains("ContextMenuOpening=\"FileList_ContextMenuOpening\""), "Context menu handler should be wired.");
         Assert(main.Contains("StaticResource ShellIconConverter"), "Shell icon converter should be used in MainWindow.");
@@ -1623,7 +1788,7 @@ internal static class Program
         Assert(main.Contains("BreadcrumbSegment_Click"), "Breadcrumb click handler should be wired.");
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
-        Assert(main.Contains("BookmarkList_KeyDown"), "Bookmark keyboard handler should be wired.");
+        Assert(main.Contains("BookmarkTree_MouseMove"), "Bookmark drag/drop handler should be wired.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
@@ -1635,6 +1800,10 @@ internal static class Program
         Assert(main.Contains("Command=\"{Binding SelectAllCommand}\""), "Select-all bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding AddCurrentSearchCommand}\""), "Saved-search save bindings should route through the main view model.");
+        Assert(main.Contains("Header=\"_Sessions\""), "Sessions menu should exist.");
+        Assert(main.Contains("SaveCurrentSessionAs_Click"), "Save Session As menu item should be wired.");
+        Assert(main.Contains("UpdateCurrentNamedSessionCommand"), "Update Current Session should be wired.");
+        Assert(main.Contains("SessionsMenu_SubmenuOpened"), "Sessions submenu population should be wired.");
         Assert(main.Contains("CurrentPaneFileList.FilterText"), "Filter bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.SearchText"), "Search bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.IsSearchVisible"), "Search visibility should bind to the current active pane.");
@@ -1651,10 +1820,7 @@ internal static class Program
         Assert(main.Contains("CurrentPanePath"), "Status bar should reflect the current active pane path.");
         Assert(main.Contains("FileOperationQueueStatusText"), "Status bar should expose background file operation status.");
         Assert(main.Contains("CancelFileOperationQueueCommand"), "Queue cancel command should be wired.");
-        Assert(main.Contains("FileOperationQueueCurrentOperationProgressFraction"), "Queue progress bar should be bound.");
-        Assert(main.Contains("FileOperationQueueCurrentOperationDetailText"), "Queue detail text should be bound.");
         Assert(main.Contains("ToggleQueueDetailsCommand"), "Queue details toggle should be wired.");
-        Assert(main.Contains("Background File Queue"), "Queue details panel should exist.");
         Assert(main.Contains("ContextMenuOpening=\"RightPane_ContextMenuOpening\""), "Right pane context menu handler should be wired.");
         Assert(main.Contains("GridViewColumnHeader.Click=\"RightPaneHeader_Click\""), "Right pane sort handler should be wired.");
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");

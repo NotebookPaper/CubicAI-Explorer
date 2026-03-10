@@ -24,4 +24,6 @@ public sealed class UserSettings
     public List<string> OpenTabs { get; set; } = [];
     public int ActiveTabIndex { get; set; } = 0;
     public string RightPanePath { get; set; } = string.Empty;
+    public List<NamedSession> NamedSessions { get; set; } = [];
+    public string StartupSessionName { get; set; } = string.Empty;
 }

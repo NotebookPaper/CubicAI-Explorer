@@ -23,6 +23,22 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Named sessions and session manager
+
+- added persisted named sessions inside the existing settings file
+- added session save-as, update, load, delete, and startup-session selection from the main window File menu
+- startup now supports either generic last-state restore or a chosen named session
+- smoke coverage now verifies save/load/delete/startup session behavior
+
+Primary files:
+
+- `src/CubicAIExplorer/Models/NamedSession.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Edit menu and advanced operations
 
 - added full original CubicExplorer Edit menu parity
@@ -89,19 +105,96 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-1. Manual UX pass on the newest slices:
-   - verify drag-and-drop bookmark reordering UX
-   - check symbolic link creation success feedback
-   - ensure "New File" creates usable template-based files if appropriate
-2. Archive follow-up:
-   - add richer archive actions beyond browse + filter + extract-all
-   - decide whether opening an archive should stay metadata-first or become navigable
-3. Preview follow-up:
-   - extend metadata/preview support for more file types
-   - keep expensive preview generation off the UI thread
-4. Queue follow-up:
-   - preserve richer queue history than the last result only
-   - implement per-item failure detail or batch summaries
+The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
+
+### 1. Richer filter and search model
+
+Why this matters:
+
+- the original exposed filtering as a stronger first-class workflow, including stricter filter behavior and filter-history style affordances
+- the current rewrite has good basics, but it still feels lighter than CubicExplorer in day-to-day file-list narrowing
+
+Scope:
+
+- add wildcard/strict filter mode and clearer filter semantics
+- consider separate filename mask vs free-text search modes
+- add filter history / quick reuse and optional "clear filter on folder change" behavior
+- improve search result UX so saved searches, recursive search, and inline filters feel like one coherent system
+
+Likely files:
+
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
+### 2. View-style and column customization
+
+Why this matters:
+
+- this is one of the clearest areas where the rewrite still feels simpler than the original
+- the original offered deeper control over columns, sorting visibility, and view behavior than the current fixed `GridView` setup
+
+Scope:
+
+- persist per-view or global column widths/order/visibility
+- support richer shell/detail columns where practical
+- add optional auto-size / always-show-sort-column behavior
+- evaluate whether grouping / arrange-by is worth implementing before thumbs-style work
+
+Likely files:
+
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+
+### 3. Tab-management parity
+
+Why this matters:
+
+- the rewrite already has duplicate tab and close others, so the missing pieces are incremental and high-value
+- original CubicExplorer exposed more tab/session management power, including close-left / close-right and related affordances
+
+Scope:
+
+- add close tabs on left / right
+- consider "reuse already open tabs" navigation behavior
+- evaluate tab overflow / more-tabs affordances once command parity is in place
+
+Likely files:
+
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
+### 4. Deeper shell integration
+
+Why this matters:
+
+- CubicExplorer's identity was tightly tied to Windows shell behavior, metadata, and special-folder handling
+- the rewrite already has shell icons and basic properties, but shell-native detail still has room to grow
+
+Scope:
+
+- improve special-folder coverage and path/display handling
+- expose more shell metadata in details/properties views where practical
+- review shell context behavior and Explorer interop edge cases
+
+Likely files:
+
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/Services/ShellIconService.cs`
+- `src/CubicAIExplorer/Models/FileSystemItem.cs`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+
+### Lower-priority follow-up after parity-critical work
+
+- archive UX beyond browse/filter/extract
+- broader preview type support
+- richer queue history and per-item result reporting
+- UX polish on bookmark drag/drop, symbolic link feedback, and new-file templates
 
 ## Constraints And Decisions
 

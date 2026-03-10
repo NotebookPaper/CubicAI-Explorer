@@ -131,10 +131,15 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSavedSearchesVisible = true;
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UpdateCurrentNamedSessionCommand))]
+    private string _currentNamedSessionName = string.Empty;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FileSystemItem> Drives { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
+    public ObservableCollection<NamedSession> NamedSessions { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
@@ -198,6 +203,7 @@ public partial class MainViewModel : ObservableObject
         // Initialize Window state
         _sidebarWidth = _userSettings.SidebarWidth;
         _previewWidth = _userSettings.PreviewWidth;
+        RefreshNamedSessionsFromSettings();
 
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
 
@@ -230,6 +236,10 @@ public partial class MainViewModel : ObservableObject
 
     private void InitializeTabsFromSettings()
     {
+        var startupSession = GetStartupNamedSession();
+        if (startupSession != null && ApplyNamedSession(startupSession, setCurrentSession: true))
+            return;
+
         if (_userSettings.OpenTabs is { Count: > 0 })
         {
             foreach (var path in _userSettings.OpenTabs)
@@ -274,7 +284,222 @@ public partial class MainViewModel : ObservableObject
             IsSavedSearchesVisible = newSettings.ShowSavedSearches;
             SidebarWidth = newSettings.SidebarWidth;
             PreviewWidth = newSettings.PreviewWidth;
+            _userSettings.NamedSessions = newSettings.NamedSessions ?? [];
+            _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
+            RefreshNamedSessionsFromSettings();
+            if (!string.IsNullOrWhiteSpace(CurrentNamedSessionName)
+                && FindNamedSession(CurrentNamedSessionName) == null)
+            {
+                CurrentNamedSessionName = string.Empty;
+            }
         });
+    }
+
+    private void RefreshNamedSessionsFromSettings()
+    {
+        NamedSessions.Clear();
+        foreach (var session in (_userSettings.NamedSessions ?? [])
+                     .Select(CloneNamedSession)
+                     .Where(static session => !string.IsNullOrWhiteSpace(session.Name))
+                     .OrderBy(static session => session.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            NamedSessions.Add(session);
+        }
+    }
+
+    private NamedSession? GetStartupNamedSession()
+    {
+        if (string.IsNullOrWhiteSpace(_userSettings.StartupSessionName))
+            return null;
+
+        return FindNamedSession(_userSettings.StartupSessionName);
+    }
+
+    private NamedSession? FindNamedSession(string? rawName)
+    {
+        var name = NormalizeSessionName(rawName);
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        return NamedSessions.FirstOrDefault(session =>
+            string.Equals(session.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeSessionName(string? rawName)
+        => rawName?.Trim() ?? string.Empty;
+
+    private static NamedSession CloneNamedSession(NamedSession session)
+    {
+        return new NamedSession
+        {
+            Name = NormalizeSessionName(session.Name),
+            OpenTabs = session.OpenTabs
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .ToList(),
+            ActiveTabIndex = session.ActiveTabIndex,
+            RightPanePath = session.RightPanePath ?? string.Empty,
+            IsDualPaneMode = session.IsDualPaneMode
+        };
+    }
+
+    private NamedSession CaptureCurrentSession(string sessionName)
+    {
+        var openTabs = Tabs
+            .Select(static tab => tab.CurrentPath)
+            .Where(path => !string.IsNullOrWhiteSpace(path) && _fileSystemService.DirectoryExists(path))
+            .ToList();
+
+        return new NamedSession
+        {
+            Name = NormalizeSessionName(sessionName),
+            OpenTabs = openTabs,
+            ActiveTabIndex = ActiveTab != null ? Math.Max(0, Tabs.IndexOf(ActiveTab)) : 0,
+            RightPanePath = IsDualPaneMode ? _rightPaneTab?.CurrentPath ?? string.Empty : string.Empty,
+            IsDualPaneMode = IsDualPaneMode
+        };
+    }
+
+    private bool ApplyNamedSession(NamedSession session, bool setCurrentSession)
+    {
+        var tabPaths = session.OpenTabs
+            .Where(path => !string.IsNullOrWhiteSpace(path) && _fileSystemService.DirectoryExists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (tabPaths.Count == 0)
+            return false;
+
+        foreach (var tab in Tabs.ToList())
+        {
+            DetachTab(tab);
+        }
+
+        Tabs.Clear();
+        ActiveTab = null;
+
+        foreach (var path in tabPaths)
+        {
+            var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+            AttachTab(tab);
+            Tabs.Add(tab);
+            tab.NavigateTo(path);
+            ApplyTabDefaults(tab);
+        }
+
+        ActiveTab = Tabs[Math.Clamp(session.ActiveTabIndex, 0, Tabs.Count - 1)];
+
+        if (session.IsDualPaneMode)
+        {
+            if (!IsDualPaneMode)
+                ToggleDualPane();
+
+            var rightPanePath = !string.IsNullOrWhiteSpace(session.RightPanePath)
+                && _fileSystemService.DirectoryExists(session.RightPanePath)
+                ? session.RightPanePath
+                : ActiveTab.CurrentPath;
+            _rightPaneTab?.NavigateTo(rightPanePath);
+        }
+        else if (IsDualPaneMode)
+        {
+            ToggleDualPane();
+        }
+
+        if (setCurrentSession)
+            CurrentNamedSessionName = session.Name;
+
+        RefreshCurrentPaneState();
+        SaveSettings();
+        return true;
+    }
+
+    private void ApplyTabDefaults(TabViewModel tab)
+    {
+        if (_userSettings.ShowHiddenFiles)
+            tab.FileList.ShowHiddenFiles = true;
+        if (_userSettings.DefaultViewMode is "List" or "Tiles")
+            tab.FileList.ViewMode = _userSettings.DefaultViewMode;
+    }
+
+    public bool SaveNamedSession(string rawName, bool overwriteExisting)
+    {
+        var sessionName = NormalizeSessionName(rawName);
+        if (string.IsNullOrWhiteSpace(sessionName))
+            return false;
+
+        var session = CaptureCurrentSession(sessionName);
+        var existing = FindNamedSession(sessionName);
+
+        if (existing != null && !overwriteExisting)
+            return false;
+
+        if (existing != null)
+        {
+            var existingIndex = NamedSessions.IndexOf(existing);
+            NamedSessions[existingIndex] = session;
+        }
+        else
+        {
+            NamedSessions.Add(session);
+        }
+
+        ReorderNamedSessions();
+        CurrentNamedSessionName = sessionName;
+        SaveSettings();
+        return true;
+    }
+
+    public bool LoadNamedSession(string rawName)
+    {
+        var session = FindNamedSession(rawName);
+        return session != null && ApplyNamedSession(session, setCurrentSession: true);
+    }
+
+    public bool DeleteNamedSession(string rawName)
+    {
+        var session = FindNamedSession(rawName);
+        if (session == null)
+            return false;
+
+        NamedSessions.Remove(session);
+        if (string.Equals(CurrentNamedSessionName, session.Name, StringComparison.OrdinalIgnoreCase))
+            CurrentNamedSessionName = string.Empty;
+        if (string.Equals(_userSettings.StartupSessionName, session.Name, StringComparison.OrdinalIgnoreCase))
+            _userSettings.StartupSessionName = string.Empty;
+
+        SaveSettings();
+        return true;
+    }
+
+    public bool SetStartupSession(string? rawName)
+    {
+        if (string.IsNullOrWhiteSpace(rawName))
+        {
+            _userSettings.StartupSessionName = string.Empty;
+            SaveSettings();
+            return true;
+        }
+
+        var session = FindNamedSession(rawName);
+        if (session == null)
+            return false;
+
+        _userSettings.StartupSessionName = session.Name;
+        SaveSettings();
+        return true;
+    }
+
+    public string GetStartupSessionName() => _userSettings.StartupSessionName;
+
+    private void ReorderNamedSessions()
+    {
+        var ordered = NamedSessions
+            .OrderBy(static session => session.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CloneNamedSession)
+            .ToList();
+
+        NamedSessions.Clear();
+        foreach (var session in ordered)
+            NamedSessions.Add(session);
     }
 
     private void OnBookmarkFileChanged(object sender, FileSystemEventArgs e)
@@ -283,7 +508,11 @@ public partial class MainViewModel : ObservableObject
         if (currentWrite > _lastBookmarkWrite.AddMilliseconds(500))
         {
             _lastBookmarkWrite = currentWrite;
-            Application.Current.Dispatcher.Invoke(LoadBookmarks);
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null)
+                dispatcher.Invoke(LoadBookmarks);
+            else
+                LoadBookmarks();
         }
     }
 
@@ -400,39 +629,40 @@ public partial class MainViewModel : ObservableObject
             SyncFolderTreeToPath(path);
         }
     }
-public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
-public event EventHandler<BookmarkItem>? ScrollToSelectedBookmarkRequested;
 
-private bool _isSyncingTree;
-...
-public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
-{
-    if (string.IsNullOrWhiteSpace(path)) return;
+    public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
+    public event EventHandler<BookmarkItem>? ScrollToSelectedBookmarkRequested;
 
-    var newItem = new BookmarkItem
+    private bool _isSyncingTree;
+
+    public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
     {
-        Name = GetDisplayName(path),
-        Path = path,
-        IsFolder = true,
-        IsExpanded = true
-    };
+        if (string.IsNullOrWhiteSpace(path)) return;
 
-    if (targetParent != null && targetParent.IsFolder)
-    {
-        targetParent.Children.Add(newItem);
-        targetParent.IsExpanded = true;
+        var newItem = new BookmarkItem
+        {
+            Name = GetDisplayName(path),
+            Path = path,
+            IsFolder = true,
+            IsExpanded = true
+        };
+
+        if (targetParent != null && targetParent.IsFolder)
+        {
+            targetParent.Children.Add(newItem);
+            targetParent.IsExpanded = true;
+        }
+        else
+        {
+            Bookmarks.Add(newItem);
+        }
+
+        SelectedBookmark = newItem;
+        SaveBookmarks();
+        ScrollToSelectedBookmarkRequested?.Invoke(this, newItem);
     }
-    else
-    {
-        Bookmarks.Add(newItem);
-    }
 
-    SelectedBookmark = newItem;
-    SaveBookmarks();
-    ScrollToSelectedBookmarkRequested?.Invoke(this, newItem);
-}
-
-private void SyncFolderTreeToPath(string path)
+    private void SyncFolderTreeToPath(string path)
     {
         if (_isSyncingTree || string.IsNullOrEmpty(path)) return;
         _isSyncingTree = true;
@@ -619,12 +849,7 @@ private void SyncFolderTreeToPath(string path)
         AttachTab(tab);
         Tabs.Add(tab);
         ActiveTab = tab;
-
-        // Apply user settings
-        if (_userSettings.ShowHiddenFiles)
-            tab.FileList.ShowHiddenFiles = true;
-        if (_userSettings.DefaultViewMode is "List" or "Tiles")
-            tab.FileList.ViewMode = _userSettings.DefaultViewMode;
+        ApplyTabDefaults(tab);
 
         // Navigate to startup folder or user profile
         var startupFolder = _userSettings.StartupFolder;
@@ -1255,17 +1480,14 @@ private void SyncFolderTreeToPath(string path)
         if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
         if (!_fileSystemService.DirectoryExists(bookmark.Path) && !File.Exists(bookmark.Path)) return;
 
-        // Use the existing logic from FileListViewModel if possible, or trigger via event
-        // For simplicity here, we'll assume we can just use the path
         var item = new FileSystemItem
         {
             Name = bookmark.Name,
             FullPath = bookmark.Path,
             ItemType = _fileSystemService.DirectoryExists(bookmark.Path) ? FileSystemItemType.Directory : FileSystemItemType.File
         };
-        
-        // MainViewModel doesn't directly handle PropertiesRequested, usually the View does.
-        // We'll update RefreshCurrentPaneState to handle this or add a new event.
+
+        BookmarkPropertiesRequested?.Invoke(this, item);
     }
 
     [RelayCommand]
@@ -1512,6 +1734,14 @@ private void SyncFolderTreeToPath(string path)
     private void OpenPreferences()
     {
         OpenPreferencesRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool CanUpdateCurrentNamedSession() => !string.IsNullOrWhiteSpace(CurrentNamedSessionName);
+
+    [RelayCommand(CanExecute = nameof(CanUpdateCurrentNamedSession))]
+    private void UpdateCurrentNamedSession()
+    {
+        SaveNamedSession(CurrentNamedSessionName, overwriteExisting: true);
     }
 
     public void ApplyAndSaveSettings(Models.UserSettings newSettings)
@@ -2292,6 +2522,7 @@ private void SyncFolderTreeToPath(string path)
             _userSettings.ActiveTabIndex = ActiveTab != null ? Tabs.IndexOf(ActiveTab) : 0;
         }
         _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;
+        _userSettings.NamedSessions = NamedSessions.Select(CloneNamedSession).ToList();
         _settingsService?.Save(_userSettings);
     }
 

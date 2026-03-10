@@ -47,6 +47,17 @@
                 <MenuItem Header="_New Tab" InputGestureText="Ctrl+T" Command="{Binding NewTabCommand}" />
                 <MenuItem Header="_Close Tab" InputGestureText="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
                 <Separator />
+                <MenuItem Header="_Sessions" SubmenuOpened="SessionsMenu_SubmenuOpened">
+                    <MenuItem Header="_Save Current Session As..." Click="SaveCurrentSessionAs_Click" />
+                    <MenuItem Header="_Update Current Session"
+                              Command="{Binding UpdateCurrentNamedSessionCommand}" />
+                    <Separator />
+                    <MenuItem x:Name="LoadSessionMenuItem" Header="_Load Session" />
+                    <MenuItem x:Name="DeleteSessionMenuItem" Header="_Delete Session" />
+                    <Separator />
+                    <MenuItem x:Name="StartupSessionMenuItem" Header="_Startup Session" />
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
             </MenuItem>
             <MenuItem Header="_Edit">

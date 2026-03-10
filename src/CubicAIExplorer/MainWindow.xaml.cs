@@ -876,6 +876,162 @@ public partial class MainWindow : Window
 
     private void OnExitClick(object sender, RoutedEventArgs e) => Close();
 
+    private void SessionsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, e.OriginalSource))
+            return;
+
+        PopulateLoadSessionMenu();
+        PopulateDeleteSessionMenu();
+        PopulateStartupSessionMenu();
+    }
+
+    private void SaveCurrentSessionAs_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new NewFolderDialog
+        {
+            Title = "Save Session As",
+            Message = "Enter session name:"
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var sessionName = dialog.FolderName.Trim();
+        if (string.IsNullOrWhiteSpace(sessionName))
+        {
+            MessageBox.Show(
+                "Session name cannot be empty.",
+                "Session Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var existing = ViewModel.NamedSessions.Any(session =>
+            string.Equals(session.Name, sessionName, StringComparison.OrdinalIgnoreCase));
+        var overwriteExisting = false;
+
+        if (existing)
+        {
+            overwriteExisting = MessageBox.Show(
+                $"Overwrite the existing session '{sessionName}'?",
+                "Session Manager",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+            if (!overwriteExisting)
+                return;
+        }
+
+        if (!ViewModel.SaveNamedSession(sessionName, overwriteExisting))
+        {
+            MessageBox.Show(
+                "Unable to save the session.",
+                "Session Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void PopulateLoadSessionMenu()
+    {
+        LoadSessionMenuItem.Items.Clear();
+        if (ViewModel.NamedSessions.Count == 0)
+        {
+            LoadSessionMenuItem.Items.Add(new MenuItem
+            {
+                Header = "No Saved Sessions",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        foreach (var session in ViewModel.NamedSessions)
+        {
+            var sessionName = session.Name;
+            var item = new MenuItem { Header = sessionName };
+            item.Click += (_, _) =>
+            {
+                if (!ViewModel.LoadNamedSession(sessionName))
+                {
+                    MessageBox.Show(
+                        $"Unable to load session '{sessionName}'.",
+                        "Session Manager",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            };
+            LoadSessionMenuItem.Items.Add(item);
+        }
+    }
+
+    private void PopulateDeleteSessionMenu()
+    {
+        DeleteSessionMenuItem.Items.Clear();
+        if (ViewModel.NamedSessions.Count == 0)
+        {
+            DeleteSessionMenuItem.Items.Add(new MenuItem
+            {
+                Header = "No Saved Sessions",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        foreach (var session in ViewModel.NamedSessions)
+        {
+            var sessionName = session.Name;
+            var item = new MenuItem { Header = sessionName };
+            item.Click += (_, _) =>
+            {
+                var confirmed = MessageBox.Show(
+                    $"Delete session '{sessionName}'?",
+                    "Session Manager",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirmed != MessageBoxResult.Yes)
+                    return;
+
+                ViewModel.DeleteNamedSession(sessionName);
+            };
+            DeleteSessionMenuItem.Items.Add(item);
+        }
+    }
+
+    private void PopulateStartupSessionMenu()
+    {
+        StartupSessionMenuItem.Items.Clear();
+
+        var startupSessionName = ViewModel.GetStartupSessionName();
+        var autoRestoreItem = new MenuItem
+        {
+            Header = "Auto Restore Last State",
+            IsCheckable = true,
+            IsChecked = string.IsNullOrWhiteSpace(startupSessionName)
+        };
+        autoRestoreItem.Click += (_, _) => ViewModel.SetStartupSession(null);
+        StartupSessionMenuItem.Items.Add(autoRestoreItem);
+
+        if (ViewModel.NamedSessions.Count == 0)
+            return;
+
+        StartupSessionMenuItem.Items.Add(new Separator());
+
+        foreach (var session in ViewModel.NamedSessions)
+        {
+            var sessionName = session.Name;
+            var item = new MenuItem
+            {
+                Header = sessionName,
+                IsCheckable = true,
+                IsChecked = string.Equals(startupSessionName, sessionName, StringComparison.OrdinalIgnoreCase)
+            };
+            item.Click += (_, _) => ViewModel.SetStartupSession(sessionName);
+            StartupSessionMenuItem.Items.Add(item);
+        }
+    }
+
     private void DuplicateTab_Click(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: TabViewModel tab })
@@ -962,6 +1118,27 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(TryScroll), System.Windows.Threading.DispatcherPriority.Background);
     }
 
+    private void MainWindow_ScrollToSelectedBookmarkRequested(object? sender, BookmarkItem bookmark)
+    {
+        int attempts = 0;
+        void TryScroll()
+        {
+            var container = FindTreeViewItemByData(BookmarkTree, bookmark);
+            if (container != null)
+            {
+                container.IsSelected = true;
+                container.BringIntoView();
+            }
+            else if (attempts < 10)
+            {
+                attempts++;
+                Dispatcher.BeginInvoke(new Action(TryScroll), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        Dispatcher.BeginInvoke(new Action(TryScroll), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     private TreeViewItem? FindSelectedTreeViewItem(ItemsControl parent)
     {
         // Try to find in current items
@@ -981,6 +1158,24 @@ public partial class MainWindow : Window
                     return result;
             }
         }
+        return null;
+    }
+
+    private TreeViewItem? FindTreeViewItemByData(ItemsControl parent, object targetItem)
+    {
+        foreach (var item in parent.Items)
+        {
+            var container = parent.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+            if (container == null) continue;
+
+            if (ReferenceEquals(item, targetItem))
+                return container;
+
+            var result = FindTreeViewItemByData(container, targetItem);
+            if (result != null)
+                return result;
+        }
+
         return null;
     }
 
