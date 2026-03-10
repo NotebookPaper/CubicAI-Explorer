@@ -856,10 +856,89 @@ public partial class MainViewModel : ObservableObject
     private void RemoveBookmark(BookmarkItem? bookmark)
     {
         if (bookmark == null) return;
-        Bookmarks.Remove(bookmark);
+        
+        // Remove from root or from parent children
+        if (Bookmarks.Contains(bookmark))
+        {
+            Bookmarks.Remove(bookmark);
+        }
+        else
+        {
+            RemoveFromChildren(Bookmarks, bookmark);
+        }
+
         if (SelectedBookmark == bookmark)
             SelectedBookmark = null;
         SaveBookmarks();
+    }
+
+    private bool RemoveFromChildren(IEnumerable<BookmarkItem> collection, BookmarkItem target)
+    {
+        foreach (var item in collection)
+        {
+            if (item.Children.Remove(target)) return true;
+            if (RemoveFromChildren(item.Children, target)) return true;
+        }
+        return false;
+    }
+
+    public void MoveBookmark(BookmarkItem source, BookmarkItem? target)
+    {
+        if (source == null) return;
+
+        // 1. Remove from current location
+        if (Bookmarks.Contains(source))
+        {
+            Bookmarks.Remove(source);
+        }
+        else
+        {
+            RemoveFromChildren(Bookmarks, source);
+        }
+
+        // 2. Add to new location
+        if (target == null)
+        {
+            // Drop on empty area -> move to root
+            Bookmarks.Add(source);
+        }
+        else if (target.IsFolder)
+        {
+            // Drop on folder -> move inside
+            target.Children.Add(source);
+            target.IsExpanded = true;
+        }
+        else
+        {
+            // Drop on bookmark -> move to same level as bookmark
+            var parent = FindParent(Bookmarks, target);
+            if (parent != null)
+            {
+                var index = parent.Children.IndexOf(target);
+                parent.Children.Insert(index + 1, source);
+            }
+            else
+            {
+                var index = Bookmarks.IndexOf(target);
+                if (index >= 0)
+                    Bookmarks.Insert(index + 1, source);
+                else
+                    Bookmarks.Add(source);
+            }
+        }
+
+        SaveBookmarks();
+    }
+
+    private BookmarkItem? FindParent(IEnumerable<BookmarkItem> collection, BookmarkItem target)
+    {
+        foreach (var item in collection)
+        {
+            if (item.Children.Contains(target)) return item;
+            var parent = FindParent(item.Children, target);
+            if (parent != null) return parent;
+        }
+        return null;
     }
 
     [RelayCommand]

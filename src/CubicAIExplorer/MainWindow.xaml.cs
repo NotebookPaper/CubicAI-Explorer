@@ -479,6 +479,75 @@ public partial class MainWindow : Window
         }
     }
 
+    private Point _bookmarkDragStart;
+    private const string BookmarkDragFormat = "CubicAIExplorer_BookmarkDrag";
+
+    private void BookmarkTree_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var delta = e.GetPosition(BookmarkTree) - _bookmarkDragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        if (BookmarkTree.SelectedItem is BookmarkItem bookmark)
+        {
+            var data = new DataObject();
+            data.SetData(BookmarkDragFormat, bookmark);
+            DragDrop.DoDragDrop(BookmarkTree, data, DragDropEffects.Move);
+        }
+    }
+
+    private void BookmarkTree_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(BookmarkDragFormat))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        var source = e.Data.GetData(BookmarkDragFormat) as BookmarkItem;
+        var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        var target = targetItem?.DataContext as BookmarkItem;
+
+        // Don't allow dropping on self or a descendant
+        if (source == null || target == source || IsDescendant(source, target))
+        {
+            e.Effects = DragDropEffects.None;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.Move;
+        }
+
+        e.Handled = true;
+    }
+
+    private void BookmarkTree_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(BookmarkDragFormat)) return;
+
+        var source = e.Data.GetData(BookmarkDragFormat) as BookmarkItem;
+        var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        var target = targetItem?.DataContext as BookmarkItem;
+
+        if (source != null && target != source && !IsDescendant(source, target))
+        {
+            ViewModel.MoveBookmark(source, target);
+        }
+        e.Handled = true;
+    }
+
+    private static bool IsDescendant(BookmarkItem parent, BookmarkItem? potentialDescendant)
+    {
+        if (potentialDescendant == null) return false;
+        var current = potentialDescendant;
+        // This is a bit tricky without parent pointers, but we can check if parent's children contain it recursively
+        return parent.Children.Any(c => c == potentialDescendant || IsDescendant(c, potentialDescendant));
+    }
+
     private void ImportBookmarks_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog

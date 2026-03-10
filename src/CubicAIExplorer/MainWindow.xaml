@@ -458,6 +458,10 @@
                 <Border Grid.Row="5" Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}" Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}">
                     <TreeView x:Name="BookmarkTree"
                               ItemsSource="{Binding Bookmarks}"
+                              AllowDrop="True"
+                              MouseMove="BookmarkTree_MouseMove"
+                              DragOver="BookmarkTree_DragOver"
+                              Drop="BookmarkTree_Drop"
                               TabIndex="30">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
