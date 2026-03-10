@@ -1280,30 +1280,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
-    {
-        var item = new BookmarkItem
-        {
-            Name = record.Name,
-            Path = record.Path,
-            IsFolder = record.IsFolder
-        };
-        if (record.Children != null)
-        {
-            foreach (var childRecord in record.Children)
-            {
-                item.Children.Add(MapRecordToBookmark(childRecord));
-            }
-        }
-        return item;
-    }
-
-    private BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
-    {
-        var children = item.Children.Select(MapBookmarkToRecord).ToList();
-        return new BookmarkRecord(item.Name, item.Path, item.IsFolder, children.Count > 0 ? children : null);
-    }
-
     private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
     private sealed record SavedSearchRecord(string Name, string Path, string Term);
 
