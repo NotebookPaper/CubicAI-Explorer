@@ -253,6 +253,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SwitchToEditMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToEditMode();
+    }
+
+    private void AddressBar_GotFocus(object sender, RoutedEventArgs e)
+    {
+        AddressBar.SelectAll();
+    }
+
     private void SwitchToEditMode()
     {
         BreadcrumbBar.Visibility = Visibility.Collapsed;
@@ -306,6 +316,7 @@ public partial class MainWindow : Window
             && lb.SelectedItem is Models.RecentFolderItem recent)
         {
             ViewModel.NavigateCurrentPaneToPath(recent.FullPath);
+            SwitchToBreadcrumbMode();
             lb.SelectedItem = null; // Reset selection so clicking the same item again works
         }
     }
@@ -475,6 +486,10 @@ public partial class MainWindow : Window
         if (e.OriginalSource is TreeViewItem item && item.DataContext is BookmarkItem bookmark)
         {
             ViewModel.SelectedBookmark = bookmark;
+            if (!string.IsNullOrWhiteSpace(bookmark.Path))
+            {
+                ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            }
             e.Handled = true;
         }
     }
@@ -905,6 +920,7 @@ public partial class MainWindow : Window
             _boundViewModel.DualPaneModeChanged -= ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
+            _boundViewModel.ScrollToSelectedRequested -= MainWindow_ScrollToSelectedRequested;
         }
 
         _boundViewModel = e.NewValue as MainViewModel;
@@ -914,10 +930,61 @@ public partial class MainWindow : Window
             _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
+            _boundViewModel.ScrollToSelectedRequested += MainWindow_ScrollToSelectedRequested;
             HookFileListViewModel(_boundViewModel.ActiveTab?.FileList);
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
             UpdatePaneHighlight();
         }
+    }
+
+    private void MainWindow_ScrollToSelectedRequested(object? sender, EventArgs e)
+    {
+        // We might need a few attempts as containers are generated
+        int attempts = 0;
+        void TryScrollAndFlash()
+        {
+            var selectedContainer = FindSelectedTreeViewItem(FolderTree);
+            if (selectedContainer != null)
+            {
+                selectedContainer.BringIntoView();
+                
+                // Trigger the flash animation
+                if (FolderTree.Resources["FlashNodeStoryboard"] is System.Windows.Media.Animation.Storyboard sb)
+                {
+                    System.Windows.Media.Animation.Storyboard.SetTarget(sb, selectedContainer);
+                    sb.Begin(selectedContainer); // Begin specifically on this container
+                }
+            }
+            else if (attempts < 10)
+            {
+                attempts++;
+                Dispatcher.BeginInvoke(new Action(TryScrollAndFlash), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        Dispatcher.BeginInvoke(new Action(TryScrollAndFlash), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private TreeViewItem? FindSelectedTreeViewItem(ItemsControl parent)
+    {
+        // Try to find in current items
+        foreach (var item in parent.Items)
+        {
+            var container = parent.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+            if (container == null) continue;
+
+            if (container.IsSelected)
+                return container;
+
+            // If it's expanded, we can look deeper
+            if (container.IsExpanded)
+            {
+                var result = FindSelectedTreeViewItem(container);
+                if (result != null)
+                    return result;
+            }
+        }
+        return null;
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)

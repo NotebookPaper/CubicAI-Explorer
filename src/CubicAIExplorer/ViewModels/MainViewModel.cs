@@ -387,11 +387,99 @@ public partial class MainViewModel : ObservableObject
     private void RefreshCurrentPaneState()
     {
         var currentPaneTab = CurrentPaneTab;
-        AddressBarText = currentPaneTab?.CurrentPath ?? string.Empty;
+        var path = currentPaneTab?.CurrentPath ?? string.Empty;
+        AddressBarText = path;
         StatusText = currentPaneTab?.FileList.StatusText ?? "Ready";
-        UpdateBreadcrumbs(currentPaneTab?.CurrentPath ?? string.Empty);
+        UpdateBreadcrumbs(path);
         UpdatePreview();
         RaiseCurrentPaneStateProperties();
+        
+        if (!string.IsNullOrEmpty(path))
+        {
+            SyncFolderTreeToPath(path);
+        }
+    }
+
+    public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
+
+    private bool _isSyncingTree;
+    private void SyncFolderTreeToPath(string path)
+    {
+        if (_isSyncingTree || string.IsNullOrEmpty(path)) return;
+        _isSyncingTree = true;
+
+        try
+        {
+            // 1. Deselect all nodes first to avoid multiple selections
+            foreach (var rootNode in FolderTreeRoots)
+            {
+                DeselectRecursive(rootNode);
+            }
+
+            // 2. Find root drive
+            var root = Path.GetPathRoot(path);
+            if (string.IsNullOrEmpty(root)) return;
+
+            var driveNode = FolderTreeRoots.FirstOrDefault(n => string.Equals(n.FullPath, root, StringComparison.OrdinalIgnoreCase));
+            if (driveNode == null) return;
+
+            // 3. Start recursive expansion
+            ExpandToPathAsync(driveNode, path);
+        }
+        finally
+        {
+            _isSyncingTree = false;
+        }
+    }
+
+    private void DeselectRecursive(FolderTreeNodeViewModel node)
+    {
+        node.IsSelected = false;
+        foreach (var child in node.Children)
+        {
+            DeselectRecursive(child);
+        }
+    }
+
+    private async void ExpandToPathAsync(FolderTreeNodeViewModel node, string targetPath)
+    {
+        if (string.Equals(node.FullPath.TrimEnd('\\'), targetPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        {
+            node.IsSelected = true;
+            node.IsExpanded = true; // Ensure the target itself is visible if it has children
+            ScrollToSelectedRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        if (!targetPath.StartsWith(node.FullPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!node.IsExpanded)
+        {
+            node.IsExpanded = true;
+            // Give WPF a moment to generate child nodes in the background
+            await Task.Delay(50);
+        }
+
+        var nextPart = targetPath[node.FullPath.Length..].TrimStart('\\');
+        var slashIndex = nextPart.IndexOf('\\');
+        var currentPart = slashIndex == -1 ? nextPart : nextPart[..slashIndex];
+        var nextPath = Path.Combine(node.FullPath, currentPart);
+
+        // Try to find the child. If not found, maybe it's not loaded yet?
+        var child = node.Children.FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+        
+        if (child == null)
+        {
+            // If we just expanded, it should be there. If not, wait a bit more or retry.
+            await Task.Delay(50);
+            child = node.Children.FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (child != null)
+        {
+            ExpandToPathAsync(child, targetPath);
+        }
     }
 
     private static string GetAppDataPath(string filename)
