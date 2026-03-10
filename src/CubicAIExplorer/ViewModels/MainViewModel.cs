@@ -1108,13 +1108,20 @@ public partial class MainViewModel : ObservableObject
         }
 
         // Debounced async lookup for directory suggestions
+        if (Application.Current == null)
+        {
+            PopulateSuggestions(text, suggestions, setOpen);
+            return;
+        }
+
         var newCts = new CancellationTokenSource();
         cts = newCts;
-        LoadSuggestionsAsync(text, suggestions, setOpen, newCts.Token);
+        var uiDispatcher = Application.Current.Dispatcher;
+        LoadSuggestionsAsync(text, suggestions, setOpen, uiDispatcher, newCts.Token);
     }
 
     private async void LoadSuggestionsAsync(string text, ObservableCollection<string> suggestions,
-        Action<bool> setOpen, CancellationToken token)
+        Action<bool> setOpen, System.Windows.Threading.Dispatcher uiDispatcher, CancellationToken token)
     {
         // Debounce: wait 100ms before querying the filesystem
         await Task.Delay(100, token).ConfigureAwait(false);
@@ -1155,12 +1162,55 @@ public partial class MainViewModel : ObservableObject
 
         if (token.IsCancellationRequested) return;
 
+        await uiDispatcher.InvokeAsync(() =>
+        {
+            if (token.IsCancellationRequested) return;
+
+            SetSuggestions(suggestions, setOpen, results);
+        });
+    }
+
+    private void PopulateSuggestions(string text, ObservableCollection<string> suggestions, Action<bool> setOpen)
+    {
+        string parentDir;
+        string prefix;
+
+        if (text.EndsWith('\\') || text.EndsWith('/'))
+        {
+            parentDir = text;
+            prefix = string.Empty;
+        }
+        else
+        {
+            parentDir = Path.GetDirectoryName(text) ?? string.Empty;
+            prefix = Path.GetFileName(text);
+        }
+
+        if (!_fileSystemService.DirectoryExists(parentDir))
+        {
+            SetSuggestions(suggestions, setOpen, []);
+            return;
+        }
+
+        var results = _fileSystemService.GetSubDirectories(parentDir)
+            .Where(d => string.IsNullOrEmpty(prefix)
+                || d.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Take(15)
+            .Select(d => d.FullPath)
+            .ToList();
+
+        SetSuggestions(suggestions, setOpen, results);
+    }
+
+    private static void SetSuggestions(ObservableCollection<string> suggestions, Action<bool> setOpen, List<string>? results)
+    {
         suggestions.Clear();
         if (results is { Count: > 0 })
         {
             foreach (var dir in results)
                 suggestions.Add(dir);
         }
+
         setOpen(suggestions.Count > 0);
     }
 

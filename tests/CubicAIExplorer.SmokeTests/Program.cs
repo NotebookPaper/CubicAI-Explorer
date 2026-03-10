@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Data;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
@@ -52,6 +53,7 @@ internal static class Program
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
+            Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
             Run("user settings defaults", failures, TestUserSettingsDefaults);
             Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
@@ -981,6 +983,28 @@ internal static class Program
         Assert(vm.AddressSuggestions.Count == 0, "Non-matching prefixes should clear suggestions.");
     }
 
+    private static void TestAddressSuggestionsUiThreadSafety(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "autocomplete_threadsafe");
+        CreateCleanSubdir(folder, "alpha");
+        CreateCleanSubdir(folder, "beta");
+
+        var vm = new MainViewModel(fs, clipboard)
+        {
+            AddressBarText = Path.Combine(folder, "a")
+        };
+
+        // Attach a CollectionView to simulate real WPF binding behavior.
+        _ = CollectionViewSource.GetDefaultView(vm.AddressSuggestions);
+
+        vm.UpdateAddressSuggestions();
+        WaitFor(() => vm.AddressSuggestions.Count > 0);
+        Assert(vm.AddressSuggestions.Any(s => s.Contains("alpha", StringComparison.OrdinalIgnoreCase)),
+            "Address suggestions should update safely when a CollectionView is attached.");
+    }
+
     private static void TestPreviewRefreshOnTabSwitch(string root)
     {
         var fs = new FileSystemService();
@@ -1134,6 +1158,10 @@ internal static class Program
         Assert(main.Contains("CurrentPaneFileList.SearchText"), "Search bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.IsSearchVisible"), "Search visibility should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneLabel"), "Status bar should include the current pane label.");
+        Assert(main.Contains("CurrentPaneLabel, Mode=OneWay"), "CurrentPaneLabel should be OneWay-bound (read-only source).");
+        Assert(main.Contains("CurrentPanePath, Mode=OneWay"), "CurrentPanePath should be OneWay-bound (read-only source).");
+        Assert(main.Contains("LeftPaneStatusText, Mode=OneWay"), "LeftPaneStatusText should be OneWay-bound (read-only source).");
+        Assert(main.Contains("RightPaneStatusText, Mode=OneWay"), "RightPaneStatusText should be OneWay-bound (read-only source).");
         Assert(main.Contains("RightPaneHeader_MouseLeftButtonDown"), "Right pane header activation should be wired.");
         Assert(main.Contains("RightPaneAddressBox"), "Right pane should expose an inline address editor.");
         Assert(main.Contains("RightPaneAddressGo_Click"), "Right pane address editor should wire its go action.");

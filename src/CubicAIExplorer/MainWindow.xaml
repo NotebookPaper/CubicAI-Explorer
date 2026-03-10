@@ -244,23 +244,23 @@
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem MinWidth="140">
                 <TextBlock>
-                    <Run Text="{Binding CurrentPaneLabel}" />
+                    <Run Text="{Binding CurrentPaneLabel, Mode=OneWay}" />
                     <Run Text=": " />
-                    <Run Text="{Binding StatusText}" />
+                    <Run Text="{Binding StatusText, Mode=OneWay}" />
                 </TextBlock>
             </StatusBarItem>
             <Separator />
             <StatusBarItem>
-                <TextBlock Text="{Binding CurrentPanePath}" TextTrimming="CharacterEllipsis"
+                <TextBlock Text="{Binding CurrentPanePath, Mode=OneWay}" TextTrimming="CharacterEllipsis"
                            MaxWidth="600" />
             </StatusBarItem>
             <Separator />
             <StatusBarItem Visibility="{Binding IsDualPaneMode, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock>
                     <Run Text="Left: " />
-                    <Run Text="{Binding LeftPaneStatusText}" />
+                    <Run Text="{Binding LeftPaneStatusText, Mode=OneWay}" />
                     <Run Text=" | Right: " />
-                    <Run Text="{Binding RightPaneStatusText}" />
+                    <Run Text="{Binding RightPaneStatusText, Mode=OneWay}" />
                 </TextBlock>
             </StatusBarItem>
         </StatusBar>
