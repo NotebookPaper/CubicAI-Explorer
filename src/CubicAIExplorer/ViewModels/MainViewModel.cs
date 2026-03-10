@@ -888,51 +888,82 @@ public partial class MainViewModel : ObservableObject
         var root = doc.Root;
         if (root == null) return;
 
-        // Old CubicExplorer format: <Bookmarks><Category Name="..."><Bookmark Name="..." Path="..."/></Category></Bookmarks>
-        // Or flat: <Bookmarks><Bookmark Name="..." Path="..."/></Bookmarks>
-        
         var count = 0;
-        
-        // Handle categories (folders)
-        foreach (var category in root.Descendants("Category"))
+        var skipped = 0;
+
+        // We'll traverse the tree to preserve naming context
+        void ProcessNode(XElement element, string? prefix)
         {
-            var catName = category.Attribute("Name")?.Value;
-            foreach (var bookmark in category.Elements("Bookmark"))
+            foreach (var node in element.Elements())
             {
-                var name = bookmark.Attribute("Name")?.Value;
-                var path = bookmark.Attribute("Path")?.Value;
-                if (!string.IsNullOrWhiteSpace(path))
+                var localName = node.Name.LocalName;
+                var isItem = string.Equals(localName, "item", StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(localName, "Bookmark", StringComparison.OrdinalIgnoreCase);
+                var isCategory = string.Equals(localName, "category", StringComparison.OrdinalIgnoreCase);
+
+                var name = node.Attribute("Name")?.Value 
+                          ?? node.Attribute("name")?.Value 
+                          ?? node.Attribute("Title")?.Value;
+
+                var path = node.Attribute("Path")?.Value 
+                          ?? node.Attribute("path")?.Value 
+                          ?? node.Attribute("Location")?.Value;
+
+                if (isItem || isCategory)
                 {
-                    // Prefix name with category if available to preserve some structure in the flat list
-                    var displayName = !string.IsNullOrWhiteSpace(catName) ? $"{catName} - {name}" : name;
-                    TryAddBookmark(path, displayName, save: false);
-                    count++;
+                    var displayName = string.IsNullOrEmpty(prefix) ? name : $"{prefix} - {name}";
+
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        if (TryAddBookmarkWithFeedback(path, displayName, save: false))
+                            count++;
+                        else
+                            skipped++;
+                    }
+
+                    // Recurse into children
+                    ProcessNode(node, displayName);
                 }
             }
         }
 
-        // Handle flat bookmarks
-        foreach (var bookmark in root.Elements("Bookmark"))
-        {
-            var name = bookmark.Attribute("Name")?.Value;
-            var path = bookmark.Attribute("Path")?.Value;
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                TryAddBookmark(path, name, save: false);
-                count++;
-            }
-        }
+        ProcessNode(root, null);
 
-        if (count > 0)
+        if (count > 0 || skipped > 0)
         {
             SaveBookmarks();
-            MessageBox.Show($"Imported {count} bookmarks.", "Import Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            var message = $"Imported {count} bookmarks.";
+            if (skipped > 0)
+            {
+                message += $"\nSkipped {skipped} bookmarks (path not found on this PC).";
+            }
+            MessageBox.Show(message, "Import Results", MessageBoxButton.OK, MessageBoxImage.Information);
         }
+    }
+    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true)
+    {
+        if (!_fileSystemService.DirectoryExists(path)) return false;
+        if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase))) return true; // Already exists
+
+        var name = string.IsNullOrWhiteSpace(displayName)
+            ? GetDisplayName(path)
+            : displayName;
+
+        Bookmarks.Add(new BookmarkItem
+        {
+            Name = name,
+            Path = path,
+            IsFolder = true
+        });
+
+        if (save)
+            SaveBookmarks();
+
+        return true;
     }
 
     [RelayCommand]
-    private void ExportBookmarks(string filePath)
-    {
+    private void ExportBookmarks(string filePath)    {
         if (string.IsNullOrWhiteSpace(filePath)) return;
 
         try
