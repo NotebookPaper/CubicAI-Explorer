@@ -6,4 +6,5 @@ namespace CubicAIExplorer.Models;
 public sealed record ArchiveBrowseRequest(
     string ArchivePath,
     IReadOnlyList<ArchiveEntryInfo> Entries,
-    FileListViewModel SourceFileList);
+    FileListViewModel SourceFileList,
+    IFileSystemService FileSystemService);

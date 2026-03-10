@@ -286,7 +286,97 @@ public partial class FileListViewModel : ObservableObject
         if (dialog.ShowDialog() != true)
             return;
 
-        await ExtractArchiveToAsync(item, dialog.DestinationPath, dialog.OpenFolderWhenDone);
+        await ExtractArchiveToAsync(item, dialog.DestinationPath, dialog.OpenFolderWhenDone, dialog.ConflictMode);
+    }
+
+    [RelayCommand]
+    private async Task CompressToZip()
+    {
+        var items = SelectedItems.Count > 0 ? SelectedItems.ToList() : (SelectedItem != null ? [SelectedItem] : null);
+        if (items == null || items.Count == 0)
+            return;
+
+        var defaultName = items.Count == 1
+            ? Path.GetFileNameWithoutExtension(items[0].Name)
+            : Path.GetFileName(CurrentPath.TrimEnd(Path.DirectorySeparatorChar));
+        var defaultDestination = CurrentPath;
+
+        var dialog = new CreateArchiveDialog(defaultName, defaultDestination);
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var archivePath = dialog.ArchivePath;
+        var sourcePaths = items.Select(static i => i.FullPath).ToList();
+
+        try
+        {
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Creating {Path.GetFileName(archivePath)}",
+                context =>
+                {
+                    _fileSystemService.CreateArchive(archivePath, sourcePaths, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Created {Path.GetFileName(archivePath)}");
+            Refresh();
+
+            if (dialog.OpenFolderWhenDone)
+                _fileSystemService.OpenInDefaultApp(dialog.DestinationFolder);
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary("Archive creation canceled");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Create archive failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddToArchive()
+    {
+        var items = SelectedItems.Count > 0 ? SelectedItems.ToList() : (SelectedItem != null ? [SelectedItem] : null);
+        if (items == null || items.Count == 0)
+            return;
+
+        var dialog = new AddToArchiveDialog(items.Count);
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var archivePath = dialog.ArchivePath;
+        var sourcePaths = items.Select(static i => i.FullPath).ToList();
+
+        try
+        {
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Adding {items.Count} item(s) to {Path.GetFileName(archivePath)}",
+                context =>
+                {
+                    _fileSystemService.AddToArchive(archivePath, sourcePaths, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Added {items.Count} item(s) to {Path.GetFileName(archivePath)}");
+            Refresh();
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary("Add to archive canceled");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Add to archive failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     [RelayCommand]
@@ -304,7 +394,7 @@ public partial class FileListViewModel : ObservableObject
         try
         {
             var entries = _fileSystemService.GetArchiveEntries(item.FullPath, maxEntries: int.MaxValue);
-            ArchiveBrowseRequested?.Invoke(this, new ArchiveBrowseRequest(item.FullPath, entries, this));
+            ArchiveBrowseRequested?.Invoke(this, new ArchiveBrowseRequest(item.FullPath, entries, this, _fileSystemService));
         }
         catch (Exception ex)
         {
@@ -475,7 +565,7 @@ public partial class FileListViewModel : ObservableObject
         return Path.Combine(parentPath, Path.GetFileNameWithoutExtension(item.Name));
     }
 
-    public async Task ExtractArchiveToAsync(FileSystemItem item, string destinationPath, bool openFolderWhenDone = false)
+    public async Task ExtractArchiveToAsync(FileSystemItem item, string destinationPath, bool openFolderWhenDone = false, ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip)
     {
         if (!IsArchiveItem(item) || string.IsNullOrWhiteSpace(destinationPath))
             return;
@@ -490,7 +580,7 @@ public partial class FileListViewModel : ObservableObject
                 $"Extracting {item.Name}",
                 context =>
                 {
-                    _fileSystemService.ExtractArchive(item.FullPath, sanitizedDestination, context);
+                    _fileSystemService.ExtractArchive(item.FullPath, sanitizedDestination, conflictMode, context);
                     return true;
                 });
 
@@ -519,7 +609,8 @@ public partial class FileListViewModel : ObservableObject
         string archivePath,
         IEnumerable<string> entryPaths,
         string destinationPath,
-        bool openFolderWhenDone = false)
+        bool openFolderWhenDone = false,
+        ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip)
     {
         if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(destinationPath))
             return;
@@ -541,7 +632,7 @@ public partial class FileListViewModel : ObservableObject
                 $"Extracting {entryPathList.Length} archive item(s)",
                 context =>
                 {
-                    _fileSystemService.ExtractArchiveEntries(archivePath, sanitizedDestination, entryPathList, context);
+                    _fileSystemService.ExtractArchiveEntries(archivePath, sanitizedDestination, entryPathList, conflictMode, context);
                     return true;
                 });
 

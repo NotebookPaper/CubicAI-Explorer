@@ -10,16 +10,18 @@ namespace CubicAIExplorer.Views;
 public partial class ArchiveBrowserDialog : Window
 {
     private readonly string _archivePath;
+    private readonly IFileSystemService _fileSystemService;
     private readonly FileListViewModel _sourceFileList;
-    private readonly List<ArchiveEntryInfo> _allEntries;
+    private List<ArchiveEntryInfo> _allEntries;
     private readonly ObservableCollection<ArchiveEntryViewModel> _visibleEntries = [];
     private string _currentFolder = string.Empty;
 
-    public ArchiveBrowserDialog(string archivePath, IReadOnlyList<ArchiveEntryInfo> entries, FileListViewModel sourceFileList)
+    public ArchiveBrowserDialog(string archivePath, IReadOnlyList<ArchiveEntryInfo> entries, FileListViewModel sourceFileList, IFileSystemService fileSystemService)
     {
         InitializeComponent();
 
         _archivePath = archivePath;
+        _fileSystemService = fileSystemService;
         _sourceFileList = sourceFileList;
         _allEntries = entries.ToList();
         ArchivePathTextBlock.Text = archivePath;
@@ -72,6 +74,44 @@ public partial class ArchiveBrowserDialog : Window
         await ExtractEntriesAsync(GetCurrentScopeEntryPaths(), promptForDestination: true);
     }
 
+    private void DeleteSelectedButton_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedEntries = EntriesListView.SelectedItems.OfType<ArchiveEntryViewModel>().ToArray();
+        if (selectedEntries.Length == 0)
+            return;
+
+        var names = selectedEntries.Length <= 3
+            ? string.Join(", ", selectedEntries.Select(static entry => entry.Name))
+            : $"{selectedEntries.Length} items";
+        var result = MessageBox.Show(
+            $"Permanently delete {names} from the archive?",
+            "Delete from Archive",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            IsEnabled = false;
+            _fileSystemService.DeleteArchiveEntries(_archivePath, selectedEntries.Select(static e => e.FullName));
+            _allEntries = _fileSystemService.GetArchiveEntries(_archivePath, int.MaxValue).ToList();
+            RefreshEntries();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Delete failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
+    }
+
     private async Task ExtractEntriesAsync(IEnumerable<string> entryPaths, bool promptForDestination)
     {
         var requestedEntries = entryPaths
@@ -84,6 +124,7 @@ public partial class ArchiveBrowserDialog : Window
         var defaultDestination = GetDefaultDestination();
         var destination = defaultDestination;
         var openWhenDone = false;
+        var conflictMode = Services.ArchiveExtractConflictMode.Skip;
 
         if (promptForDestination)
         {
@@ -93,12 +134,13 @@ public partial class ArchiveBrowserDialog : Window
 
             destination = dialog.DestinationPath;
             openWhenDone = dialog.OpenFolderWhenDone;
+            conflictMode = dialog.ConflictMode;
         }
 
         try
         {
             IsEnabled = false;
-            await _sourceFileList.ExtractArchiveEntriesToAsync(_archivePath, requestedEntries, destination, openWhenDone);
+            await _sourceFileList.ExtractArchiveEntriesToAsync(_archivePath, requestedEntries, destination, openWhenDone, conflictMode);
         }
         finally
         {

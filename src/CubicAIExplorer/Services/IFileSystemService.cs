@@ -4,6 +4,13 @@ namespace CubicAIExplorer.Services;
 
 public sealed record ArchiveEntryInfo(string FullName, long Length, bool IsDirectory);
 
+public enum ArchiveExtractConflictMode
+{
+    Skip,
+    Overwrite,
+    RenameWithSuffix
+}
+
 public enum FileTransferCollisionResolution
 {
     KeepBoth,
@@ -50,10 +57,24 @@ public interface IFileSystemService
     string CreateFolder(string parentPath, string folderName);
     string? EnsureDirectoryExists(string path);
     IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);
-    void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null);
+    void ExtractArchive(
+        string archivePath,
+        string destinationDirectory,
+        ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip,
+        IFileOperationContext? operationContext = null);
     void ExtractArchiveEntries(
         string archivePath,
         string destinationDirectory,
         IEnumerable<string> entryPaths,
+        ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip,
         IFileOperationContext? operationContext = null);
+    void CreateArchive(
+        string destinationArchivePath,
+        IEnumerable<string> sourcePaths,
+        IFileOperationContext? operationContext = null);
+    void AddToArchive(
+        string archivePath,
+        IEnumerable<string> sourcePaths,
+        IFileOperationContext? operationContext = null);
+    void DeleteArchiveEntries(string archivePath, IEnumerable<string> entryPaths);
 }

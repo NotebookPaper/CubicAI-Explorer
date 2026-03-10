@@ -638,7 +638,8 @@ public partial class MainWindow : Window
         ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
             OpenMenuItem, BrowseArchiveMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
             DeleteMenuItem, RenameMenuItem, NewFolderMenuItem, RefreshMenuItem,
-            PasteMenuItem, ExtractArchiveMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
+            PasteMenuItem, ExtractArchiveMenuItem, CompressToZipMenuItem, AddToArchiveMenuItem,
+            PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
     }
 
     private void RightPane_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -647,7 +648,8 @@ public partial class MainWindow : Window
         ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
             RightOpenMenuItem, RightBrowseArchiveMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
             RightDeleteMenuItem, RightRenameMenuItem, RightNewFolderMenuItem, RightRefreshMenuItem,
-            RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
+            RightPasteMenuItem, RightExtractArchiveMenuItem, RightCompressToZipMenuItem, RightAddToArchiveMenuItem,
+            RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
     }
 
     private void ConfigureContextMenu(
@@ -655,6 +657,7 @@ public partial class MainWindow : Window
         FrameworkElement open, FrameworkElement browseArchive, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
         FrameworkElement sep2, FrameworkElement delete, FrameworkElement rename,
         FrameworkElement newFolder, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
+        FrameworkElement compressToZip, FrameworkElement addToArchive,
         FrameworkElement propsSep, FrameworkElement props, FrameworkElement openInExplorer)
     {
         if (fileList == null) return;
@@ -688,6 +691,8 @@ public partial class MainWindow : Window
         refresh.Visibility = emptyVisibility;
         paste.Visibility = Visibility.Visible;
         extractArchive.Visibility = archiveVisibility;
+        compressToZip.Visibility = itemVisibility;
+        addToArchive.Visibility = itemVisibility;
         propsSep.Visibility = Visibility.Visible;
         props.Visibility = itemVisibility;
         openInExplorer.Visibility = Visibility.Visible;
@@ -935,7 +940,7 @@ public partial class MainWindow : Window
 
     private void FileListViewModel_ArchiveBrowseRequested(object? sender, ArchiveBrowseRequest request)
     {
-        var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.SourceFileList) { Owner = this };
+        var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.SourceFileList, request.FileSystemService) { Owner = this };
         dialog.ShowDialog();
     }
 

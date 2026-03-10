@@ -575,6 +575,8 @@
                                 <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                 <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
+                                <MenuItem x:Name="CompressToZipMenuItem" Header="Compress to ZIP..." Command="{Binding CompressToZipCommand}" />
+                                <MenuItem x:Name="AddToArchiveMenuItem" Header="Add to Archive..." Command="{Binding AddToArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                 <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
@@ -716,6 +718,8 @@
                                     <MenuItem x:Name="RightNewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                     <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
+                                    <MenuItem x:Name="RightCompressToZipMenuItem" Header="Compress to ZIP..." Command="{Binding CompressToZipCommand}" />
+                                    <MenuItem x:Name="RightAddToArchiveMenuItem" Header="Add to Archive..." Command="{Binding AddToArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />
                                     <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                     <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />

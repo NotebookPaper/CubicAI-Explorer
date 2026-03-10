@@ -337,7 +337,11 @@ public sealed class FileSystemService : IFileSystemService
             .ToList();
     }
 
-    public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
+    public void ExtractArchive(
+        string archivePath,
+        string destinationDirectory,
+        ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip,
+        IFileOperationContext? operationContext = null)
     {
         var sanitizedArchive = SanitizePath(archivePath);
         var sanitizedDestination = SanitizePath(destinationDirectory);
@@ -367,7 +371,7 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            entry.ExtractToFile(targetPath, overwrite: false);
+            ExtractEntry(entry, targetPath, conflictMode);
             operationContext?.ReportProgress(i + 1, archive.Entries.Count, entry.FullName);
         }
     }
@@ -376,6 +380,7 @@ public sealed class FileSystemService : IFileSystemService
         string archivePath,
         string destinationDirectory,
         IEnumerable<string> entryPaths,
+        ArchiveExtractConflictMode conflictMode = ArchiveExtractConflictMode.Skip,
         IFileOperationContext? operationContext = null)
     {
         var sanitizedArchive = SanitizePath(archivePath);
@@ -419,9 +424,168 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            entry.ExtractToFile(targetPath, overwrite: false);
+            ExtractEntry(entry, targetPath, conflictMode);
             operationContext?.ReportProgress(i + 1, matchingEntries.Count, entry.FullName);
         }
+    }
+
+    public void CreateArchive(
+        string destinationArchivePath,
+        IEnumerable<string> sourcePaths,
+        IFileOperationContext? operationContext = null)
+    {
+        var sanitizedDest = SanitizePath(destinationArchivePath);
+        if (sanitizedDest == null)
+            return;
+
+        var sources = sourcePaths
+            .Select(SanitizePath)
+            .Where(static p => p != null)
+            .ToList()!;
+        if (sources.Count == 0)
+            return;
+
+        var destDir = Path.GetDirectoryName(sanitizedDest);
+        if (!string.IsNullOrWhiteSpace(destDir))
+            Directory.CreateDirectory(destDir);
+
+        var allFiles = new List<(string FilePath, string EntryName)>();
+        foreach (var source in sources)
+        {
+            if (File.Exists(source))
+                allFiles.Add((source, Path.GetFileName(source)));
+            else if (Directory.Exists(source))
+                CollectFilesFromDirectory(source, Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar)), allFiles);
+        }
+
+        if (allFiles.Count == 0)
+            return;
+
+        using var stream = new FileStream(sanitizedDest, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false);
+
+        for (var i = 0; i < allFiles.Count; i++)
+        {
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            var (filePath, entryName) = allFiles[i];
+            archive.CreateEntryFromFile(filePath, entryName.Replace('\\', '/'), CompressionLevel.Optimal);
+            operationContext?.ReportProgress(i + 1, allFiles.Count, entryName);
+        }
+    }
+
+    public void AddToArchive(
+        string archivePath,
+        IEnumerable<string> sourcePaths,
+        IFileOperationContext? operationContext = null)
+    {
+        var sanitized = SanitizePath(archivePath);
+        if (sanitized == null || !File.Exists(sanitized))
+            return;
+
+        var sources = sourcePaths
+            .Select(SanitizePath)
+            .Where(static p => p != null)
+            .ToList()!;
+        if (sources.Count == 0)
+            return;
+
+        var allFiles = new List<(string FilePath, string EntryName)>();
+        foreach (var source in sources)
+        {
+            if (File.Exists(source))
+                allFiles.Add((source, Path.GetFileName(source)));
+            else if (Directory.Exists(source))
+                CollectFilesFromDirectory(source, Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar)), allFiles);
+        }
+
+        if (allFiles.Count == 0)
+            return;
+
+        using var stream = new FileStream(sanitized, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
+
+        var existingEntries = archive.Entries
+            .Select(static e => e.FullName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < allFiles.Count; i++)
+        {
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            var (filePath, entryName) = allFiles[i];
+            var normalizedName = entryName.Replace('\\', '/');
+            if (existingEntries.Contains(normalizedName))
+                continue;
+            archive.CreateEntryFromFile(filePath, normalizedName, CompressionLevel.Optimal);
+            operationContext?.ReportProgress(i + 1, allFiles.Count, entryName);
+        }
+    }
+
+    public void DeleteArchiveEntries(string archivePath, IEnumerable<string> entryPaths)
+    {
+        var sanitized = SanitizePath(archivePath);
+        if (sanitized == null || !File.Exists(sanitized))
+            return;
+
+        var toDelete = entryPaths
+            .Where(static p => !string.IsNullOrWhiteSpace(p))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (toDelete.Count == 0)
+            return;
+
+        using var stream = new FileStream(sanitized, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
+
+        var entriesToDelete = archive.Entries
+            .Where(entry => toDelete.Contains(entry.FullName)
+                || toDelete.Any(p => entry.FullName.StartsWith(
+                    p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var entry in entriesToDelete)
+            entry.Delete();
+    }
+
+    private static void ExtractEntry(ZipArchiveEntry entry, string targetPath, ArchiveExtractConflictMode conflictMode)
+    {
+        if (File.Exists(targetPath))
+        {
+            switch (conflictMode)
+            {
+                case ArchiveExtractConflictMode.Skip:
+                    return;
+                case ArchiveExtractConflictMode.Overwrite:
+                    entry.ExtractToFile(targetPath, overwrite: true);
+                    return;
+                case ArchiveExtractConflictMode.RenameWithSuffix:
+                    targetPath = GetNonConflictingPath(targetPath);
+                    break;
+            }
+        }
+        entry.ExtractToFile(targetPath, overwrite: false);
+    }
+
+    private static string GetNonConflictingPath(string path)
+    {
+        var dir = Path.GetDirectoryName(path) ?? string.Empty;
+        var name = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        var counter = 2;
+        string candidate;
+        do
+        {
+            candidate = Path.Combine(dir, $"{name} ({counter}){ext}");
+            counter++;
+        } while (File.Exists(candidate));
+        return candidate;
+    }
+
+    private static void CollectFilesFromDirectory(string dirPath, string entryPrefix, List<(string, string)> result)
+    {
+        foreach (var file in Directory.EnumerateFiles(dirPath))
+            result.Add((file, entryPrefix + "/" + Path.GetFileName(file)));
+
+        foreach (var subDir in Directory.EnumerateDirectories(dirPath))
+            CollectFilesFromDirectory(subDir, entryPrefix + "/" + Path.GetFileName(subDir), result);
     }
 
     /// <summary>
