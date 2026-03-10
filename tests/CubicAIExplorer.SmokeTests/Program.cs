@@ -61,6 +61,8 @@ internal static class Program
             Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
             Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
+            Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
+            Run("known folder display names", failures, TestKnownFolderDisplayNames);
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
@@ -1232,6 +1234,54 @@ internal static class Program
         }
     }
 
+    private static void TestKnownFolderAliasNavigation(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var bookmarkFile = Path.Combine(root, "known_folder_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+
+        try
+        {
+            var desktopPath = fs.ResolveDirectoryPath("Desktop");
+            Assert(!string.IsNullOrWhiteSpace(desktopPath), "Desktop alias should resolve to an existing folder.");
+
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.AddressBarText = "Desktop";
+            vm.NavigateToAddressCommand.Execute(null);
+
+            Assert(string.Equals(vm.ActiveTab?.CurrentPath, desktopPath, StringComparison.OrdinalIgnoreCase),
+                "Desktop alias should navigate to the resolved desktop path.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestKnownFolderDisplayNames()
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var desktopPath = fs.ResolveDirectoryPath("Desktop");
+        Assert(!string.IsNullOrWhiteSpace(desktopPath), "Desktop alias should resolve to an existing folder.");
+
+        var vm = new MainViewModel(fs, clipboard, userSettings: new UserSettings());
+        vm.NavigateToPath(desktopPath!);
+
+        var expectedDisplayName = fs.GetDisplayName(desktopPath!);
+        Assert(!string.IsNullOrWhiteSpace(expectedDisplayName), "Shell display name should not be empty.");
+        Assert(string.Equals(vm.ActiveTab?.Title, expectedDisplayName, StringComparison.Ordinal),
+            "Tab title should use the shell display name.");
+        Assert(vm.BreadcrumbSegments.Count > 0, "Known-folder navigation should populate breadcrumbs.");
+        Assert(string.Equals(vm.BreadcrumbSegments[^1].DisplayName, expectedDisplayName, StringComparison.Ordinal),
+            "Breadcrumbs should use the shell display name for the current folder.");
+        Assert(vm.RecentFolders.Count > 0, "Known-folder navigation should add a recent-folder entry.");
+        Assert(string.Equals(vm.RecentFolders[0].DisplayName, expectedDisplayName, StringComparison.Ordinal),
+            "Recent folders should use the shell display name.");
+    }
+
     private static void TestSavedSearchMatchMode(string root)
     {
         var fs = new FileSystemService();
@@ -1691,6 +1741,17 @@ internal static class Program
         Assert(vm.IsAddressSuggestionsOpen, "Matching folders should open address suggestions.");
         Assert(vm.AddressSuggestions.Count == 1, "Suggestions should be filtered by the typed prefix.");
         Assert(vm.AddressSuggestions[0] == alpha, "Suggestions should contain the matching folder path.");
+
+        var desktopPath = fs.ResolveDirectoryPath("Desktop");
+        if (!string.IsNullOrWhiteSpace(desktopPath))
+        {
+            vm.AddressBarText = "desk";
+            vm.UpdateAddressSuggestions();
+            WaitFor(() => vm.AddressSuggestions.Count > 0);
+
+            Assert(vm.AddressSuggestions.Contains(desktopPath, StringComparer.OrdinalIgnoreCase),
+                "Known folder aliases should contribute address suggestions.");
+        }
 
         vm.AddressBarText = Path.Combine(folder, "zzz");
         vm.UpdateAddressSuggestions();

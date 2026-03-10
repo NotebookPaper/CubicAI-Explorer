@@ -913,12 +913,7 @@ public partial class MainViewModel : ObservableObject
         return Path.Combine(appData, "CubicAIExplorer", filename);
     }
 
-    private static string GetDisplayName(string path)
-    {
-        var trimmed = path.TrimEnd('\\');
-        var name = Path.GetFileName(trimmed);
-        return string.IsNullOrEmpty(name) ? path : name;
-    }
+    private string GetDisplayName(string path) => _fileSystemService.GetDisplayName(path);
 
     private static string GetBookmarksPath()
     {
@@ -1049,9 +1044,10 @@ public partial class MainViewModel : ObservableObject
     {
         var targetTab = CurrentPaneTab;
         if (targetTab == null || string.IsNullOrWhiteSpace(AddressBarText)) return;
-        if (_fileSystemService.DirectoryExists(AddressBarText))
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(AddressBarText);
+        if (!string.IsNullOrWhiteSpace(resolvedPath))
         {
-            targetTab.NavigateTo(AddressBarText);
+            targetTab.NavigateTo(resolvedPath);
         }
     }
 
@@ -1402,13 +1398,18 @@ public partial class MainViewModel : ObservableObject
 
     public void NavigateToPath(string path)
     {
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return;
+
         if (ActiveTab == null) NewTab();
-        ActiveTab!.NavigateTo(path);
+        ActiveTab!.NavigateTo(resolvedPath);
     }
 
     public void NavigateCurrentPaneToPath(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
             return;
 
         if (CurrentPaneTab == null)
@@ -1417,7 +1418,7 @@ public partial class MainViewModel : ObservableObject
                 NewTab();
         }
 
-        CurrentPaneTab?.NavigateTo(path);
+        CurrentPaneTab?.NavigateTo(resolvedPath);
     }
 
     partial void OnActiveTabChanged(TabViewModel? value)
@@ -1451,9 +1452,7 @@ public partial class MainViewModel : ObservableObject
 
         while (!string.IsNullOrEmpty(current))
         {
-            var name = Path.GetFileName(current);
-            if (string.IsNullOrEmpty(name))
-                name = current; // Drive root like "C:\"
+            var name = GetDisplayName(current);
 
             segments.Add(new BreadcrumbSegment
             {
@@ -2551,6 +2550,18 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (!text.Contains('\\') && !text.Contains('/'))
+        {
+            foreach (var suggestion in GetKnownFolderSuggestions(text))
+                suggestions.Add(suggestion);
+
+            if (suggestions.Count > 0)
+            {
+                setOpen(true);
+                return;
+            }
+        }
+
         // Debounced async lookup for directory suggestions
         if (Application.Current == null)
         {
@@ -2603,6 +2614,33 @@ public partial class MainViewModel : ObservableObject
             return (text, string.Empty);
 
         return (Path.GetDirectoryName(text) ?? string.Empty, Path.GetFileName(text));
+    }
+
+    private List<string> GetKnownFolderSuggestions(string text)
+    {
+        var normalized = text.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return [];
+
+        var aliases = new[]
+        {
+            "Desktop",
+            "Documents",
+            "Downloads",
+            "Pictures",
+            "Music",
+            "Videos",
+            "Home",
+            "Profile"
+        };
+
+        return aliases
+            .Where(alias => alias.StartsWith(normalized, StringComparison.OrdinalIgnoreCase))
+            .Select(alias => _fileSystemService.ResolveDirectoryPath(alias))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private List<string> GetDirectorySuggestions(string parentDirectory, string prefix)

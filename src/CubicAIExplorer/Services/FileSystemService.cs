@@ -9,6 +9,11 @@ namespace CubicAIExplorer.Services;
 
 public sealed class FileSystemService : IFileSystemService
 {
+    private const uint SHGFI_DISPLAYNAME = 0x000000200;
+    private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
+    private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
+    private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+
     public IReadOnlyList<FileSystemItem> GetDrives()
     {
         return DriveInfo.GetDrives()
@@ -23,6 +28,35 @@ public sealed class FileSystemService : IFileSystemService
                 DateCreated = DateTime.MinValue
             })
             .ToList();
+    }
+
+    public string GetDisplayName(string path)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null)
+            return path;
+
+        var displayName = TryGetShellDisplayName(sanitized);
+        if (!string.IsNullOrWhiteSpace(displayName))
+            return displayName;
+
+        var trimmed = sanitized.TrimEnd('\\');
+        var name = Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(name) ? sanitized : name;
+    }
+
+    public string? ResolveDirectoryPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var rawPath = path.Trim();
+        var knownFolderPath = ResolveKnownFolderAlias(rawPath);
+        if (!string.IsNullOrWhiteSpace(knownFolderPath))
+            return knownFolderPath;
+
+        var sanitized = SanitizePath(rawPath);
+        return sanitized != null && Directory.Exists(sanitized) ? sanitized : null;
     }
 
     public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false)
@@ -481,6 +515,28 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    private static string? TryGetShellDisplayName(string path)
+    {
+        var shellInfo = new SHFILEINFO();
+        var flags = SHGFI_DISPLAYNAME;
+        var attributes = FILE_ATTRIBUTE_NORMAL;
+
+        if (!PathExists(path))
+        {
+            flags |= SHGFI_USEFILEATTRIBUTES;
+            attributes = LooksLikeDirectoryPath(path) ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
+        }
+
+        var result = SHGetFileInfo(
+            path,
+            attributes,
+            ref shellInfo,
+            (uint)Marshal.SizeOf<SHFILEINFO>(),
+            flags);
+
+        return result == IntPtr.Zero ? null : shellInfo.szDisplayName;
+    }
+
     private static FileSystemItem CreateItem(DirectoryInfo dir) => new()
     {
         Name = dir.Name,
@@ -523,6 +579,49 @@ public sealed class FileSystemService : IFileSystemService
 
     private static bool PathExists(string path, bool isDirectory)
         => isDirectory ? Directory.Exists(path) : File.Exists(path);
+
+    private static string? ResolveKnownFolderAlias(string rawPath)
+    {
+        var normalized = rawPath
+            .Trim()
+            .TrimEnd('\\', '/')
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            return null;
+
+        return normalized switch
+        {
+            "desktop" => GetExistingKnownFolder(Environment.SpecialFolder.Desktop),
+            "documents" or "document" or "mydocuments" => GetExistingKnownFolder(Environment.SpecialFolder.MyDocuments),
+            "downloads" or "download" => GetExistingPath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads")),
+            "pictures" or "picture" or "mypictures" => GetExistingKnownFolder(Environment.SpecialFolder.MyPictures),
+            "music" or "mymusic" => GetExistingKnownFolder(Environment.SpecialFolder.MyMusic),
+            "videos" or "video" or "myvideos" => GetExistingKnownFolder(Environment.SpecialFolder.MyVideos),
+            "home" or "profile" or "userprofile" => GetExistingKnownFolder(Environment.SpecialFolder.UserProfile),
+            _ => null
+        };
+    }
+
+    private static string? GetExistingKnownFolder(Environment.SpecialFolder specialFolder)
+        => GetExistingPath(Environment.GetFolderPath(specialFolder));
+
+    private static string? GetExistingPath(string? path)
+        => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path) ? path : null;
+
+    private static bool LooksLikeDirectoryPath(string path)
+    {
+        if (path.EndsWith('\\') || path.EndsWith('/'))
+            return true;
+
+        var extension = Path.GetExtension(path);
+        return string.IsNullOrWhiteSpace(extension);
+    }
 
     private static void CopyDirectoryRecursive(string sourcePath, string destinationPath)
     {
@@ -735,4 +834,24 @@ public sealed class FileSystemService : IFileSystemService
     }
 
     private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SHFILEINFO
+    {
+        public IntPtr hIcon;
+        public int iIcon;
+        public uint dwAttributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szDisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
+        public string szTypeName;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SHGetFileInfo(
+        string pszPath,
+        uint dwFileAttributes,
+        ref SHFILEINFO psfi,
+        uint cbFileInfo,
+        uint uFlags);
 }

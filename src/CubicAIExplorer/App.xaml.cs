@@ -49,17 +49,19 @@ public partial class App : Application
             Dispatcher.Invoke(() =>
             {
                 mainWindow.Activate();
-                if (args.Length > 0 && fileSystemService.DirectoryExists(args[0]))
+                var resolvedPath = args.Length > 0 ? fileSystemService.ResolveDirectoryPath(args[0]) : null;
+                if (!string.IsNullOrWhiteSpace(resolvedPath))
                 {
-                    mainViewModel.NavigateToPath(args[0]);
+                    mainViewModel.NavigateToPath(resolvedPath);
                 }
             });
         };
 
         // Navigate to command-line path if provided
-        if (e.Args.Length > 0 && fileSystemService.DirectoryExists(e.Args[0]))
+        var startupPath = e.Args.Length > 0 ? fileSystemService.ResolveDirectoryPath(e.Args[0]) : null;
+        if (!string.IsNullOrWhiteSpace(startupPath))
         {
-            mainViewModel.NavigateToPath(e.Args[0]);
+            mainViewModel.NavigateToPath(startupPath);
         }
 
         // Apply startup preferences

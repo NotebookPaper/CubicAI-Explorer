@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: crowded-tab overflow affordances are now implemented locally and verified; next roadmap work is deeper shell integration.
+> Status: shell-aware display names and known-folder alias navigation are now implemented and verified; next roadmap work remains deeper shell metadata/context integration.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -46,6 +46,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - added left/right tab-strip scroll buttons plus a `More Tabs` dropdown listing every open tab
   - active-tab changes now auto-scroll the selected tab back into view after tab-count or window-size changes
   - smoke coverage now verifies the overflow wiring is present in the main window
+- Shell-aware display names and known-folder aliases:
+  - tab titles, breadcrumbs, recent folders, and new bookmark labels now use Windows shell display names instead of raw path parsing where available
+  - the address bar now resolves common aliases such as `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Videos`, and `Home`
+  - address autocomplete now suggests matching known folders in addition to normal filesystem completions
+  - smoke coverage now verifies alias navigation, shell display-name routing, and known-folder suggestions
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
@@ -53,17 +58,13 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue deeper shell integration.
-   - improve special-folder coverage and path/display handling
    - expose more shell metadata in details/properties views where practical
    - review shell-context and Explorer interop edge cases
-2. Continue hardening transfer safety in [FileSystemService.cs](/C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Services/FileSystemService.cs#L599):
-   - do not delete the existing target before the incoming transfer succeeds
-   - prefer a stage/rename-backup flow so failed replacements preserve the original destination
-3. Add smoke-test coverage for the remaining risky file-operation paths:
+2. Add smoke-test coverage for the remaining risky file-operation paths:
    - replace failure behavior
    - same-folder duplicate behavior
    - undo/redo after duplicate, new file, and link creation
-4. Make settings/bookmark sync more reliable on first run:
+3. Make settings/bookmark sync more reliable on first run:
    - ensure watcher directories exist before `FileSystemWatcher` setup, or create watchers lazily after the first save
    - harden watcher callbacks against transient `IOException` / partial-write races for both settings and bookmarks
 
@@ -85,7 +86,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- crowded-tab overflow affordances and verification updates are local and uncommitted in this checkout
+- shell-aware display names, known-folder alias navigation, and verification updates are local and uncommitted in this checkout
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:

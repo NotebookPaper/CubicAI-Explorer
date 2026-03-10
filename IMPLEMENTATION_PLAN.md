@@ -23,6 +23,22 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Shell-aware display names and known-folder aliases
+
+- added shell-backed display-name handling for tab titles, breadcrumbs, recent folders, and new bookmark labels so Windows-known folders no longer fall back to raw path segments
+- the address bar now resolves well-known folder aliases such as `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Videos`, and `Home`
+- address autocomplete now suggests matching known folders alongside filesystem path completion
+- smoke coverage now verifies alias navigation, shell display-name routing, and known-folder autocomplete suggestions
+
+Primary files:
+
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/Services/IFileSystemService.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/TabViewModel.cs`
+- `src/CubicAIExplorer/App.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Named sessions and session manager
 
 - added persisted named sessions inside the existing settings file
@@ -180,7 +196,6 @@ Why this matters:
 
 Scope:
 
-- improve special-folder coverage and path/display handling
 - expose more shell metadata in details/properties views where practical
 - review shell context behavior and Explorer interop edge cases
 

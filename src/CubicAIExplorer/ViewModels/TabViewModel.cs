@@ -7,6 +7,7 @@ namespace CubicAIExplorer.ViewModels;
 public partial class TabViewModel : ObservableObject
 {
     private readonly NavigationService _navigation = new();
+    private readonly IFileSystemService _fileSystemService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
 
     [ObservableProperty]
@@ -33,6 +34,7 @@ public partial class TabViewModel : ObservableObject
         IClipboardService clipboardService,
         IFileOperationQueueService? fileOperationQueueService = null)
     {
+        _fileSystemService = fileSystemService;
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
         FileList = new FileListViewModel(fileSystemService, clipboardService, _fileOperationQueueService);
         FileList.NavigateRequested += (_, path) => NavigateTo(path);
@@ -59,9 +61,7 @@ public partial class TabViewModel : ObservableObject
     private void OnNavigated(string path)
     {
         CurrentPath = path;
-        Title = System.IO.Path.GetFileName(path);
-        if (string.IsNullOrEmpty(Title))
-            Title = path; // Drive root like "C:\"
+        Title = _fileSystemService.GetDisplayName(path);
 
         FileList.LoadDirectory(path);
         CanGoBack = _navigation.CanGoBack;

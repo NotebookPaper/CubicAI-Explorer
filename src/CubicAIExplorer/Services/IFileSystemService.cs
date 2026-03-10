@@ -31,6 +31,8 @@ public interface IFileSystemService
     IReadOnlyList<FileSystemItem> GetDrives();
     IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false);
     IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false);
+    string GetDisplayName(string path);
+    string? ResolveDirectoryPath(string path);
     bool DirectoryExists(string path);
     bool FileExists(string path);
     string GetParentPath(string path);
