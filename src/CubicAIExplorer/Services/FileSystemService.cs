@@ -128,16 +128,23 @@ public sealed class FileSystemService : IFileSystemService
     public IReadOnlyList<FileTransferResult> CopyFiles(
         IEnumerable<string> sourcePaths,
         string destinationDirectory,
-        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth)
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+        IFileOperationContext? operationContext = null)
     {
         var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
         if (destination == null || !Directory.Exists(destination)) return results;
 
-        foreach (var sourcePath in sourcePaths)
+        var sanitizedSources = sourcePaths
+            .Select(SanitizePath)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
+
+        var processedCount = 0;
+        foreach (var source in sanitizedSources)
         {
-            var source = SanitizePath(sourcePath);
-            if (source == null) continue;
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
 
             if (File.Exists(source))
             {
@@ -147,6 +154,12 @@ public sealed class FileSystemService : IFileSystemService
             {
                 results.Add(CopyDirectory(source, destination, collisionResolution));
             }
+
+            processedCount++;
+            operationContext?.ReportProgress(
+                processedCount,
+                sanitizedSources.Length,
+                Path.GetFileName(source.TrimEnd('\\')));
         }
 
         return results;
@@ -155,16 +168,24 @@ public sealed class FileSystemService : IFileSystemService
     public IReadOnlyList<FileTransferResult> MoveFiles(
         IEnumerable<string> sourcePaths,
         string destinationDirectory,
-        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth)
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+        IFileOperationContext? operationContext = null)
     {
         var results = new List<FileTransferResult>();
         var destination = SanitizePath(destinationDirectory);
         if (destination == null || !Directory.Exists(destination)) return results;
 
-        foreach (var sourcePath in sourcePaths)
+        var sanitizedSources = sourcePaths
+            .Select(SanitizePath)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
+
+        var processedCount = 0;
+        foreach (var source in sanitizedSources)
         {
-            var source = SanitizePath(sourcePath);
-            if (source == null) continue;
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            processedCount++;
 
             if (File.Exists(source))
             {
@@ -172,6 +193,10 @@ public sealed class FileSystemService : IFileSystemService
                 if (!string.IsNullOrWhiteSpace(sourceDir)
                     && string.Equals(sourceDir.TrimEnd('\\'), destination.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 {
+                    operationContext?.ReportProgress(
+                        processedCount,
+                        sanitizedSources.Length,
+                        Path.GetFileName(source.TrimEnd('\\')));
                     continue;
                 }
 
@@ -183,22 +208,37 @@ public sealed class FileSystemService : IFileSystemService
                 if (!string.IsNullOrWhiteSpace(sourceParent)
                     && string.Equals(sourceParent.TrimEnd('\\'), destination.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 {
+                    operationContext?.ReportProgress(
+                        processedCount,
+                        sanitizedSources.Length,
+                        Path.GetFileName(source.TrimEnd('\\')));
                     continue;
                 }
 
                 results.Add(MoveDirectoryEntry(source, destination, collisionResolution));
             }
+
+            operationContext?.ReportProgress(
+                processedCount,
+                sanitizedSources.Length,
+                Path.GetFileName(source.TrimEnd('\\')));
         }
 
         return results;
     }
 
-    public void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false)
+    public void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false, IFileOperationContext? operationContext = null)
     {
-        foreach (var path in paths)
+        var sanitizedPaths = paths
+            .Select(SanitizePath)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
+
+        for (var i = 0; i < sanitizedPaths.Length; i++)
         {
-            var sanitized = SanitizePath(path);
-            if (sanitized == null) continue;
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            var sanitized = sanitizedPaths[i];
 
             if (File.Exists(sanitized))
             {
@@ -214,6 +254,8 @@ public sealed class FileSystemService : IFileSystemService
                     UIOption.OnlyErrorDialogs,
                     permanentDelete ? RecycleOption.DeletePermanently : RecycleOption.SendToRecycleBin);
             }
+
+            operationContext?.ReportProgress(i + 1, sanitizedPaths.Length, Path.GetFileName(sanitized.TrimEnd('\\')));
         }
     }
 
@@ -267,6 +309,16 @@ public sealed class FileSystemService : IFileSystemService
         return targetPath;
     }
 
+    public string? EnsureDirectoryExists(string path)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null)
+            return null;
+
+        Directory.CreateDirectory(sanitized);
+        return sanitized;
+    }
+
     public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100)
     {
         var sanitized = SanitizePath(archivePath);
@@ -285,7 +337,7 @@ public sealed class FileSystemService : IFileSystemService
             .ToList();
     }
 
-    public void ExtractArchive(string archivePath, string destinationDirectory)
+    public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
     {
         var sanitizedArchive = SanitizePath(archivePath);
         var sanitizedDestination = SanitizePath(destinationDirectory);
@@ -297,8 +349,10 @@ public sealed class FileSystemService : IFileSystemService
         using var stream = new FileStream(sanitizedArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
 
-        foreach (var entry in archive.Entries)
+        for (var i = 0; i < archive.Entries.Count; i++)
         {
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            var entry = archive.Entries[i];
             var targetPath = SanitizePath(Path.Combine(sanitizedDestination, entry.FullName));
             if (targetPath == null || !targetPath.StartsWith(sanitizedDestination, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -314,6 +368,59 @@ public sealed class FileSystemService : IFileSystemService
                 Directory.CreateDirectory(targetDir);
 
             entry.ExtractToFile(targetPath, overwrite: false);
+            operationContext?.ReportProgress(i + 1, archive.Entries.Count, entry.FullName);
+        }
+    }
+
+    public void ExtractArchiveEntries(
+        string archivePath,
+        string destinationDirectory,
+        IEnumerable<string> entryPaths,
+        IFileOperationContext? operationContext = null)
+    {
+        var sanitizedArchive = SanitizePath(archivePath);
+        var sanitizedDestination = SanitizePath(destinationDirectory);
+        if (sanitizedArchive == null || sanitizedDestination == null)
+            return;
+        if (!File.Exists(sanitizedArchive) || !Directory.Exists(sanitizedDestination))
+            return;
+
+        var requestedEntries = entryPaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (requestedEntries.Length == 0)
+            return;
+
+        using var stream = new FileStream(sanitizedArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+
+        var matchingEntries = archive.Entries
+            .Where(entry => requestedEntries.Any(requested =>
+                string.Equals(entry.FullName, requested, StringComparison.OrdinalIgnoreCase)
+                || entry.FullName.StartsWith(requested.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        for (var i = 0; i < matchingEntries.Count; i++)
+        {
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+            var entry = matchingEntries[i];
+            var targetPath = SanitizePath(Path.Combine(sanitizedDestination, entry.FullName));
+            if (targetPath == null || !targetPath.StartsWith(sanitizedDestination, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(targetPath);
+                continue;
+            }
+
+            var targetDir = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrWhiteSpace(targetDir))
+                Directory.CreateDirectory(targetDir);
+
+            entry.ExtractToFile(targetPath, overwrite: false);
+            operationContext?.ReportProgress(i + 1, matchingEntries.Count, entry.FullName);
         }
     }
 

@@ -240,6 +240,76 @@
             </TabControl>
         </DockPanel>
 
+        <Border DockPanel.Dock="Bottom"
+                Background="#EEF4FC"
+                BorderBrush="{StaticResource ClassicChromeBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="8,6"
+                Visibility="{Binding IsQueueDetailsVisible, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0" Margin="0,0,0,6">
+                    <Button DockPanel.Dock="Right"
+                            Content="Cancel"
+                            Padding="8,2"
+                            Margin="0,0,8,0"
+                            Command="{Binding CancelFileOperationQueueCommand}"
+                            Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}" />
+                    <Button DockPanel.Dock="Right"
+                            Content="Hide"
+                            Padding="8,2"
+                            Command="{Binding ToggleQueueDetailsCommand}" />
+                    <TextBlock FontWeight="SemiBold" VerticalAlignment="Center" Text="Background File Queue" />
+                </DockPanel>
+                <Grid Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="3*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Current" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding FileOperationQueueCurrentOperationText, Mode=OneWay, TargetNullValue=Idle}" />
+                            <TextBlock Text="{Binding FileOperationQueueCurrentOperationDetailText, Mode=OneWay}"
+                                       Foreground="#5A6F89"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                        <Separator Grid.Column="1" Margin="10,0" />
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Pending" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding FileOperationQueuePendingCount, Mode=OneWay}" />
+                            <TextBlock Text="{Binding FileOperationQueueCurrentOperationProgressText, Mode=OneWay}" />
+                        </StackPanel>
+                        <Separator Grid.Column="3" Margin="10,0" />
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="Last Result" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding FileOperationQueueLastCompletedStatusText, Mode=OneWay}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                        <TextBlock Text="Progress" FontWeight="SemiBold"
+                                   Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}" />
+                        <ProgressBar Height="14"
+                                     Minimum="0"
+                                     Maximum="1"
+                                     Value="{Binding FileOperationQueueCurrentOperationProgressFraction, Mode=OneWay}"
+                                     Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
         <!-- Status Bar -->
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem MinWidth="140">
@@ -255,10 +325,17 @@
                            MaxWidth="600" />
             </StatusBarItem>
             <Separator />
-            <StatusBarItem Visibility="{Binding IsFileOperationQueueBusy, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding FileOperationQueueStatusText, Mode=OneWay}" />
+            <StatusBarItem Visibility="{Binding CanShowQueueDetails, Converter={StaticResource BoolToVisibility}}">
+                <Button Command="{Binding ToggleQueueDetailsCommand}" Padding="6,1">
+                    <TextBlock Text="{Binding FileOperationQueueStatusText, Mode=OneWay}" />
+                </Button>
             </StatusBarItem>
-            <Separator Visibility="{Binding IsFileOperationQueueBusy, Converter={StaticResource BoolToVisibility}}" />
+            <StatusBarItem Visibility="{Binding CanCancelFileOperationQueue, Converter={StaticResource BoolToVisibility}}">
+                <Button Content="Cancel"
+                        Padding="6,1"
+                        Command="{Binding CancelFileOperationQueueCommand}" />
+            </StatusBarItem>
+            <Separator Visibility="{Binding CanShowQueueDetails, Converter={StaticResource BoolToVisibility}}" />
             <StatusBarItem Visibility="{Binding IsDualPaneMode, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock>
                     <Run Text="Left: " />
@@ -323,6 +400,11 @@
                             Command="{Binding AddCurrentSearchCommand}"
                             Padding="6,2"
                             Margin="0,0,4,0" />
+                    <Button Content="Rename"
+                            Command="{Binding RenameSavedSearchCommand}"
+                            CommandParameter="{Binding SelectedSavedSearch}"
+                            Padding="6,2"
+                            Margin="0,0,4,0" />
                     <Button Content="- Remove"
                             Command="{Binding RemoveSavedSearchCommand}"
                             CommandParameter="{Binding SelectedSavedSearch}"
@@ -336,7 +418,21 @@
                              MouseDoubleClick="SavedSearchList_MouseDoubleClick"
                              KeyDown="SavedSearchList_KeyDown"
                              DisplayMemberPath="Name"
-                             TabIndex="35" />
+                             TabIndex="35">
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Run Search"
+                                          Command="{Binding PlacementTarget.DataContext.RunSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.SelectedSavedSearch, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="Rename"
+                                          Command="{Binding PlacementTarget.DataContext.RenameSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.SelectedSavedSearch, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="Remove"
+                                          Command="{Binding PlacementTarget.DataContext.RemoveSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.SelectedSavedSearch, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                    </ListBox>
                 </Border>
 
                 <TextBlock DockPanel.Dock="Top" Text="Folders" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
@@ -468,6 +564,7 @@
                         <ListView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem x:Name="OpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
+                                <MenuItem x:Name="BrowseArchiveMenuItem" Header="Browse Archive" Command="{Binding BrowseArchiveCommand}" />
                                 <Separator x:Name="ItemSeparator1" />
                                 <MenuItem x:Name="CutMenuItem" Header="Cut" Command="{Binding CutCommand}" />
                                 <MenuItem x:Name="CopyMenuItem" Header="Copy" Command="{Binding CopyCommand}" />
@@ -477,7 +574,7 @@
                                 <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                 <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
-                                <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive" Command="{Binding ExtractArchiveCommand}" />
+                                <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                 <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
@@ -608,6 +705,7 @@
                             <ListView.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem x:Name="RightOpenMenuItem" Header="Open" Command="{Binding OpenSelectedItemCommand}" />
+                                    <MenuItem x:Name="RightBrowseArchiveMenuItem" Header="Browse Archive" Command="{Binding BrowseArchiveCommand}" />
                                     <Separator x:Name="RightItemSeparator1" />
                                     <MenuItem x:Name="RightCutMenuItem" Header="Cut" Command="{Binding CutCommand}" />
                                     <MenuItem x:Name="RightCopyMenuItem" Header="Copy" Command="{Binding CopyCommand}" />
@@ -617,7 +715,7 @@
                                     <MenuItem x:Name="RightRenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                     <MenuItem x:Name="RightNewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
-                                    <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive" Command="{Binding ExtractArchiveCommand}" />
+                                    <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />
                                     <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                     <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />

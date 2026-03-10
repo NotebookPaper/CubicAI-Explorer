@@ -1,197 +1,140 @@
 # CubicAI Explorer — Implementation Plan
 
-> **Updated:** 2026-03-09  
-> **Tier 1 status:** Complete
+> **Updated:** 2026-03-10
+> **Status:** Current with `master`
 
 ## Context
-Tier 1 was fully implemented and then extended. This document now tracks:
-1. Completed Tier 1 scope (historical record)
-2. Completed post-Tier-1 improvements
-3. Next planned slices
 
-## Tier 1 Implementation (Completed)
+Tier 1 is long complete. This file now tracks the actual shipped feature set, the recently finished roadmap slices, and the next practical work items.
 
-### Phase 1 — Foundation Services (done)
+## Implemented Foundation
 
-**1a. File Operations** — extend `IFileSystemService` + `FileSystemService`
-- Add: `CopyFiles`, `MoveFiles`, `DeleteFiles`, `RenameFile`, `CreateFolder`
-- Delete uses Recycle Bin by default via `Microsoft.VisualBasic.FileIO.FileSystem` (no extra NuGet needed)
-- All paths go through existing `SanitizePath()`
-- Name collisions handled with numeric suffix ("file (2).txt")
-- Files: `Services/IFileSystemService.cs`, `Services/FileSystemService.cs`
+The app currently includes:
 
-**1b. Clipboard Service** — new `IClipboardService` + `ClipboardService`
-- Uses Windows clipboard with `CF_HDROP` + `Preferred DropEffect` format
-- Full interop: copy in CubicAI → paste in Windows Explorer (and vice versa)
-- `SetFiles(paths, isCut)`, `GetFiles()`, `HasFiles()`
-- New files: `Services/IClipboardService.cs`, `Services/ClipboardService.cs`
+- tabbed browsing and dual-pane mode
+- folder tree with lazy loading
+- file list sorting, multi-select, inline rename, drag/drop, and shell icons
+- copy, cut, paste, move, delete, permanent delete, create folder, undo/redo, and Explorer clipboard interop
+- bookmarks, recent folders, breadcrumbs, autocomplete, search/filter, and recursive search
+- preview panel with text, image, folder, metadata, and fallback states
+- properties dialog, toolbar, context menus, keyboard shortcuts, and persisted window/settings state
+- smoke-test harness covering core behaviors and recent regressions
 
-**1c. Shell Icon Service** — new `IShellIconService` + `ShellIconService`
-- P/Invoke `SHGetFileInfo` from `shell32.dll`
-- Extension-based cache for files, path-based for folders/drives
-- `BitmapSource.Freeze()` for thread safety
-- New files: `Services/IShellIconService.cs`, `Services/ShellIconService.cs`
+## Recently Completed Slices
 
-### Phase 2 — Commands & Dialogs (done)
+### Transfer reliability
 
-**2a. Simple Dialogs** — for rename and new folder
-- `RenameDialog` — TextBox pre-filled with current name, OK/Cancel
-- `NewFolderDialog` — TextBox defaulting to "New folder", OK/Cancel
-- New files: `Views/RenameDialog.xaml(.cs)`, `Views/NewFolderDialog.xaml(.cs)`
+- conflict-aware paste flow supports `KeepBoth`, `Replace`, and `Skip`
+- transfer history keeps partial results instead of collapsing mixed outcomes
+- skip-only results report through pane status text rather than modal noise
+- clipboard handling is more robust against transient failures and Explorer drop-effect variants
 
-**2b. FileListViewModel Commands** — the core feature addition
-- New commands: `Copy`, `Cut`, `Paste`, `Delete`, `PermanentDelete`, `Rename`, `NewFolder`, `Refresh`, `SelectAll`
-- Add `ObservableCollection<FileSystemItem> SelectedItems` for multi-select
-- Add `IClipboardService` constructor dependency
-- Delete shows confirmation MessageBox
-- After each operation, calls `Refresh()` to reload file list
-- Wire `IClipboardService` through `MainViewModel` → `TabViewModel` → `FileListViewModel`
-- Update: `ViewModels/FileListViewModel.cs`, `ViewModels/TabViewModel.cs`, `ViewModels/MainViewModel.cs`, `App.xaml.cs`
+Primary files:
 
-### Phase 3 — View Integration (done)
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/Services/IFileSystemService.cs`
+- `src/CubicAIExplorer/Services/ClipboardService.cs`
+- `src/CubicAIExplorer/Views/FileConflictDialog.xaml`
+- `src/CubicAIExplorer/Views/FileConflictDialog.xaml.cs`
 
-**3a. Context Menu** — right-click on file list
-- On items: Open, Cut, Copy, Paste, Delete, Rename
-- On empty space: Paste, New Folder, Refresh
-- Toggle visibility via `ContextMenuOpening` code-behind handler
-- Update: `MainWindow.xaml`, `MainWindow.xaml.cs`
+### Background file operations
 
-**3b. Keyboard Shortcuts** — `InputBindings` on Window
-| Key | Action |
-|-----|--------|
-| Ctrl+C | Copy |
-| Ctrl+X | Cut |
-| Ctrl+V | Paste |
-| Delete | Delete (Recycle Bin) |
-| Shift+Delete | Permanent Delete |
-| F2 | Rename |
-| F5 | Refresh |
-| Ctrl+Shift+N | New Folder |
-| Ctrl+A | Select All |
-- Update: `MainWindow.xaml`
+- added a shared `IFileOperationQueueService` / `FileOperationQueueService`
+- paste, delete, permanent delete, and drag/drop transfers run off the UI thread
+- queue state is surfaced in the status bar
+- active queued transfers now expose item-count progress and cooperative cancellation
+- the queue details panel now shows current progress/detail plus a cancel action
 
-**3c. Shell Icons** — replace emoji placeholders
-- New `ShellIconConverter` replaces `FileIconConverter`
-- Change icon `TextBlock` to `Image` control in file list and folder tree
-- Set `ShellIconConverter.IconService` static property from `App.xaml.cs`
-- New file: `Converters/ShellIconConverter.cs`
-- Update: `MainWindow.xaml`, `App.xaml`, `App.xaml.cs`
-- Delete: `Converters/FileIconConverter.cs`
+Primary files:
 
-**3d. Multi-Select** — `SelectionMode="Extended"` on ListView
-- Sync `ListView.SelectedItems` → `FileListViewModel.SelectedItems` via `SelectionChanged` code-behind
-- Handle `SelectAllRequested` event from ViewModel to call `ListView.SelectAll()`
-- Update: `MainWindow.xaml`, `MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
+- `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
+- `src/CubicAIExplorer/App.xaml.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/ViewModels/TabViewModel.cs`
 
-## Tier 1 File Summary
+### Preview and archive support
 
-### New files (9):
-| File | Purpose |
-|------|---------|
-| `Services/IClipboardService.cs` | Clipboard interface |
-| `Services/ClipboardService.cs` | Windows clipboard with Explorer interop |
-| `Services/IShellIconService.cs` | Shell icon interface |
-| `Services/ShellIconService.cs` | SHGetFileInfo P/Invoke + cache |
-| `Converters/ShellIconConverter.cs` | IValueConverter using ShellIconService |
-| `Views/RenameDialog.xaml` + `.cs` | Rename dialog |
-| `Views/NewFolderDialog.xaml` + `.cs` | New folder dialog |
+- small binary files fall back to a hex preview
+- image preview includes dimensions and basic metadata
+- ZIP files show archive metadata and entry listings in preview
+- added `Extract Archive` for single selected `.zip` files
+- added an in-app archive browser with filtering and a folders-only toggle for larger ZIPs
 
-### Modified files (9):
-| File | Changes |
-|------|---------|
-| `Services/IFileSystemService.cs` | +5 method signatures |
-| `Services/FileSystemService.cs` | +5 method implementations |
-| `ViewModels/FileListViewModel.cs` | +IClipboardService, +SelectedItems, +9 commands |
-| `ViewModels/TabViewModel.cs` | Pass IClipboardService through |
-| `ViewModels/MainViewModel.cs` | Accept + pass IClipboardService |
-| `MainWindow.xaml` | Context menu, shortcuts, SelectionMode, Image icons |
-| `MainWindow.xaml.cs` | SelectionChanged, ContextMenuOpening, SelectAll |
-| `App.xaml` | Swap converter resource |
-| `App.xaml.cs` | Create + wire new services |
+Primary files:
 
-### Deleted files (1):
-| File | Reason |
-|------|--------|
-| `Converters/FileIconConverter.cs` | Replaced by ShellIconConverter |
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/Services/IFileSystemService.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
 
-## Post-Tier-1 Completed Enhancements
+### Saved searches and cleanup
 
-1. Inline rename in file list (replaced modal rename workflow)
-2. Bookmarks MVP + persistence to `%AppData%\\CubicAIExplorer\\bookmarks.json`
-3. Drag/drop copy/move in file list
-4. Undo/redo history for rename/copy/move/new-folder/permanent-delete
-5. Clear History command
-6. Same-folder move no-op guard
-7. Classic Cubic-inspired theme pass (typography/chrome/pane styling)
-8. Smoke-test harness (`tests/CubicAIExplorer.SmokeTests`) with regression coverage
-9. Full toolbar with Cut/Copy/Paste/Delete/Undo/Redo/Refresh buttons
-10. View mode switching (Details/List/Tiles) with data templates
-11. Selection count in status bar
-12. Expanded smoke tests (19 total: redo copy, redo move, view mode, selection status)
-13. Search/filter bar (Ctrl+F) with real-time name filtering
-14. File properties dialog (size, type, dates, attributes, folder contents count)
-15. Drag/drop files to folder tree nodes
-16. Sort indicator arrows (▲/▼) on column headers
-17. Tab context menu (Duplicate, Close, Close Other Tabs)
-18. Status bar total size of selected files
-19. Open in Explorer from context menu
-20. Enter key opens selected item
-21. Window size/position persistence (`%AppData%\CubicAIExplorer\window.json`)
-22. Expanded smoke tests (24 total: filter, properties, duplicate tab, close others, size status)
-23. Breadcrumb-style address bar
-24. Recent folders panel
-25. Recursive search across subdirectories
-26. Toolbar vector icon assets replacing Unicode glyphs
-27. Address bar autocomplete suggestions
-28. Dual-pane mode
-29. Preview panel for text and common image files
-30. Active-pane routing for commands and navigation in dual-pane mode
-31. Right-pane context menu, sort, rename, select-all, and properties parity
-32. Active-pane filter/search/view-mode routing
-33. Active-pane highlighting and per-pane status presentation
-34. Current-pane navigation from breadcrumbs, recent folders, bookmarks, tree selection, and autocomplete
-35. Preview empty/error/size-limit states
-36. Right-pane inline address editing from the pane header
-37. Expanded smoke tests covering dual-pane routing, preview refresh, preview states, and address suggestions
+- saved searches persist and render in the left rail
+- running a saved search rehydrates the search results view
+- `MainViewModel` command-forwarding/property-notification duplication was reduced
 
-## Next Planned Features
+Primary files:
 
-1. **Preview polish**
-- Expand supported previewable formats
-- Move preview loading off the UI thread where practical
-- Improve image/text fallback behavior further
+- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
 
-2. **Address autocomplete polish**
-- Improve root and partial-drive completion
-- Tighten keyboard navigation and selection behavior
+## Verification
 
-3. **Visual polish**
-- Refine pane spacing, borders, and splitter behavior to better match CubicExplorer
+Verified on the current branch:
 
-4. **Address workflow consistency**
-- Decide whether the left-pane/shared top bar should gain a more explicit inline-edit affordance to better match the right-pane header editor
+1. `dotnet build CubicAIExplorer.sln -v minimal`
+2. `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
+3. `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
 
-## NuGet Packages
-None added. All APIs are in .NET 8 + WPF SDK.
+Smoke coverage explicitly includes:
 
-## Verification (Current)
-1. `dotnet build` — zero errors, zero warnings
-2. Run app → right-click file → Copy → navigate to another folder → Paste → file appears
-3. Copy file in app → paste in Windows Explorer → file appears (clipboard interop)
-4. Copy file in Windows Explorer → paste in app → file appears
-5. Select file → Delete → confirm → file goes to Recycle Bin
-6. F2 → inline rename editor appears in list → Enter commits, Esc cancels
-7. Ctrl+Shift+N → new folder dialog → folder created
-8. All files show real Windows icons, not emoji
-9. Multi-select with Ctrl+Click and Shift+Click works
-10. Smoke tests pass:
-   - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
-   - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
+- transfer conflicts and keep-both behavior
+- clipboard drop-effect parsing
+- queued file operation behavior and status text
+- queue cancellation and progress reporting
+- ZIP listing and extraction
+- archive browser filtering
+- archive preview metadata
+- image preview metadata
+- saved search persistence and rerun behavior
+- preview refresh and preview status states
 
-## Key Design Decisions
-- **Recycle Bin delete** via `Microsoft.VisualBasic.FileIO.FileSystem` — simplest reliable approach, no P/Invoke needed
-- **Clipboard interop** uses `CF_HDROP` + `Preferred DropEffect` DWORD — the exact format Windows Explorer uses
-- **Shell icons** cached by extension (files) or path (folders/drives) — avoids per-file disk access
-- **Multi-select** synced via code-behind `SelectionChanged` handler — WPF's `SelectedItems` isn't bindable
-- **All file paths** go through `SanitizePath()` (calls `Path.GetFullPath()`) before any operation
-- **No new NuGet packages** — everything is in .NET 8 SDK + WPF
+## Next Planned Work
+
+1. Manual UX pass on the newest slices:
+   - paste conflict dialog behavior
+   - transfer summary wording
+   - queue visibility and busy feedback
+   - ZIP extraction flow
+   - saved-search rail interactions
+2. Archive follow-up:
+   - add richer archive actions beyond browse + filter + extract-all
+   - decide whether opening an archive should stay metadata-first or become navigable
+3. Preview follow-up:
+   - extend metadata/preview support for more file types
+   - keep expensive preview generation off the UI thread
+4. Queue follow-up:
+   - preserve richer queue history than the last result only
+   - consider per-item failure detail or batch summaries beyond the current item-count progress model
+
+## Constraints And Decisions
+
+- stay on `.NET 8` / WPF with no new NuGet packages unless explicitly approved
+- keep all file paths sanitized through `FileSystemService`
+- prefer existing MVVM and service-wiring patterns over new abstractions
+- do not recreate the `GridView` during tab initialization
+- avoid `DockPanel` for file-list plus popup layouts; use explicit `Grid`
+- avoid keyed `DataTemplate` plus `DataType` combinations in `App.xaml`
+- do not enable WinForms just to obtain folder dialogs
+
+## Known Gotchas
+
+- WPF markup generation can intermittently lock `App.g.cs` or `CubicAIExplorer_MarkupCompile.cache`; rerun the build when it happens
+- `IMPLEMENTATION_PLAN.md` and `CONTINUE.md` should be kept in sync when roadmap state changes materially

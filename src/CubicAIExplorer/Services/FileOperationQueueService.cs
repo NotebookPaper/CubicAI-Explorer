@@ -8,12 +8,34 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly object _stateLock = new();
     private int _pendingCount;
+    private CancellationTokenSource? _currentCancellationTokenSource;
 
     [ObservableProperty]
     private bool _isBusy;
 
     [ObservableProperty]
+    private bool _canCancel;
+
+    [ObservableProperty]
+    private bool _hasRecentActivity;
+
+    [ObservableProperty]
     private string _currentOperationText = string.Empty;
+
+    [ObservableProperty]
+    private int _currentOperationCompletedSteps;
+
+    [ObservableProperty]
+    private int _currentOperationTotalSteps;
+
+    [ObservableProperty]
+    private string _currentOperationDetailText = string.Empty;
+
+    [ObservableProperty]
+    private string _lastCompletedOperationText = string.Empty;
+
+    [ObservableProperty]
+    private string _lastCompletedStatusText = string.Empty;
 
     public int PendingCount
     {
@@ -43,17 +65,37 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
     {
         get
         {
+            var progressText = CurrentOperationProgressText;
             if (IsBusy && PendingCount > 0)
-                return $"{CurrentOperationText} ({PendingCount} queued)";
+                return string.IsNullOrWhiteSpace(progressText)
+                    ? $"{CurrentOperationText} ({PendingCount} queued)"
+                    : $"{CurrentOperationText} {progressText} ({PendingCount} queued)";
             if (IsBusy)
-                return CurrentOperationText;
+                return string.IsNullOrWhiteSpace(progressText)
+                    ? CurrentOperationText
+                    : $"{CurrentOperationText} {progressText}";
             if (PendingCount > 0)
                 return $"{PendingCount} queued";
+            if (HasRecentActivity)
+                return LastCompletedStatusText;
             return string.Empty;
         }
     }
 
+    public double CurrentOperationProgressFraction
+        => CurrentOperationTotalSteps <= 0
+            ? 0
+            : Math.Clamp((double)CurrentOperationCompletedSteps / CurrentOperationTotalSteps, 0, 1);
+
+    public string CurrentOperationProgressText
+        => CurrentOperationTotalSteps <= 0
+            ? string.Empty
+            : $"({Math.Min(CurrentOperationCompletedSteps, CurrentOperationTotalSteps)}/{CurrentOperationTotalSteps})";
+
     public async Task<T> EnqueueAsync<T>(string description, Func<T> operation)
+        => await EnqueueAsync(description, _ => operation()).ConfigureAwait(false);
+
+    public async Task<T> EnqueueAsync<T>(string description, Func<IFileOperationContext, T> operation)
     {
         PendingCount += 1;
         try
@@ -67,24 +109,71 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
 
         try
         {
-            SetBusyState(description, isBusy: true);
-            return await Task.Run(operation).ConfigureAwait(false);
+            using var cancellationTokenSource = new CancellationTokenSource();
+            SetBusyState(description, cancellationTokenSource, isBusy: true);
+            var context = new FileOperationContext(this, cancellationTokenSource.Token);
+            var result = await Task.Run(() => operation(context), cancellationTokenSource.Token).ConfigureAwait(false);
+            SetCompletionState(description, $"{description} completed.");
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            SetCompletionState(description, $"{description} canceled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetCompletionState(description, $"{description} failed: {ex.Message}");
+            throw;
         }
         finally
         {
-            SetBusyState(string.Empty, isBusy: false);
+            SetBusyState(string.Empty, cancellationTokenSource: null, isBusy: false);
             _semaphore.Release();
         }
     }
 
-    partial void OnIsBusyChanged(bool value) => RaisePropertyChanged(nameof(StatusText));
-    partial void OnCurrentOperationTextChanged(string value) => RaisePropertyChanged(nameof(StatusText));
+    public void CancelCurrent()
+    {
+        lock (_stateLock)
+        {
+            _currentCancellationTokenSource?.Cancel();
+        }
+    }
 
-    private void SetBusyState(string description, bool isBusy)
+    partial void OnIsBusyChanged(bool value) => RaisePropertyChanged(nameof(StatusText));
+    partial void OnCanCancelChanged(bool value) => RaisePropertyChanged(nameof(StatusText));
+    partial void OnHasRecentActivityChanged(bool value) => RaisePropertyChanged(nameof(StatusText));
+    partial void OnCurrentOperationTextChanged(string value) => RaisePropertyChanged(nameof(StatusText));
+    partial void OnCurrentOperationCompletedStepsChanged(int value)
+    {
+        RaisePropertyChanged(nameof(CurrentOperationProgressFraction));
+        RaisePropertyChanged(nameof(CurrentOperationProgressText));
+        RaisePropertyChanged(nameof(StatusText));
+    }
+    partial void OnCurrentOperationTotalStepsChanged(int value)
+    {
+        RaisePropertyChanged(nameof(CurrentOperationProgressFraction));
+        RaisePropertyChanged(nameof(CurrentOperationProgressText));
+        RaisePropertyChanged(nameof(StatusText));
+    }
+    partial void OnCurrentOperationDetailTextChanged(string value) => RaisePropertyChanged(nameof(StatusText));
+    partial void OnLastCompletedStatusTextChanged(string value) => RaisePropertyChanged(nameof(StatusText));
+
+    private void SetBusyState(string description, CancellationTokenSource? cancellationTokenSource, bool isBusy)
     {
         RunOnUiThread(() =>
         {
+            lock (_stateLock)
+            {
+                _currentCancellationTokenSource = isBusy ? cancellationTokenSource : null;
+            }
+
             CurrentOperationText = description;
+            CurrentOperationCompletedSteps = 0;
+            CurrentOperationTotalSteps = 0;
+            CurrentOperationDetailText = string.Empty;
+            CanCancel = isBusy && cancellationTokenSource != null;
             IsBusy = isBusy;
         });
     }
@@ -92,6 +181,26 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
     private void RaisePropertyChanged(string propertyName)
     {
         RunOnUiThread(() => OnPropertyChanged(propertyName));
+    }
+
+    private void SetCompletionState(string description, string statusText)
+    {
+        RunOnUiThread(() =>
+        {
+            LastCompletedOperationText = description;
+            LastCompletedStatusText = statusText;
+            HasRecentActivity = true;
+        });
+    }
+
+    private void ReportProgress(int completedSteps, int totalSteps, string? detailText)
+    {
+        RunOnUiThread(() =>
+        {
+            CurrentOperationCompletedSteps = Math.Max(0, completedSteps);
+            CurrentOperationTotalSteps = Math.Max(0, totalSteps);
+            CurrentOperationDetailText = detailText ?? string.Empty;
+        });
     }
 
     private static void RunOnUiThread(Action action)
@@ -104,5 +213,21 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
         }
 
         dispatcher.Invoke(action);
+    }
+
+    private sealed class FileOperationContext : IFileOperationContext
+    {
+        private readonly FileOperationQueueService _owner;
+
+        public FileOperationContext(FileOperationQueueService owner, CancellationToken cancellationToken)
+        {
+            _owner = owner;
+            CancellationToken = cancellationToken;
+        }
+
+        public CancellationToken CancellationToken { get; }
+
+        public void ReportProgress(int completedSteps, int totalSteps, string? detailText = null)
+            => _owner.ReportProgress(completedSteps, totalSteps, detailText);
     }
 }

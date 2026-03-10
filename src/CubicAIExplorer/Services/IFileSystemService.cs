@@ -38,14 +38,22 @@ public interface IFileSystemService
     IReadOnlyList<FileTransferResult> CopyFiles(
         IEnumerable<string> sourcePaths,
         string destinationDirectory,
-        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth);
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+        IFileOperationContext? operationContext = null);
     IReadOnlyList<FileTransferResult> MoveFiles(
         IEnumerable<string> sourcePaths,
         string destinationDirectory,
-        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth);
-    void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false);
+        FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+        IFileOperationContext? operationContext = null);
+    void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false, IFileOperationContext? operationContext = null);
     string RenameFile(string path, string newName);
     string CreateFolder(string parentPath, string folderName);
+    string? EnsureDirectoryExists(string path);
     IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);
-    void ExtractArchive(string archivePath, string destinationDirectory);
+    void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null);
+    void ExtractArchiveEntries(
+        string archivePath,
+        string destinationDirectory,
+        IEnumerable<string> entryPaths,
+        IFileOperationContext? operationContext = null);
 }

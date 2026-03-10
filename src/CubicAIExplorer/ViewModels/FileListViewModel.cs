@@ -84,6 +84,7 @@ public partial class FileListViewModel : ObservableObject
     public event EventHandler<string>? ViewModeChanged;
     public event EventHandler<FileSystemItem>? PropertiesRequested;
     public event EventHandler? SearchPanelOpened;
+    public event EventHandler<ArchiveBrowseRequest>? ArchiveBrowseRequested;
 
     public FileListViewModel(
         IFileSystemService fileSystemService,
@@ -139,7 +140,14 @@ public partial class FileListViewModel : ObservableObject
                 NavigateRequested?.Invoke(this, item.FullPath);
                 break;
             case FileSystemItemType.File:
-                _fileSystemService.OpenFile(item.FullPath);
+                if (IsArchiveItem(item))
+                {
+                    BrowseArchive(item);
+                }
+                else
+                {
+                    _fileSystemService.OpenFile(item.FullPath);
+                }
                 break;
         }
     }
@@ -267,27 +275,41 @@ public partial class FileListViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ExtractArchive()
+    private async Task ExtractArchive()
     {
         var item = GetSingleSelectedItem();
-        if (item == null || !string.Equals(item.Extension, ".zip", StringComparison.OrdinalIgnoreCase))
+        if (!IsArchiveItem(item))
             return;
 
-        var parentPath = Path.GetDirectoryName(item.FullPath);
-        if (string.IsNullOrWhiteSpace(parentPath))
+        var defaultDestination = GetDefaultExtractDestination(item!);
+        var dialog = new ExtractArchiveDialog(item!.Name, defaultDestination);
+        if (dialog.ShowDialog() != true)
             return;
 
+        await ExtractArchiveToAsync(item, dialog.DestinationPath, dialog.OpenFolderWhenDone);
+    }
+
+    [RelayCommand]
+    private void BrowseArchive()
+    {
+        var item = GetSingleSelectedItem();
+        if (!IsArchiveItem(item))
+            return;
+
+        BrowseArchive(item!);
+    }
+
+    private void BrowseArchive(FileSystemItem item)
+    {
         try
         {
-            var destination = _fileSystemService.CreateFolder(parentPath, Path.GetFileNameWithoutExtension(item.Name));
-            _fileSystemService.ExtractArchive(item.FullPath, destination);
-            SetTransferSummary($"Extracted archive to {Path.GetFileName(destination)}");
-            Refresh();
+            var entries = _fileSystemService.GetArchiveEntries(item.FullPath, maxEntries: int.MaxValue);
+            ArchiveBrowseRequested?.Invoke(this, new ArchiveBrowseRequest(item.FullPath, entries, this));
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Extract archive failed: {ex.Message}",
+                $"Browse archive failed: {ex.Message}",
                 "Archive Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -440,6 +462,108 @@ public partial class FileListViewModel : ObservableObject
         SearchText = searchTerm;
         IsSearchVisible = true;
         ExecuteSearchSync();
+    }
+
+    public static bool IsArchiveItem(FileSystemItem? item)
+        => item != null
+           && item.ItemType == FileSystemItemType.File
+           && string.Equals(item.Extension, ".zip", StringComparison.OrdinalIgnoreCase);
+
+    public static string GetDefaultExtractDestination(FileSystemItem item)
+    {
+        var parentPath = Path.GetDirectoryName(item.FullPath) ?? item.FullPath;
+        return Path.Combine(parentPath, Path.GetFileNameWithoutExtension(item.Name));
+    }
+
+    public async Task ExtractArchiveToAsync(FileSystemItem item, string destinationPath, bool openFolderWhenDone = false)
+    {
+        if (!IsArchiveItem(item) || string.IsNullOrWhiteSpace(destinationPath))
+            return;
+
+        try
+        {
+            var sanitizedDestination = _fileSystemService.EnsureDirectoryExists(destinationPath);
+            if (string.IsNullOrWhiteSpace(sanitizedDestination))
+                throw new InvalidOperationException("The extraction destination is invalid.");
+
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Extracting {item.Name}",
+                context =>
+                {
+                    _fileSystemService.ExtractArchive(item.FullPath, sanitizedDestination, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Extracted archive to {Path.GetFileName(sanitizedDestination)}");
+            Refresh();
+
+            if (openFolderWhenDone)
+                _fileSystemService.OpenInDefaultApp(sanitizedDestination);
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary($"Canceled archive extraction for {item.Name}");
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Extract archive failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    public async Task ExtractArchiveEntriesToAsync(
+        string archivePath,
+        IEnumerable<string> entryPaths,
+        string destinationPath,
+        bool openFolderWhenDone = false)
+    {
+        if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(destinationPath))
+            return;
+
+        var entryPathList = entryPaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (entryPathList.Length == 0)
+            return;
+
+        try
+        {
+            var sanitizedDestination = _fileSystemService.EnsureDirectoryExists(destinationPath);
+            if (string.IsNullOrWhiteSpace(sanitizedDestination))
+                throw new InvalidOperationException("The extraction destination is invalid.");
+
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Extracting {entryPathList.Length} archive item(s)",
+                context =>
+                {
+                    _fileSystemService.ExtractArchiveEntries(archivePath, sanitizedDestination, entryPathList, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Extracted {entryPathList.Length} archive item(s)");
+            Refresh();
+
+            if (openFolderWhenDone)
+                _fileSystemService.OpenInDefaultApp(sanitizedDestination);
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary("Archive extraction canceled");
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Extract archive failed: {ex.Message}",
+                "Archive Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private void ApplySearchResults(List<FileSystemItem> results, string searchTerm)
@@ -704,9 +828,9 @@ public partial class FileListViewModel : ObservableObject
             var operationText = $"{(moveFiles ? "Moving" : "Copying")} {distinctPaths.Length} item(s)";
             var transferResults = await _fileOperationQueueService.EnqueueAsync(
                 operationText,
-                () => moveFiles
-                    ? _fileSystemService.MoveFiles(distinctPaths, destinationPath, collisionResolution)
-                    : _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution));
+                context => moveFiles
+                    ? _fileSystemService.MoveFiles(distinctPaths, destinationPath, collisionResolution, context)
+                    : _fileSystemService.CopyFiles(distinctPaths, destinationPath, collisionResolution, context));
 
             SetTransferSummary(BuildTransferSummary(moveFiles ? "Moved" : "Copied", transferResults));
             ShowTransferIssues(transferResults, errorTitle);
@@ -714,6 +838,12 @@ public partial class FileListViewModel : ObservableObject
             return transferResults.Any(static result => result.Status == FileTransferStatus.Success)
                 ? transferResults
                 : [];
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary($"{(moveFiles ? "Move" : "Copy")} canceled");
+            Refresh();
+            return [];
         }
         catch (Exception ex)
         {
@@ -942,7 +1072,7 @@ public partial class FileListViewModel : ObservableObject
             {
                 var stagedItems = await _fileOperationQueueService.EnqueueAsync(
                     $"Permanently deleting {deletePaths.Length} item(s)",
-                    () => _fileSystemService.MoveFiles(deletePaths, _undoStagingPath));
+                    context => _fileSystemService.MoveFiles(deletePaths, _undoStagingPath, operationContext: context));
                 SetTransferSummary(BuildTransferSummary("Permanently deleted", stagedItems));
                 ShowTransferIssues(stagedItems, "Delete Error");
                 RegisterPermanentDeleteUndo(GetSuccessfulTransfers(stagedItems));
@@ -951,14 +1081,19 @@ public partial class FileListViewModel : ObservableObject
             {
                 await _fileOperationQueueService.EnqueueAsync(
                     $"Deleting {deletePaths.Length} item(s)",
-                    () =>
+                    context =>
                     {
-                        _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false);
+                        _fileSystemService.DeleteFiles(deletePaths, permanentDelete: false, context);
                         return true;
                     });
                 SetTransferSummary($"Deleted {deletePaths.Length} item(s)");
             }
 
+            Refresh();
+        }
+        catch (OperationCanceledException)
+        {
+            SetTransferSummary("Delete canceled");
             Refresh();
         }
         catch (Exception ex)

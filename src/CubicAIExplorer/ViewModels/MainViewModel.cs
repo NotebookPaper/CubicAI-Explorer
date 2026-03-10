@@ -53,6 +53,9 @@ public partial class MainViewModel : ObservableObject
     private bool _isDualPaneMode;
 
     [ObservableProperty]
+    private bool _isQueueDetailsVisible;
+
+    [ObservableProperty]
     private string _rightPaneAddressText = string.Empty;
 
     private TabViewModel? _rightPaneTab;
@@ -109,7 +112,20 @@ public partial class MainViewModel : ObservableObject
     public string LeftPaneStatusText => ActiveTab?.FileList.StatusText ?? "Ready";
     public string RightPaneStatusText => _rightPaneTab?.FileList.StatusText ?? "Ready";
     public bool IsFileOperationQueueBusy => _fileOperationQueueService.IsBusy;
+    public bool CanShowQueueDetails => _fileOperationQueueService.IsBusy
+        || _fileOperationQueueService.PendingCount > 0
+        || _fileOperationQueueService.HasRecentActivity;
     public string FileOperationQueueStatusText => _fileOperationQueueService.StatusText;
+    public string FileOperationQueueCurrentOperationText => _fileOperationQueueService.CurrentOperationText;
+    public int FileOperationQueueCurrentOperationCompletedSteps => _fileOperationQueueService.CurrentOperationCompletedSteps;
+    public int FileOperationQueueCurrentOperationTotalSteps => _fileOperationQueueService.CurrentOperationTotalSteps;
+    public double FileOperationQueueCurrentOperationProgressFraction => _fileOperationQueueService.CurrentOperationProgressFraction;
+    public string FileOperationQueueCurrentOperationProgressText => _fileOperationQueueService.CurrentOperationProgressText;
+    public string FileOperationQueueCurrentOperationDetailText => _fileOperationQueueService.CurrentOperationDetailText;
+    public int FileOperationQueuePendingCount => _fileOperationQueueService.PendingCount;
+    public string FileOperationQueueLastCompletedOperationText => _fileOperationQueueService.LastCompletedOperationText;
+    public string FileOperationQueueLastCompletedStatusText => _fileOperationQueueService.LastCompletedStatusText;
+    public bool CanCancelFileOperationQueue => _fileOperationQueueService.CanCancel;
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
 
@@ -211,9 +227,29 @@ public partial class MainViewModel : ObservableObject
 
         if (e.PropertyName == nameof(IFileOperationQueueService.StatusText)
             || e.PropertyName == nameof(IFileOperationQueueService.IsBusy)
+            || e.PropertyName == nameof(IFileOperationQueueService.HasRecentActivity)
             || e.PropertyName == nameof(IFileOperationQueueService.PendingCount)
-            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
+            || e.PropertyName == nameof(IFileOperationQueueService.CanCancel)
+            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText)
+            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationCompletedSteps)
+            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationTotalSteps)
+            || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationDetailText)
+            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedOperationText)
+            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedStatusText))
+        {
             OnPropertyChanged(nameof(FileOperationQueueStatusText));
+            OnPropertyChanged(nameof(CanShowQueueDetails));
+            OnPropertyChanged(nameof(CanCancelFileOperationQueue));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationText));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationCompletedSteps));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationTotalSteps));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationProgressFraction));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationProgressText));
+            OnPropertyChanged(nameof(FileOperationQueueCurrentOperationDetailText));
+            OnPropertyChanged(nameof(FileOperationQueuePendingCount));
+            OnPropertyChanged(nameof(FileOperationQueueLastCompletedOperationText));
+            OnPropertyChanged(nameof(FileOperationQueueLastCompletedStatusText));
+        }
     }
 
     private void RefreshCurrentPaneState()
@@ -506,6 +542,19 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void RenameSavedSearch(SavedSearchItem? savedSearch)
+    {
+        if (savedSearch == null)
+            return;
+
+        var dialog = new Views.RenameDialog(savedSearch.Name);
+        if (dialog.ShowDialog() != true)
+            return;
+
+        RenameSavedSearch(savedSearch, dialog.EnteredName);
+    }
+
+    [RelayCommand]
     private void RunSavedSearch(SavedSearchItem? savedSearch)
     {
         if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath) || string.IsNullOrWhiteSpace(savedSearch.SearchTerm))
@@ -533,6 +582,25 @@ public partial class MainViewModel : ObservableObject
     private void ClearHistory()
     {
         ExecuteCurrentPaneFileListCommand(static fileList => fileList.ClearHistoryCommand);
+    }
+
+    [RelayCommand]
+    private void ToggleQueueDetails()
+    {
+        if (!CanShowQueueDetails)
+        {
+            IsQueueDetailsVisible = false;
+            return;
+        }
+
+        IsQueueDetailsVisible = !IsQueueDetailsVisible;
+    }
+
+    [RelayCommand]
+    private void CancelFileOperationQueue()
+    {
+        if (_fileOperationQueueService.CanCancel)
+            _fileOperationQueueService.CancelCurrent();
     }
 
     private void ExecuteOnCurrentPaneTab(Action<TabViewModel> action)
@@ -935,14 +1003,12 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            var text = await Task.Run(() =>
-            {
-                var lines = File.ReadLines(path).Take(200);
-                return string.Join("\n", lines);
-            });
+            var preview = await Task.Run(() => ReadTextPreview(path));
             if (_previewGeneration != generation) return;
-            PreviewText = text;
+            PreviewText = preview.Text;
             HasPreviewText = true;
+            PreviewStatusText = BuildTextPreviewStatus(path, preview);
+            HasPreviewStatus = true;
         }
         catch
         {
@@ -960,7 +1026,7 @@ public partial class MainViewModel : ObservableObject
             if (_previewGeneration != generation) return;
             PreviewText = preview;
             HasPreviewText = true;
-            PreviewStatusText = "Binary preview (hex)";
+            PreviewStatusText = $"Binary preview (hex)\nShowing {new FileInfo(path).Length} byte(s)\n\n{GetBasicFileMetadata(path)}";
             HasPreviewStatus = true;
         }
         catch
@@ -1036,6 +1102,9 @@ public partial class MainViewModel : ObservableObject
             if (_previewGeneration != generation) return;
 
             var details = new List<string> { "Media file" };
+            var mediaKind = GetMediaKind(path);
+            if (!string.IsNullOrWhiteSpace(mediaKind))
+                details.Add(mediaKind);
             if (media.Duration is { } duration && duration > TimeSpan.Zero)
                 details.Add($"Duration: {FormatDuration(duration)}");
             if (media.Width > 0 && media.Height > 0)
@@ -1062,6 +1131,7 @@ public partial class MainViewModel : ObservableObject
             var folderCount = entries.Count(static entry => entry.IsDirectory);
             var details = new List<string> { "ZIP archive" };
             details.Add($"Entries: {entries.Count}");
+            details.Add("Preview: first 8 entries");
             if (folderCount > 0)
                 details.Add($"Folders: {folderCount}");
             if (fileCount > 0)
@@ -1115,6 +1185,68 @@ public partial class MainViewModel : ObservableObject
             text += "\nRead-only";
 
         return text;
+    }
+
+    private static TextPreviewResult ReadTextPreview(string path)
+    {
+        const int maxLines = 200;
+        const int maxCharacters = 64 * 1024;
+
+        using var reader = new StreamReader(path, detectEncodingFromByteOrderMarks: true);
+        var lines = new List<string>(capacity: Math.Min(maxLines, 32));
+        var totalCharacters = 0;
+        var wasTruncated = false;
+
+        while (!reader.EndOfStream && lines.Count < maxLines && totalCharacters < maxCharacters)
+        {
+            var line = reader.ReadLine() ?? string.Empty;
+            lines.Add(line);
+            totalCharacters += line.Length + Environment.NewLine.Length;
+        }
+
+        if (!reader.EndOfStream)
+            wasTruncated = true;
+
+        return new TextPreviewResult(
+            string.Join("\n", lines),
+            lines.Count,
+            totalCharacters,
+            wasTruncated,
+            reader.CurrentEncoding.WebName);
+    }
+
+    private static string BuildTextPreviewStatus(string path, TextPreviewResult preview)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        var details = new List<string> { GetTextPreviewKind(extension) };
+        details.Add($"Encoding: {preview.EncodingName}");
+        details.Add($"Lines shown: {preview.LineCount}");
+        if (preview.WasTruncated)
+            details.Add("Preview truncated");
+
+        return string.Join("\n", details) + "\n\n" + GetBasicFileMetadata(path);
+    }
+
+    private static string GetTextPreviewKind(string extension) => extension switch
+    {
+        ".json" => "JSON document",
+        ".xml" => "XML document",
+        ".md" => "Markdown document",
+        ".csv" or ".tsv" => "Delimited text",
+        ".cs" or ".xaml" or ".js" or ".ts" or ".py" or ".cpp" or ".h" => "Source code",
+        ".log" => "Log file",
+        _ => "Text file"
+    };
+
+    private static string GetMediaKind(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension switch
+        {
+            ".mp3" or ".wav" or ".flac" or ".aac" or ".m4a" or ".ogg" or ".wma" => "Audio",
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".webm" or ".m4v" => "Video",
+            _ => string.Empty
+        };
     }
 
     private static string FormatDuration(TimeSpan duration)
@@ -1264,6 +1396,13 @@ public partial class MainViewModel : ObservableObject
         ".swift" or ".kt" or ".scala" or ".r" or ".m" or ".mm" or
         ".dockerfile" or ".makefile" or ".gradle" or ".properties" or
         ".reg" or ".inf" or ".manifest" or ".targets" or ".props";
+
+    private sealed record TextPreviewResult(
+        string Text,
+        int LineCount,
+        int CharacterCount,
+        bool WasTruncated,
+        string EncodingName);
 
     // --- Address Autocomplete ---
 
@@ -1502,5 +1641,15 @@ public partial class MainViewModel : ObservableObject
         {
             // Non-critical.
         }
+    }
+
+    public void RenameSavedSearch(SavedSearchItem savedSearch, string newName)
+    {
+        if (savedSearch == null || string.IsNullOrWhiteSpace(newName))
+            return;
+
+        savedSearch.Name = newName.Trim();
+        OnPropertyChanged(nameof(SavedSearches));
+        SaveSavedSearches();
     }
 }

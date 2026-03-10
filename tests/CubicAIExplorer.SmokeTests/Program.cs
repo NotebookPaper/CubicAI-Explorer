@@ -1,8 +1,10 @@
 using System.IO;
+using System.Windows.Controls;
 using System.Windows.Data;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
+using CubicAIExplorer.Views;
 
 internal static class Program
 {
@@ -32,8 +34,13 @@ internal static class Program
             Run("move collision skip", failures, () => TestMoveCollisionSkip(tempRoot));
             Run("clipboard drop effect byte array", failures, TestClipboardDropEffectByteArray);
             Run("file operation queue service", failures, TestFileOperationQueueService);
+            Run("queue recent status", failures, TestQueueRecentStatus);
+            Run("queue cancel + progress", failures, TestQueueCancelAndProgress);
             Run("zip archive service", failures, () => TestZipArchiveService(tempRoot));
             Run("extract archive command", failures, () => TestExtractArchiveCommand(tempRoot));
+            Run("extract archive custom destination", failures, () => TestExtractArchiveCustomDestination(tempRoot));
+            Run("browse archive request", failures, () => TestBrowseArchiveRequest(tempRoot));
+            Run("archive browser filter", failures, TestArchiveBrowserFilter);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -51,6 +58,7 @@ internal static class Program
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("saved searches", failures, () => TestSavedSearches(tempRoot));
+            Run("rename saved search", failures, () => TestRenameSavedSearch(tempRoot));
             Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
             Run("active pane command routing", failures, () => TestActivePaneCommandRouting(tempRoot));
             Run("active pane ui command routing", failures, () => TestActivePaneUiCommandRouting(tempRoot));
@@ -447,6 +455,7 @@ internal static class Program
         WaitFor(() => queue.PendingCount == 1);
         Assert(queue.StatusText.Contains("First op"), "Queue should report the running operation.");
         Assert(queue.StatusText.Contains("queued"), "Queue should report queued work while busy.");
+        Assert(queue.CanCancel, "Active queue work should be cancelable.");
 
         releaseFirst.Set();
         Task.WaitAll(firstTask, secondTask);
@@ -454,6 +463,57 @@ internal static class Program
         Assert(secondStarted, "Queued operation should run after the first completes.");
         Assert(!queue.IsBusy, "Queue should become idle after all work completes.");
         Assert(queue.PendingCount == 0, "Queue should clear pending work after completion.");
+        Assert(!queue.CanCancel, "Idle queue should not expose cancel.");
+    }
+
+    private static void TestQueueRecentStatus()
+    {
+        var queue = new FileOperationQueueService();
+        queue.EnqueueAsync("Quick op", () => 123).GetAwaiter().GetResult();
+
+        WaitFor(() => queue.HasRecentActivity);
+        Assert(queue.LastCompletedOperationText == "Quick op", "Queue should remember the last completed operation.");
+        Assert(queue.LastCompletedStatusText.Contains("completed", StringComparison.OrdinalIgnoreCase),
+            "Queue should expose a completion summary after work finishes.");
+        Assert(queue.StatusText.Contains("completed", StringComparison.OrdinalIgnoreCase),
+            "Idle queue status should show the most recent result.");
+    }
+
+    private static void TestQueueCancelAndProgress()
+    {
+        var queue = new FileOperationQueueService();
+        using var progressReported = new ManualResetEventSlim();
+        using var allowCancel = new ManualResetEventSlim();
+
+        try
+        {
+            var task = queue.EnqueueAsync("Cancelable op", context =>
+            {
+                context.ReportProgress(1, 3, "first.txt");
+                progressReported.Set();
+                allowCancel.Wait(2000);
+                queue.CancelCurrent();
+                context.CancellationToken.ThrowIfCancellationRequested();
+                return 0;
+            });
+
+            WaitFor(() => progressReported.IsSet && queue.CurrentOperationProgressText == "(1/3)");
+            Assert(queue.CurrentOperationDetailText == "first.txt", "Queue should expose the current progress detail.");
+            allowCancel.Set();
+            task.GetAwaiter().GetResult();
+
+            throw new InvalidOperationException("Cancelable queue work should throw on cancellation.");
+        }
+        catch (OperationCanceledException)
+        {
+            // expected
+        }
+
+        Assert(progressReported.IsSet, "Queue progress should be reportable during active work.");
+        WaitFor(() => queue.HasRecentActivity);
+        Assert(queue.LastCompletedStatusText.Contains("canceled", StringComparison.OrdinalIgnoreCase),
+            "Canceled queue work should report a canceled status.");
+        Assert(!queue.CanCancel, "Queue should clear cancel state after cancellation.");
     }
 
     private static void TestZipArchiveService(string root)
@@ -502,11 +562,108 @@ internal static class Program
         vm.SelectedItems.Clear();
         vm.SelectedItems.Add(archiveItem);
 
-        vm.ExtractArchiveCommand.Execute(null);
+        vm.ExtractArchiveToAsync(archiveItem, FileListViewModel.GetDefaultExtractDestination(archiveItem))
+            .GetAwaiter()
+            .GetResult();
 
         Assert(Directory.Exists(Path.Combine(folder, "sample")), "Extract archive command should create a destination folder.");
         Assert(File.Exists(Path.Combine(folder, "sample", "inner.txt")), "Extract archive command should extract files.");
         Assert(vm.StatusText.Contains("Extracted archive"), "Extract archive command should update status text.");
+    }
+
+    private static void TestExtractArchiveCustomDestination(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "extract_archive_custom");
+        var archive = Path.Combine(folder, "sample.zip");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var entry = zip.CreateEntry("nested/inner.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("hello archive");
+        }
+
+        var vm = new FileListViewModel(fs, clipboard);
+        vm.LoadDirectory(folder);
+        var archiveItem = vm.Items.Single(i => i.Name == "sample.zip");
+        var destination = Path.Combine(folder, "custom-out");
+
+        vm.ExtractArchiveToAsync(archiveItem, destination, openFolderWhenDone: false).GetAwaiter().GetResult();
+
+        Assert(Directory.Exists(destination), "Custom archive extraction should create the chosen destination.");
+        Assert(File.Exists(Path.Combine(destination, "nested", "inner.txt")),
+            "Custom archive extraction should write archive contents to the chosen destination.");
+    }
+
+    private static void TestBrowseArchiveRequest(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "browse_archive");
+        var archive = Path.Combine(folder, "sample.zip");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var entry = zip.CreateEntry("docs/readme.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("hello archive");
+        }
+
+        var vm = new FileListViewModel(fs, clipboard);
+        vm.LoadDirectory(folder);
+        vm.SelectedItem = vm.Items.Single(i => i.Name == "sample.zip");
+
+        ArchiveBrowseRequest? request = null;
+        vm.ArchiveBrowseRequested += (_, archiveRequest) => request = archiveRequest;
+
+        vm.BrowseArchiveCommand.Execute(null);
+
+        Assert(request != null, "Browse archive should raise an archive browse request.");
+        Assert(request!.Entries.Any(entry => entry.FullName == "docs/readme.txt"),
+            "Browse archive should include the archive entry listing.");
+    }
+
+    private static void TestArchiveBrowserFilter()
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var sourceVm = new FileListViewModel(fs, clipboard);
+        var entries = new[]
+        {
+            new ArchiveEntryInfo("docs/", 0, true),
+            new ArchiveEntryInfo("docs/readme.txt", 12, false),
+            new ArchiveEntryInfo("images/logo.png", 24, false)
+        };
+
+        var dialog = new ArchiveBrowserDialog("sample.zip", entries, sourceVm);
+        var filterTextBox = (TextBox?)dialog.FindName("FilterTextBox");
+        var foldersOnlyCheckBox = (CheckBox?)dialog.FindName("FoldersOnlyCheckBox");
+        var entriesListView = (ListView?)dialog.FindName("EntriesListView");
+        var summaryTextBlock = (TextBlock?)dialog.FindName("SummaryTextBlock");
+        var currentFolderTextBlock = (TextBlock?)dialog.FindName("CurrentFolderTextBlock");
+
+        Assert(filterTextBox != null, "Archive browser should expose a filter text box.");
+        Assert(foldersOnlyCheckBox != null, "Archive browser should expose a folders-only toggle.");
+        Assert(entriesListView != null, "Archive browser should expose an entries list.");
+        Assert(summaryTextBlock != null, "Archive browser should expose a summary text block.");
+        Assert(currentFolderTextBlock != null, "Archive browser should expose the current folder text.");
+        Assert(entriesListView!.Items.Count == 2, "Archive browser should initially show root-level archive items.");
+        Assert(currentFolderTextBlock!.Text.Contains(@"Inside: \"), "Archive browser should start at archive root.");
+
+        filterTextBox!.Text = "docs";
+        Assert(entriesListView.Items.Count == 1, "Archive browser filter should narrow the visible entries.");
+        Assert(summaryTextBlock!.Text.Contains("1 item", StringComparison.OrdinalIgnoreCase),
+            "Archive browser summary should reflect filtered results.");
+
+        filterTextBox.Text = string.Empty;
+        foldersOnlyCheckBox!.IsChecked = true;
+        Assert(entriesListView.Items.Count == 2, "Folders-only mode should keep visible directory entries, including synthesized parent folders.");
+        Assert(summaryTextBlock.Text.Contains("folder", StringComparison.OrdinalIgnoreCase),
+            "Archive browser summary should include folder counts.");
     }
 
     private static void TestRedoCopy(string root)
@@ -877,6 +1034,41 @@ internal static class Program
         }
     }
 
+    private static void TestRenameSavedSearch(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var savedSearchFile = Path.Combine(root, "saved-searches-rename.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", savedSearchFile);
+        TryDelete(savedSearchFile);
+
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            var item = new SavedSearchItem
+            {
+                Name = "Before",
+                SearchPath = root,
+                SearchTerm = "needle"
+            };
+            vm.SavedSearches.Add(item);
+
+            vm.RenameSavedSearch(item, "After");
+
+            Assert(item.Name == "After", "RenameSavedSearch should update the saved search name.");
+
+            var reloaded = new MainViewModel(fs, clipboard);
+            Assert(reloaded.SavedSearches.Any(saved => saved.Name == "After"),
+                "RenameSavedSearch should persist the renamed saved search.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", originalOverridePath);
+            TryDelete(savedSearchFile);
+        }
+    }
+
     private static void TestDualPaneToggle(string root)
     {
         var fs = new FileSystemService();
@@ -1015,6 +1207,7 @@ internal static class Program
 
         vm.CurrentPaneFileList.SearchText = "search";
         vm.ExecuteSearchCommand.Execute(null);
+        WaitFor(() => vm.RightPaneTab.FileList.IsShowingSearchResults, 1000);
         Assert(vm.RightPaneTab.FileList.IsShowingSearchResults, "Search results should be shown in the active right pane.");
         Assert(vm.RightPaneTab.FileList.Items.Any(i => i.Name == "search-hit"), "Right pane search should search the right pane tree.");
 
@@ -1133,6 +1326,8 @@ internal static class Program
         Assert(vm.HasPreviewText, "Text files should produce text preview content.");
         Assert(!vm.HasPreviewImage, "Text files should not produce image preview content.");
         Assert(vm.PreviewText.Contains("line one"), "Preview should include file contents.");
+        Assert(vm.PreviewStatusText.Contains("Text file"), "Text preview should include a text-file status.");
+        Assert(vm.PreviewStatusText.Contains("Lines shown"), "Text preview should report line counts.");
 
         vm.TogglePreviewCommand.Execute(null);
 
@@ -1230,6 +1425,7 @@ internal static class Program
         WaitFor(() => vm.PreviewStatusText.Contains("ZIP"), 1000);
 
         Assert(vm.PreviewStatusText.Contains("ZIP archive"), "ZIP files should show archive metadata.");
+        Assert(vm.PreviewStatusText.Contains("first 8 entries"), "ZIP preview should describe preview truncation scope.");
         Assert(vm.PreviewText.Contains("notes.txt"), "ZIP preview should list archive entries.");
     }
 
@@ -1418,6 +1614,7 @@ internal static class Program
         Assert(main.Contains("PropertiesMenuItem"), "Properties menu item should be in context menu.");
         Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
         Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
+        Assert(main.Contains("BrowseArchiveMenuItem"), "Browse Archive menu item should exist.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
         Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");
         Assert(main.Contains("FolderTree_Drop"), "Folder tree drop handler should be wired.");
@@ -1431,6 +1628,7 @@ internal static class Program
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
         Assert(main.Contains("AddCurrentSearchCommand"), "Saved-search add command should exist.");
+        Assert(main.Contains("RenameSavedSearchCommand"), "Saved-search rename command should exist.");
         Assert(main.Contains("Command=\"{Binding CopyCommand}\""), "Copy bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding GoBackCommand}\""), "Back bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding RenameCommand}\""), "Rename bindings should route through the main view model.");
@@ -1452,6 +1650,11 @@ internal static class Program
         Assert(main.Contains("PreviewStatusText"), "Preview panel should bind a fallback status message.");
         Assert(main.Contains("CurrentPanePath"), "Status bar should reflect the current active pane path.");
         Assert(main.Contains("FileOperationQueueStatusText"), "Status bar should expose background file operation status.");
+        Assert(main.Contains("CancelFileOperationQueueCommand"), "Queue cancel command should be wired.");
+        Assert(main.Contains("FileOperationQueueCurrentOperationProgressFraction"), "Queue progress bar should be bound.");
+        Assert(main.Contains("FileOperationQueueCurrentOperationDetailText"), "Queue detail text should be bound.");
+        Assert(main.Contains("ToggleQueueDetailsCommand"), "Queue details toggle should be wired.");
+        Assert(main.Contains("Background File Queue"), "Queue details panel should exist.");
         Assert(main.Contains("ContextMenuOpening=\"RightPane_ContextMenuOpening\""), "Right pane context menu handler should be wired.");
         Assert(main.Contains("GridViewColumnHeader.Click=\"RightPaneHeader_Click\""), "Right pane sort handler should be wired.");
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");
@@ -1464,6 +1667,7 @@ internal static class Program
         Assert(mainCs.Contains("Key.D4"), "Ctrl+4 shortcut should be handled.");
         Assert(mainCs.Contains("SavedSearchList_KeyDown"), "Saved search keyboard handler should be wired.");
         Assert(mainCs.Contains("SavedSearchList_MouseDoubleClick"), "Saved search double-click handler should be wired.");
+        Assert(mainCs.Contains("FileListViewModel_ArchiveBrowseRequested"), "Archive browser handler should be wired.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");

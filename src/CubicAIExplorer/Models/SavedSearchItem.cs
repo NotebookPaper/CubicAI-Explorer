@@ -1,9 +1,17 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace CubicAIExplorer.Models;
 
-public sealed class SavedSearchItem
+public partial class SavedSearchItem : ObservableObject
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public required string Name { get; set; }
-    public required string SearchTerm { get; set; }
-    public required string SearchPath { get; set; }
+
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private string _searchTerm = string.Empty;
+
+    [ObservableProperty]
+    private string _searchPath = string.Empty;
 }

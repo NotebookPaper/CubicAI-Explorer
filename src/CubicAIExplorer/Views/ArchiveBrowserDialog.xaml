@@ -1,0 +1,94 @@
+<Window x:Class="CubicAIExplorer.Views.ArchiveBrowserDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Archive Browser"
+        Width="760"
+        Height="560"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="ArchivePathTextBlock"
+                   FontWeight="SemiBold"
+                   TextWrapping="Wrap" />
+        <TextBlock x:Name="SummaryTextBlock"
+                   Grid.Row="1"
+                   Margin="0,4,0,10"
+                   Foreground="#5A6F89" />
+
+        <DockPanel Grid.Row="2" Margin="0,0,0,10">
+            <Button DockPanel.Dock="Left"
+                    x:Name="UpButton"
+                    Content="Up"
+                    Width="64"
+                    Margin="0,0,10,0"
+                    Click="UpButton_Click" />
+            <TextBlock x:Name="CurrentFolderTextBlock"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+
+        <Grid Grid.Row="3" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="FilterTextBox"
+                     MinWidth="280"
+                     Margin="0,0,10,0"
+                     VerticalContentAlignment="Center"
+                     ToolTip="Filter archive entries"
+                     TextChanged="FilterTextBox_TextChanged" />
+            <CheckBox x:Name="FoldersOnlyCheckBox"
+                      Grid.Column="1"
+                      VerticalAlignment="Center"
+                      Content="Folders only"
+                      Checked="FoldersOnlyCheckBox_Changed"
+                      Unchecked="FoldersOnlyCheckBox_Changed" />
+        </Grid>
+
+        <ListView x:Name="EntriesListView"
+                  Grid.Row="4"
+                  SelectionMode="Extended"
+                  MouseDoubleClick="EntriesListView_MouseDoubleClick">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Name" Width="320" DisplayMemberBinding="{Binding Name}" />
+                    <GridViewColumn Header="Path" Width="200" DisplayMemberBinding="{Binding FolderPath}" />
+                    <GridViewColumn Header="Type" Width="90" DisplayMemberBinding="{Binding EntryType}" />
+                    <GridViewColumn Header="Size" Width="100" DisplayMemberBinding="{Binding DisplaySize}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="Extract Selected..."
+                    Width="120"
+                    Margin="0,0,8,0"
+                    Click="ExtractSelectedButton_Click" />
+            <Button Content="Extract Here"
+                    Width="100"
+                    Margin="0,0,8,0"
+                    Click="ExtractHereButton_Click" />
+            <Button Content="Extract To..."
+                    Width="100"
+                    Margin="0,0,8,0"
+                    Click="ExtractToButton_Click" />
+            <Button Content="Close"
+                    Width="90"
+                    IsDefault="True"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

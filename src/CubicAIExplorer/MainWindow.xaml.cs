@@ -498,8 +498,7 @@ public partial class MainWindow : Window
 
     private void SavedSearchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ViewModel.SelectedSavedSearch is { } savedSearch)
-            ViewModel.RunSavedSearchCommand.Execute(savedSearch);
+        // Keep selection for context actions; execution is explicit via Enter, double-click, or the context menu.
     }
 
     private void SavedSearchList_KeyDown(object sender, KeyEventArgs e)
@@ -514,6 +513,13 @@ public partial class MainWindow : Window
         if (e.Key == Key.Delete && ViewModel.SelectedSavedSearch is { } selected)
         {
             ViewModel.RemoveSavedSearchCommand.Execute(selected);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F2 && ViewModel.SelectedSavedSearch is { } renameTarget)
+        {
+            ViewModel.RenameSavedSearchCommand.Execute(renameTarget);
             e.Handled = true;
         }
     }
@@ -630,25 +636,25 @@ public partial class MainWindow : Window
     {
         ViewModel.ActivateLeftPane();
         ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
-            OpenMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
+            OpenMenuItem, BrowseArchiveMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
             DeleteMenuItem, RenameMenuItem, NewFolderMenuItem, RefreshMenuItem,
-            PasteMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
+            PasteMenuItem, ExtractArchiveMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
     }
 
     private void RightPane_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateRightPane();
         ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
-            RightOpenMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
+            RightOpenMenuItem, RightBrowseArchiveMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
             RightDeleteMenuItem, RightRenameMenuItem, RightNewFolderMenuItem, RightRefreshMenuItem,
-            RightPasteMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
+            RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
     }
 
     private void ConfigureContextMenu(
         ContextMenuEventArgs e, FileListViewModel? fileList,
-        FrameworkElement open, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
+        FrameworkElement open, FrameworkElement browseArchive, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
         FrameworkElement sep2, FrameworkElement delete, FrameworkElement rename,
-        FrameworkElement newFolder, FrameworkElement refresh, FrameworkElement paste,
+        FrameworkElement newFolder, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
         FrameworkElement propsSep, FrameworkElement props, FrameworkElement openInExplorer)
     {
         if (fileList == null) return;
@@ -660,8 +666,17 @@ public partial class MainWindow : Window
 
         var itemVisibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         var emptyVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
+        var selectedArchive = fileList.SelectedItems.Count == 1
+            ? fileList.SelectedItems[0]
+            : fileList.SelectedItems.Count == 0
+                ? fileList.SelectedItem
+                : null;
+        var archiveVisibility = FileListViewModel.IsArchiveItem(selectedArchive)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         open.Visibility = itemVisibility;
+        browseArchive.Visibility = archiveVisibility;
         sep1.Visibility = itemVisibility;
         cut.Visibility = itemVisibility;
         copy.Visibility = itemVisibility;
@@ -672,6 +687,7 @@ public partial class MainWindow : Window
         newFolder.Visibility = emptyVisibility;
         refresh.Visibility = emptyVisibility;
         paste.Visibility = Visibility.Visible;
+        extractArchive.Visibility = archiveVisibility;
         propsSep.Visibility = Visibility.Visible;
         props.Visibility = itemVisibility;
         openInExplorer.Visibility = Visibility.Visible;
@@ -848,6 +864,7 @@ public partial class MainWindow : Window
             boundField.ViewModeChanged -= FileListViewModel_ViewModeChanged;
             boundField.PropertiesRequested -= FileListViewModel_PropertiesRequested;
             boundField.SearchPanelOpened -= FileListViewModel_SearchPanelOpened;
+            boundField.ArchiveBrowseRequested -= FileListViewModel_ArchiveBrowseRequested;
         }
 
         boundField = newViewModel;
@@ -858,6 +875,7 @@ public partial class MainWindow : Window
             boundField.ViewModeChanged += FileListViewModel_ViewModeChanged;
             boundField.PropertiesRequested += FileListViewModel_PropertiesRequested;
             boundField.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
+            boundField.ArchiveBrowseRequested += FileListViewModel_ArchiveBrowseRequested;
             // Only apply non-default view modes; Details is already set in XAML
             if (boundField.ViewMode != "Details")
                 ApplyViewMode(targetListView, boundField.ViewMode);
@@ -913,6 +931,12 @@ public partial class MainWindow : Window
             SearchTextBox.Focus();
             SearchTextBox.SelectAll();
         }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void FileListViewModel_ArchiveBrowseRequested(object? sender, ArchiveBrowseRequest request)
+    {
+        var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.SourceFileList) { Owner = this };
+        dialog.ShowDialog();
     }
 
     private void ApplyViewMode(ListView listView, string mode)
