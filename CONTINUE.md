@@ -1,7 +1,7 @@
 # Continuation Instructions for Next Session
 
-> **Last updated:** 2026-03-09
-> **Status:** Tier 1 complete + dual-pane, preview, autocomplete, preferences, and active-pane proxy cleanup are implemented and pushed. New uncommitted follow-up adds richer preview metadata (PDF/media) and keyboard accessibility shortcuts/tab-order polish. Smoke suite passes.
+> **Last updated:** 2026-03-10
+> **Status:** Tier 1 complete + dual-pane, preview, autocomplete, preferences, active-pane proxy cleanup, preview metadata expansion, keyboard accessibility polish, and startup crash fixes are implemented and pushed. Smoke suite passes.
 
 ---
 
@@ -68,12 +68,10 @@ You are continuing work on **CubicAI Explorer**, a C#/WPF file manager rewrite.
 - `8ad16c9` — async preview, drive-root autocomplete, debounced suggestions, right-pane autocomplete
 - `6445720` — preferences/settings persistence + smoke coverage
 - `2cd2788` — active-pane UI now binds directly to `CurrentPaneFileList.*`; removed `Current*` forwarding proxies and related wiring
+- `b5e59e9` — expanded preview metadata (PDF/media) + keyboard navigation shortcuts/focus polish
+- `e2b513f` — fixed startup crashes (read-only binding mode + suggestion UI-thread safety) + smoke guards
 
-**Uncommitted but building + tests passing — preview/accessibility follow-up:**
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs` — PDF preview metadata parsing, media metadata fallback (duration/video dimensions), preview extension routing
-- `src/CubicAIExplorer/MainWindow.xaml` — focusable preview panel, tab order, and keyboard handler wiring for recent/bookmark lists
-- `src/CubicAIExplorer/MainWindow.xaml.cs` — keyboard shortcuts (`Ctrl+1..4`, `Alt+D`, `Ctrl+Shift+L`) and recent/bookmark key handlers
-- `tests/CubicAIExplorer.SmokeTests/Program.cs` — preview PDF smoke coverage + keyboard wiring assertions
+**Worktree:** clean for tracked files (only local untracked utility paths below).
 
 Untracked local-only paths:
 - `.claude/`
@@ -81,14 +79,14 @@ Untracked local-only paths:
 - `tests/CubicAIExplorer.SmokeTests/obj_verify/`
 
 ## Verification
-Verified on **2026-03-09**:
+Verified on **2026-03-10**:
 - `dotnet build CubicAIExplorer.sln` — 0 errors, 0 warnings
-- Smoke tests: 41/41 pass (includes settings defaults + round-trip + `NewTab` settings application)
+- Smoke tests: 42/42 pass (includes settings coverage, preview metadata coverage, and startup-regression guards)
 
 ## Priority Next Work
-1. **Commit and push the preview/accessibility follow-up** once user confirms.
-2. **Manual UX verification pass** for new keyboard shortcuts and media metadata behavior on real files.
-3. **Optional next cleanup:** reduce MainViewModel forwarding `[RelayCommand]` methods by binding deeper into pane view models where practical.
+1. **Manual UX verification pass** for new keyboard shortcuts and media metadata behavior on real files.
+2. **Optional next cleanup:** reduce MainViewModel forwarding `[RelayCommand]` methods by binding deeper into pane view models where practical.
+3. **Preview roadmap (optional):** improve PDF page-count accuracy and richer audio/video metadata if future package approvals are allowed.
 
 ## Known Gotchas
 - **WPF markup build lock:** smoke-test project builds can fail in the sandbox with `App.g.cs` / `MarkupCompile.cache` access-denied errors under `src\CubicAIExplorer\obj\Debug\net8.0-windows`. Re-running the smoke-test build outside the sandbox resolves it.

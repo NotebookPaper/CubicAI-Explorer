@@ -348,123 +348,137 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void GoBack()
     {
-        CurrentPaneTab?.GoBackCommand.Execute(null);
+        ExecuteOnCurrentPaneTab(tab => tab.GoBackCommand.Execute(null));
     }
 
     [RelayCommand]
     private void GoForward()
     {
-        CurrentPaneTab?.GoForwardCommand.Execute(null);
+        ExecuteOnCurrentPaneTab(tab => tab.GoForwardCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Copy()
     {
-        CurrentPaneFileList?.CopyCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.CopyCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Cut()
     {
-        CurrentPaneFileList?.CutCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.CutCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Paste()
     {
-        CurrentPaneFileList?.PasteCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.PasteCommand.Execute(null));
     }
 
     [RelayCommand]
     private void OpenSelectedItem()
     {
-        var item = CurrentPaneFileList?.SelectedItem;
-        if (item != null)
-            CurrentPaneFileList!.OpenItemCommand.Execute(item);
+        ExecuteOnCurrentPaneFileList(fileList =>
+        {
+            if (fileList.SelectedItem is { } item)
+                fileList.OpenItemCommand.Execute(item);
+        });
     }
 
     [RelayCommand]
     private void Delete()
     {
-        CurrentPaneFileList?.DeleteCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.DeleteCommand.Execute(null));
     }
 
     [RelayCommand]
     private void PermanentDelete()
     {
-        CurrentPaneFileList?.PermanentDeleteCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.PermanentDeleteCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Refresh()
     {
-        CurrentPaneFileList?.RefreshCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.RefreshCommand.Execute(null));
     }
 
     [RelayCommand]
     private void NewFolder()
     {
-        CurrentPaneFileList?.NewFolderCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.NewFolderCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Rename()
     {
-        CurrentPaneFileList?.RenameCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.RenameCommand.Execute(null));
     }
 
     [RelayCommand]
     private void SelectAll()
     {
-        CurrentPaneFileList?.SelectAllCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.SelectAllCommand.Execute(null));
     }
 
     [RelayCommand]
     private void ShowProperties()
     {
-        CurrentPaneFileList?.ShowPropertiesCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.ShowPropertiesCommand.Execute(null));
     }
 
     [RelayCommand]
     private void SearchInFolder()
     {
-        CurrentPaneFileList?.SearchInFolderCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.SearchInFolderCommand.Execute(null));
     }
 
     [RelayCommand]
     private void ExecuteSearch()
     {
-        CurrentPaneFileList?.ExecuteSearchCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.ExecuteSearchCommand.Execute(null));
     }
 
     [RelayCommand]
     private void CloseSearch()
     {
-        CurrentPaneFileList?.CloseSearchCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.CloseSearchCommand.Execute(null));
     }
 
     [RelayCommand]
     private void ClearSearchResults()
     {
-        CurrentPaneFileList?.ClearSearchResultsCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.ClearSearchResultsCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Undo()
     {
-        CurrentPaneFileList?.UndoCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.UndoCommand.Execute(null));
     }
 
     [RelayCommand]
     private void Redo()
     {
-        CurrentPaneFileList?.RedoCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.RedoCommand.Execute(null));
     }
 
     [RelayCommand]
     private void ClearHistory()
     {
-        CurrentPaneFileList?.ClearHistoryCommand.Execute(null);
+        ExecuteOnCurrentPaneFileList(fileList => fileList.ClearHistoryCommand.Execute(null));
+    }
+
+    private void ExecuteOnCurrentPaneTab(Action<TabViewModel> action)
+    {
+        if (CurrentPaneTab is { } tab)
+            action(tab);
+    }
+
+    private void ExecuteOnCurrentPaneFileList(Action<FileListViewModel> action)
+    {
+        if (CurrentPaneFileList is { } fileList)
+            action(fileList);
     }
 
     public void DuplicateTab(TabViewModel sourceTab)
