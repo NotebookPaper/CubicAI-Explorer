@@ -447,7 +447,7 @@ public partial class MainViewModel : ObservableObject
         {
             node.IsSelected = true;
             node.IsExpanded = true; // Ensure the target itself is visible if it has children
-            ScrollToSelectedRequested?.Invoke(this, EventArgs.Empty);
+            ScrollToSelectedRequested?.Invoke(this, node);
             return;
         }
 
