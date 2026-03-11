@@ -31,6 +31,7 @@ public interface IFileSystemService
     IReadOnlyList<FileSystemItem> GetDrives();
     IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false);
     IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false);
+    IReadOnlyList<string> GetFiles(string path, bool showHidden = false);
     string GetDisplayName(string path);
     string? ResolveDirectoryPath(string path);
     bool DirectoryExists(string path);
@@ -56,6 +57,7 @@ public interface IFileSystemService
     string RenameFile(string path, string newName);
     string CreateFolder(string parentPath, string folderName);
     string CreateFile(string parentPath, string fileName);
+    string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null);
     void CreateSymbolicLink(string linkPath, string targetPath);
     string? EnsureDirectoryExists(string path);
     IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);

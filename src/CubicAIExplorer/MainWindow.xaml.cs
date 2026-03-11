@@ -836,7 +836,7 @@ public partial class MainWindow : Window
 
         ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
             OpenMenuItem, BrowseArchiveMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
-            DeleteMenuItem, RenameMenuItem, NewFolderMenuItem, RefreshMenuItem,
+            DeleteMenuItem, RenameMenuItem, NewMenuItem, RefreshMenuItem,
             PasteMenuItem, ExtractArchiveMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
     }
 
@@ -855,7 +855,7 @@ public partial class MainWindow : Window
 
         ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
             RightOpenMenuItem, RightBrowseArchiveMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
-            RightDeleteMenuItem, RightRenameMenuItem, RightNewFolderMenuItem, RightRefreshMenuItem,
+            RightDeleteMenuItem, RightRenameMenuItem, RightNewMenuItem, RightRefreshMenuItem,
             RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
     }
 
@@ -943,7 +943,7 @@ public partial class MainWindow : Window
         ContextMenuEventArgs e, FileListViewModel? fileList,
         FrameworkElement open, FrameworkElement browseArchive, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
         FrameworkElement sep2, FrameworkElement delete, FrameworkElement rename,
-        FrameworkElement newFolder, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
+        FrameworkElement newMenu, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
         FrameworkElement propsSep, FrameworkElement props, FrameworkElement openInExplorer)
     {
         if (fileList == null) return;
@@ -973,7 +973,7 @@ public partial class MainWindow : Window
         delete.Visibility = itemVisibility;
         rename.Visibility = itemVisibility;
 
-        newFolder.Visibility = emptyVisibility;
+        newMenu.Visibility = emptyVisibility;
         refresh.Visibility = emptyVisibility;
         paste.Visibility = Visibility.Visible;
         extractArchive.Visibility = archiveVisibility;
@@ -985,6 +985,70 @@ public partial class MainWindow : Window
     private void ViewMode_Details_Click(object sender, RoutedEventArgs e) => SetViewMode("Details");
     private void ViewMode_List_Click(object sender, RoutedEventArgs e) => SetViewMode("List");
     private void ViewMode_Tiles_Click(object sender, RoutedEventArgs e) => SetViewMode("Tiles");
+
+    private void EditNewMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+            PopulateNewMenu(menuItem, isMainMenu: true);
+    }
+
+    private void PaneNewMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+            PopulateNewMenu(menuItem, isMainMenu: false);
+    }
+
+    private void PopulateNewMenu(MenuItem menuItem, bool isMainMenu)
+    {
+        ViewModel.RefreshNewFileTemplatesCatalog();
+
+        menuItem.Items.Clear();
+        menuItem.Items.Add(new MenuItem
+        {
+            Header = "_Folder",
+            InputGestureText = isMainMenu ? "Ctrl+N" : string.Empty,
+            Command = ViewModel.NewFolderCommand
+        });
+        menuItem.Items.Add(new MenuItem
+        {
+            Header = "_File",
+            Command = ViewModel.NewFileCommand
+        });
+        menuItem.Items.Add(new Separator());
+
+        if (ViewModel.NewFileTemplates.Count == 0)
+        {
+            menuItem.Items.Add(new MenuItem
+            {
+                Header = "No Templates Found",
+                IsEnabled = false
+            });
+        }
+        else
+        {
+            foreach (var template in ViewModel.NewFileTemplates)
+            {
+                menuItem.Items.Add(new MenuItem
+                {
+                    Header = template.DisplayName,
+                    Command = ViewModel.CreateFileFromTemplateCommand,
+                    CommandParameter = template
+                });
+            }
+        }
+
+        menuItem.Items.Add(new Separator());
+        menuItem.Items.Add(new MenuItem
+        {
+            Header = "Open Templates Folder",
+            Command = ViewModel.OpenNewFileTemplatesFolderCommand
+        });
+        menuItem.Items.Add(new MenuItem
+        {
+            Header = "Refresh Templates",
+            Command = ViewModel.RefreshNewFileTemplatesCommand
+        });
+    }
 
     private void ClearFilter_Click(object sender, RoutedEventArgs e)
     {

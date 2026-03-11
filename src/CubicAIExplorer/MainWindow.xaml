@@ -75,10 +75,7 @@
                 <Separator />
                 <MenuItem Header="{Binding ActiveUndoDescription}" InputGestureText="Ctrl+Z" Command="{Binding UndoCommand}" />
                 <Separator />
-                <MenuItem Header="_New">
-                    <MenuItem Header="_Folder" InputGestureText="Ctrl+N" Command="{Binding NewFolderCommand}" />
-                    <MenuItem Header="_File" Command="{Binding CurrentPaneFileList.NewFileCommand}" />
-                </MenuItem>
+                <MenuItem x:Name="EditNewMenuItem" Header="_New" SubmenuOpened="EditNewMenuItem_SubmenuOpened" />
                 <MenuItem Header="Create _Symbolic Link" Command="{Binding CurrentPaneFileList.CreateSymbolicLinkCommand}" />
                 <Separator />
                 <MenuItem Header="_Select All" InputGestureText="Ctrl+A" Command="{Binding SelectAllCommand}" />
@@ -846,7 +843,7 @@
                                 <Separator x:Name="ItemSeparator2" />
                                 <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
                                 <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
-                                <MenuItem x:Name="NewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
+                                <MenuItem x:Name="NewMenuItem" Header="New" SubmenuOpened="PaneNewMenuItem_SubmenuOpened" />
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                 <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
@@ -987,7 +984,7 @@
                                     <Separator x:Name="RightItemSeparator2" />
                                     <MenuItem x:Name="RightDeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
                                     <MenuItem x:Name="RightRenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
-                                    <MenuItem x:Name="RightNewFolderMenuItem" Header="New Folder" Command="{Binding NewFolderCommand}" />
+                                    <MenuItem x:Name="RightNewMenuItem" Header="New" SubmenuOpened="PaneNewMenuItem_SubmenuOpened" />
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                     <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />

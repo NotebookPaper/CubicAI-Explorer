@@ -17,6 +17,7 @@ public partial class PreferencesWindow : Window
             DefaultViewMode = settings.DefaultViewMode,
             ShowHiddenFiles = settings.ShowHiddenFiles,
             StartupFolder = settings.StartupFolder,
+            NewFileTemplatesPath = settings.NewFileTemplatesPath,
             StartInDualPane = settings.StartInDualPane,
             StartWithPreview = settings.StartWithPreview,
             UseShellContextMenu = settings.UseShellContextMenu
@@ -52,6 +53,26 @@ public partial class PreferencesWindow : Window
         {
             Settings.StartupFolder = dialog.FolderName;
             StartupFolderBox.Text = dialog.FolderName;
+        }
+    }
+
+    private void BrowseTemplatesFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select new-file template folder"
+        };
+
+        if (!string.IsNullOrWhiteSpace(Settings.NewFileTemplatesPath)
+            && System.IO.Directory.Exists(Settings.NewFileTemplatesPath))
+        {
+            dialog.InitialDirectory = Settings.NewFileTemplatesPath;
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            Settings.NewFileTemplatesPath = dialog.FolderName;
+            TemplatesFolderBox.Text = dialog.FolderName;
         }
     }
 

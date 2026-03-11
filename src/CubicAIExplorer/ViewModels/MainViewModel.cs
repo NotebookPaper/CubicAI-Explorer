@@ -161,6 +161,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
+    public ObservableCollection<NewFileTemplateItem> NewFileTemplates { get; } = [];
     public ObservableCollection<string> AddressSuggestions { get; } = [];
     public ObservableCollection<string> RightPaneAddressSuggestions { get; } = [];
     public TabViewModel? CurrentPaneTab => IsRightPaneActive && IsDualPaneMode ? _rightPaneTab : ActiveTab;
@@ -210,6 +211,7 @@ public partial class MainViewModel : ObservableObject
         _settingsService = settingsService;
         _bookmarkService = bookmarkService;
         _userSettings = userSettings ?? new Models.UserSettings();
+        _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(_userSettings.NewFileTemplatesPath);
 
         // Initialize UI visibility from settings
         _isToolbarVisible = _userSettings.ShowToolbar;
@@ -238,6 +240,7 @@ public partial class MainViewModel : ObservableObject
         LoadRecentFolders();
         LoadSavedSearches();
         LoadDrives();
+        RefreshNewFileTemplatesCatalog();
 
         InitializeTabsFromSettings();
     }
@@ -294,11 +297,13 @@ public partial class MainViewModel : ObservableObject
             PreviewWidth = newSettings.PreviewWidth;
             _userSettings.NamedSessions = newSettings.NamedSessions ?? [];
             _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
+            _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(newSettings.NewFileTemplatesPath);
             _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
             _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
             _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
             _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
             _userSettings.DetailsColumns = CloneDetailsColumnSettings(newSettings.DetailsColumns);
+            RefreshNewFileTemplatesCatalog();
             RefreshNamedSessionsFromSettings();
             ApplyFilterPreferencesToAllTabs();
             OnPropertyChanged(nameof(DetailsColumnSettings));
@@ -342,6 +347,14 @@ public partial class MainViewModel : ObservableObject
 
     private static string NormalizeSessionName(string? rawName)
         => rawName?.Trim() ?? string.Empty;
+
+    private static string NormalizeNewFileTemplatesPath(string? rawPath)
+    {
+        var path = rawPath?.Trim();
+        return string.IsNullOrWhiteSpace(path)
+            ? Models.UserSettings.GetDefaultNewFileTemplatesPath()
+            : path;
+    }
 
     private static NamedSession CloneNamedSession(NamedSession session)
     {
@@ -1134,6 +1147,12 @@ public partial class MainViewModel : ObservableObject
     private void NewFolder()
     {
         ExecuteCurrentPaneFileListCommand(static fileList => fileList.NewFolderCommand);
+    }
+
+    [RelayCommand]
+    private void NewFile()
+    {
+        ExecuteCurrentPaneFileListCommand(static fileList => fileList.NewFileCommand);
     }
 
     [RelayCommand]
@@ -2074,6 +2093,34 @@ public partial class MainViewModel : ObservableObject
         OpenPreferencesRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    [RelayCommand]
+    private void CreateFileFromTemplate(NewFileTemplateItem? template)
+    {
+        if (template == null
+            || string.IsNullOrWhiteSpace(template.TemplatePath)
+            || string.IsNullOrWhiteSpace(template.DefaultFileName))
+        {
+            return;
+        }
+
+        ExecuteOnCurrentPaneFileList(fileList =>
+            fileList.NewFileFromTemplateWithHistory(template.TemplatePath, template.DefaultFileName));
+    }
+
+    [RelayCommand]
+    private void OpenNewFileTemplatesFolder()
+    {
+        var path = _fileSystemService.EnsureDirectoryExists(_userSettings.NewFileTemplatesPath);
+        if (!string.IsNullOrWhiteSpace(path))
+            _fileSystemService.OpenInDefaultApp(path);
+    }
+
+    [RelayCommand]
+    private void RefreshNewFileTemplates()
+    {
+        RefreshNewFileTemplatesCatalog();
+    }
+
     private bool CanUpdateCurrentNamedSession() => !string.IsNullOrWhiteSpace(CurrentNamedSessionName);
 
     [RelayCommand(CanExecute = nameof(CanUpdateCurrentNamedSession))]
@@ -2087,6 +2134,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.DefaultViewMode = newSettings.DefaultViewMode;
         _userSettings.ShowHiddenFiles = newSettings.ShowHiddenFiles;
         _userSettings.StartupFolder = newSettings.StartupFolder;
+        _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(newSettings.NewFileTemplatesPath);
         _userSettings.StartInDualPane = newSettings.StartInDualPane;
         _userSettings.StartWithPreview = newSettings.StartWithPreview;
         _userSettings.UseShellContextMenu = newSettings.UseShellContextMenu;
@@ -2095,9 +2143,44 @@ public partial class MainViewModel : ObservableObject
         _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
         _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(newSettings.DetailsColumns);
+        RefreshNewFileTemplatesCatalog();
         ApplyFilterPreferencesToAllTabs();
         OnPropertyChanged(nameof(DetailsColumnSettings));
         _settingsService?.Save(_userSettings);
+    }
+
+    public void RefreshNewFileTemplatesCatalog()
+    {
+        NewFileTemplates.Clear();
+
+        var templateDirectory = _fileSystemService.EnsureDirectoryExists(_userSettings.NewFileTemplatesPath);
+        if (string.IsNullOrWhiteSpace(templateDirectory))
+            return;
+
+        foreach (var templatePath in _fileSystemService.GetFiles(templateDirectory)
+                     .OrderBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
+        {
+            var fileName = Path.GetFileName(templatePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+                continue;
+
+            NewFileTemplates.Add(new NewFileTemplateItem
+            {
+                DisplayName = BuildTemplateDisplayName(fileName),
+                TemplatePath = templatePath,
+                DefaultFileName = fileName
+            });
+        }
+    }
+
+    private static string BuildTemplateDisplayName(string fileName)
+    {
+        var extension = Path.GetExtension(fileName);
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrWhiteSpace(extension))
+            return fileName;
+
+        return $"{baseName} ({extension})";
     }
 
     private int _previewGeneration;

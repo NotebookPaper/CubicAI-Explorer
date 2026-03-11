@@ -109,6 +109,26 @@ public sealed class FileSystemService : IFileSystemService
         catch (IOException) { return []; }
     }
 
+    public IReadOnlyList<string> GetFiles(string path, bool showHidden = false)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null) return [];
+
+        try
+        {
+            var dirInfo = new DirectoryInfo(sanitized);
+            if (!dirInfo.Exists) return [];
+
+            return dirInfo.EnumerateFiles()
+                .Where(file => !file.Attributes.HasFlag(FileAttributes.System)
+                    && (showHidden || !file.Attributes.HasFlag(FileAttributes.Hidden)))
+                .Select(static file => file.FullName)
+                .ToList();
+        }
+        catch (UnauthorizedAccessException) { return []; }
+        catch (IOException) { return []; }
+    }
+
     public bool DirectoryExists(string path)
     {
         var sanitized = SanitizePath(path);
@@ -439,6 +459,21 @@ public sealed class FileSystemService : IFileSystemService
         var baseName = string.IsNullOrWhiteSpace(fileName) ? "New file.txt" : fileName.Trim();
         var targetPath = GetUniquePath(sanitizedParent, baseName, isDirectory: false);
         File.WriteAllText(targetPath, string.Empty);
+        return targetPath;
+    }
+
+    public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
+    {
+        var sanitizedParent = SanitizePath(parentPath);
+        var sanitizedTemplate = SanitizePath(templatePath);
+        if (sanitizedParent == null || sanitizedTemplate == null || !Directory.Exists(sanitizedParent) || !File.Exists(sanitizedTemplate))
+            return parentPath;
+
+        var baseName = string.IsNullOrWhiteSpace(fileName)
+            ? Path.GetFileName(sanitizedTemplate)
+            : fileName.Trim();
+        var targetPath = GetUniquePath(sanitizedParent, baseName, isDirectory: false);
+        File.Copy(sanitizedTemplate, targetPath, overwrite: false);
         return targetPath;
     }
 

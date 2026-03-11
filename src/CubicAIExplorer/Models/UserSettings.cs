@@ -1,11 +1,24 @@
+using System.IO;
+
 namespace CubicAIExplorer.Models;
 
 public sealed class UserSettings
 {
+    public static string GetDefaultNewFileTemplatesPath()
+    {
+        var overridePath = Environment.GetEnvironmentVariable("CUBICAI_NEWFILE_TEMPLATES_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return overridePath;
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "CubicAIExplorer", "NewFileTemplates");
+    }
+
     public List<DetailsColumnSetting> DetailsColumns { get; set; } = [];
     public string DefaultViewMode { get; set; } = "Details";
     public bool ShowHiddenFiles { get; set; }
     public string StartupFolder { get; set; } = string.Empty;
+    public string NewFileTemplatesPath { get; set; } = GetDefaultNewFileTemplatesPath();
     public bool StartInDualPane { get; set; }
     public bool StartWithPreview { get; set; }
     public bool UseShellContextMenu { get; set; } = true;

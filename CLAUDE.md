@@ -124,6 +124,7 @@ The app has a working UI with:
 - Classic Cubic/XP-inspired theme pass
 - Full toolbar with Cut/Copy/Paste/Delete/Undo/Redo/Refresh buttons
 - View mode switching (Details/List/Tiles) via View menu
+- New-file templates sourced from a configurable templates folder
 - Search/filter bar (Ctrl+F) to filter files by name
 - File properties dialog (Alt+Enter or context menu)
 - Drag/drop files to folder tree nodes

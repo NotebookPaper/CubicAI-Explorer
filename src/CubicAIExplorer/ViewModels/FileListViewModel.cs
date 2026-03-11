@@ -174,6 +174,37 @@ public partial class FileListViewModel : ObservableObject
         }
     }
 
+    public void NewFileFromTemplateWithHistory(string templatePath, string defaultFileName)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath)
+            || string.IsNullOrWhiteSpace(templatePath)
+            || string.IsNullOrWhiteSpace(defaultFileName))
+        {
+            return;
+        }
+
+        try
+        {
+            var createdPath = _fileSystemService.CreateFileFromTemplate(CurrentPath, templatePath, defaultFileName);
+            var parentPath = Path.GetDirectoryName(createdPath) ?? CurrentPath;
+            var createdFileName = Path.GetFileName(createdPath);
+            PushHistory(
+                "Undo New File",
+                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true),
+                "Redo New File",
+                () => _fileSystemService.CreateFileFromTemplate(parentPath, templatePath, createdFileName));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Could not create file from template: {ex.Message}",
+                "New File Template Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     public void CreateSymbolicLinkWithHistory(string linkName, string targetPath)
     {
         if (string.IsNullOrWhiteSpace(CurrentPath)) return;

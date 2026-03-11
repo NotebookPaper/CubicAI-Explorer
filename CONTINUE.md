@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after Spec 007
-> Status: Bookmark drag/drop feedback and visual cues are implemented and verified.
+> HEAD: current local `master` after new-file templates support
+> Status: New-file templates support is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -12,6 +12,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes (with Spec 007 coverage).
 - Specs `001`, `002`, `003`, `004`, `005`, `006`, and `007` are complete in this checkout.
+- The top roadmap item after the numbered specs, new-file templates support, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
@@ -21,6 +22,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
   - Centralized bookmark drop validation in `MainViewModel` and cleared transient drag state on drop/leave completion.
   - Updated smoke tests and XAML wiring checks to verify the new drag feedback behavior.
+- **Roadmap: New-file Templates Support** (New in this session)
+  - Added a configurable template-folder preference persisted in `UserSettings` and `SettingsService`.
+  - Added template catalog loading in `MainViewModel` and dynamic `New` submenu population in the Edit menu and background pane context menus.
+  - Added template-backed file creation through `FileSystemService.CreateFileFromTemplate` with undo/redo parity in `FileListViewModel`.
+  - Updated smoke coverage for template catalog loading, template file creation undo/redo, settings round-trip, and XAML wiring.
 - **Spec 006: Broader Preview Support**
   - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
   - Implemented a dependency-free Markdown renderer for bold, headers, and lists.
@@ -48,7 +54,6 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. UX polish and advanced operations:
-   - add new-file templates support (parity with original CubicExplorer)
 2. Deeper shell integration (continued):
    - explore recycle bin management (empty recycle bin from app)
    - shell execution with different verbs (Run as administrator, etc.)
@@ -59,6 +64,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Key Files
 
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
+- `src/CubicAIExplorer/PreferencesWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 - `src/CubicAIExplorer/Services/ShellPropertyHelper.cs`
@@ -69,6 +76,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 Tracked worktree state:
 
 - Spec 007 bookmark drag feedback is the latest completed roadmap slice in this checkout.
+- New-file templates support is the latest completed roadmap slice in this checkout.
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -80,7 +88,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all 89+ tests pass, including bookmark drag feedback)
+  - passed (all 90+ tests pass, including new-file templates coverage)
 
 ## Gotchas
 

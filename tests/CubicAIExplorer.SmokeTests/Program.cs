@@ -101,6 +101,8 @@ internal static class Program
             Run("copy replace directory failure", failures, () => TestCopyReplaceDirectoryFailure(tempRoot));
             Run("duplicate item", failures, () => TestDuplicateItem(tempRoot));
             Run("new file and link creation", failures, () => TestNewFileAndLink(tempRoot));
+            Run("new file templates catalog", failures, () => TestNewFileTemplatesCatalog(tempRoot));
+            Run("new file template creation", failures, () => TestNewFileTemplateCreation(tempRoot));
             Run("undo/redo after duplicate", failures, () => TestUndoRedoAfterDuplicate(tempRoot));
             Run("undo/redo after new file and link creation", failures, () => TestUndoRedoAfterNewFileAndLink(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
@@ -1987,6 +1989,7 @@ internal static class Program
         Assert(string.IsNullOrEmpty(settings.StartupFolder), "Startup folder should default to empty.");
         Assert(!settings.StartInDualPane, "Dual-pane startup should be off by default.");
         Assert(!settings.StartWithPreview, "Preview startup should be off by default.");
+        Assert(!string.IsNullOrWhiteSpace(settings.NewFileTemplatesPath), "Template folder should default to a concrete path.");
         Assert(settings.FilterMatchMode == NameMatchMode.Contains, "Filter mode should default to contains.");
         Assert(settings.SearchMatchMode == NameMatchMode.Contains, "Search mode should default to contains.");
         Assert(!settings.ClearFilterOnFolderChange, "Clear-on-navigation should be off by default.");
@@ -2012,6 +2015,7 @@ internal static class Program
                 DefaultViewMode = "Tiles",
                 ShowHiddenFiles = true,
                 StartupFolder = root,
+                NewFileTemplatesPath = Path.Combine(root, "templates"),
                 StartInDualPane = true,
                 StartWithPreview = true,
                 FilterMatchMode = NameMatchMode.Wildcard,
@@ -2056,6 +2060,8 @@ internal static class Program
             Assert(reloaded.DefaultViewMode == "Tiles", "Settings round-trip should persist view mode.");
             Assert(reloaded.ShowHiddenFiles, "Settings round-trip should persist ShowHiddenFiles.");
             Assert(reloaded.StartupFolder == root, "Settings round-trip should persist startup folder.");
+            Assert(reloaded.NewFileTemplatesPath == Path.Combine(root, "templates"),
+                "Settings round-trip should persist template folder.");
             Assert(reloaded.StartInDualPane, "Settings round-trip should persist dual-pane startup.");
             Assert(reloaded.StartWithPreview, "Settings round-trip should persist preview startup.");
             Assert(reloaded.FilterMatchMode == NameMatchMode.Wildcard, "Settings round-trip should persist filter match mode.");
@@ -2443,6 +2449,8 @@ internal static class Program
         Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
         Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
         Assert(main.Contains("BrowseArchiveMenuItem"), "Browse Archive menu item should exist.");
+        Assert(main.Contains("EditNewMenuItem_SubmenuOpened"), "Edit New menu should repopulate dynamically.");
+        Assert(main.Contains("PaneNewMenuItem_SubmenuOpened"), "Pane New menu should repopulate dynamically.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
         Assert(main.Contains("CloseTabsToLeft_Click"), "Close tabs to left handler should be wired.");
         Assert(main.Contains("CloseTabsToRight_Click"), "Close tabs to right handler should be wired.");
@@ -2511,6 +2519,7 @@ internal static class Program
         Assert(mainCs.Contains("SavedSearchList_KeyDown"), "Saved search keyboard handler should be wired.");
         Assert(mainCs.Contains("SavedSearchList_MouseDoubleClick"), "Saved search double-click handler should be wired.");
         Assert(mainCs.Contains("FileListViewModel_ArchiveBrowseRequested"), "Archive browser handler should be wired.");
+        Assert(mainCs.Contains("PopulateNewMenu"), "Dynamic new-file template menu should be built in code-behind.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");
@@ -2726,6 +2735,53 @@ internal static class Program
         }
     }
 
+    private static void TestNewFileTemplatesCatalog(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var templateDir = CreateCleanSubdir(root, "template_catalog");
+        File.WriteAllText(Path.Combine(templateDir, "Note.txt"), "note");
+        File.WriteAllText(Path.Combine(templateDir, "Script.ps1"), "Write-Host 'hi'");
+
+        var settings = new UserSettings
+        {
+            StartupFolder = root,
+            NewFileTemplatesPath = templateDir
+        };
+        var vm = new MainViewModel(fs, clipboard, userSettings: settings);
+
+        Assert(vm.NewFileTemplates.Count == 2, "Template catalog should load each file from the configured folder.");
+        Assert(vm.NewFileTemplates.Any(t => t.DefaultFileName == "Note.txt"), "Template catalog should include the note template.");
+        Assert(vm.NewFileTemplates.Any(t => t.DisplayName.Contains(".ps1", StringComparison.OrdinalIgnoreCase)),
+            "Template catalog should expose display names with extension hints.");
+    }
+
+    private static void TestNewFileTemplateCreation(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "template_target");
+        var templateDir = CreateCleanSubdir(root, "template_source");
+        var templatePath = Path.Combine(templateDir, "Report.md");
+        File.WriteAllText(templatePath, "# Report\n\n- item");
+
+        vm.LoadDirectory(folder);
+        vm.NewFileFromTemplateWithHistory(templatePath, "Report.md");
+
+        var createdPath = Path.Combine(folder, "Report.md");
+        Assert(File.Exists(createdPath), "Template creation should materialize a new file in the current folder.");
+        Assert(File.ReadAllText(createdPath) == "# Report\n\n- item", "Template creation should copy the template contents.");
+        Assert(vm.CanUndo, "Template creation should create undo history.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(!File.Exists(createdPath), "Undo template creation should remove the generated file.");
+
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(createdPath), "Redo template creation should recreate the generated file.");
+        Assert(File.ReadAllText(createdPath) == "# Report\n\n- item", "Redo template creation should preserve the template contents.");
+    }
+
     private static void TestBookmarkDragFeedback(string root)
     {
         var fs = new FileSystemService();
@@ -2867,6 +2923,7 @@ internal static class Program
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
         public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
         public IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false) => _inner.GetSubDirectories(path, showHidden);
+        public IReadOnlyList<string> GetFiles(string path, bool showHidden = false) => _inner.GetFiles(path, showHidden);
         public string GetDisplayName(string path) => _inner.GetDisplayName(path);
         public string? ResolveDirectoryPath(string path) => _inner.ResolveDirectoryPath(path);
         public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
@@ -2914,6 +2971,8 @@ internal static class Program
         public string RenameFile(string path, string newName) => _inner.RenameFile(path, newName);
         public string CreateFolder(string parentPath, string folderName) => _inner.CreateFolder(parentPath, folderName);
         public string CreateFile(string parentPath, string fileName) => _inner.CreateFile(parentPath, fileName);
+        public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
+            => _inner.CreateFileFromTemplate(parentPath, templatePath, fileName);
         public void CreateSymbolicLink(string linkPath, string targetPath) => _inner.CreateSymbolicLink(linkPath, targetPath);
         public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
         public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);

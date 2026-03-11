@@ -36,6 +36,13 @@ The app currently includes:
 - highlighted active bookmark drop targets and the root bookmark surface during drag operations
 - centralized bookmark drop validation and added smoke coverage for drag-feedback state transitions
 
+### New-file templates support
+
+- added a configurable new-file template folder to preferences and persisted it in settings
+- the Edit menu and background file-list context menus now populate templates dynamically from disk
+- template-based file creation preserves contents and participates in the existing undo/redo history flow
+- added smoke coverage for template catalog loading, settings persistence, and template-based create/undo/redo
+
 ### Shell property exposure (IPropertyStore) for details and properties
 
 - Implemented `ShellPropertyHelper` using `SHGetPropertyStoreFromParsingName` and `IPropertyStore` for robust metadata retrieval.
@@ -144,9 +151,9 @@ Smoke coverage explicitly includes:
 ## Next Planned Work
 
 ### 1. UX polish and advanced operations
-Status: PLANNED
+Status: PARTIALLY COMPLETE
 Scope:
-- add new-file templates support (parity with original CubicExplorer)
+- completed: new-file templates support (parity with original CubicExplorer)
 
 ### 2. Deeper shell integration (continued)
 Status: PLANNED
