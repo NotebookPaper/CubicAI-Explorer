@@ -36,6 +36,12 @@ The app currently includes:
 - supports search/replace, case transforms, counters, and extension keep/remove/replace options
 - applied grouped batch renames through a two-phase rename service so one undo/redo step replays the whole operation safely
 
+### Breadcrumb dropdown navigation
+
+- added per-segment dropdown buttons in the breadcrumb bar for non-terminal path segments
+- dropdown menus populate immediate child folders asynchronously so slow drives do not block the UI thread
+- selecting a dropdown folder routes through existing pane navigation, preserving the current tab's back/forward history
+
 ### Bookmark drag/drop feedback and visual cues
 
 - added inline bookmark drag hint text so the sidebar explains folder, sibling, root, and invalid drops in plain language
@@ -184,7 +190,6 @@ Smoke coverage explicitly includes:
 ### 4. Power User Parity (Cubic Original)
 Status: PLANNED
 Scope:
-- **010: Breadcrumb Dropdown Navigation:** Add interactive dropdown buttons between breadcrumb segments to allow quick sub-folder branching.
 - **011: Content Search (Grep):** Extend the recursive search engine to support "Contains Text" filtering for file content matching.
 
 ### 1. UX polish and advanced operations

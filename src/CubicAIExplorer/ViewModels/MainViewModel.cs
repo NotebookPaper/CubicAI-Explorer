@@ -1540,6 +1540,47 @@ public partial class MainViewModel : ObservableObject
         CurrentPaneTab?.NavigateTo(resolvedPath);
     }
 
+    public async Task LoadBreadcrumbDropdownAsync(BreadcrumbSegment? segment)
+    {
+        if (segment == null || segment.IsLast)
+            return;
+
+        SetBreadcrumbDropdownPlaceholder(segment, "Loading...");
+
+        IReadOnlyList<FileSystemItem> subDirectories;
+        try
+        {
+            subDirectories = await Task.Run(() => _fileSystemService.GetSubDirectories(segment.FullPath));
+        }
+        catch
+        {
+            SetBreadcrumbDropdownPlaceholder(segment, "Unable to load folders");
+            return;
+        }
+
+        segment.DropdownItems.Clear();
+        foreach (var directory in subDirectories
+            .OrderBy(static item => item.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            segment.DropdownItems.Add(new BreadcrumbDropdownItem
+            {
+                DisplayName = GetDisplayName(directory.FullPath),
+                FullPath = directory.FullPath
+            });
+        }
+
+        if (segment.DropdownItems.Count == 0)
+            SetBreadcrumbDropdownPlaceholder(segment, "No subfolders");
+    }
+
+    public void NavigateBreadcrumbDropdownItem(BreadcrumbDropdownItem? item)
+    {
+        if (item == null || !item.IsEnabled || string.IsNullOrWhiteSpace(item.FullPath))
+            return;
+
+        NavigateCurrentPaneToPath(item.FullPath);
+    }
+
     partial void OnActiveTabChanged(TabViewModel? value)
     {
         RefreshCurrentPaneState();
@@ -1592,9 +1633,20 @@ public partial class MainViewModel : ObservableObject
             {
                 DisplayName = seg.DisplayName,
                 FullPath = seg.FullPath,
-                IsFirst = i == 0
+                IsFirst = i == 0,
+                IsLast = i == segments.Count - 1
             });
         }
+    }
+
+    private static void SetBreadcrumbDropdownPlaceholder(BreadcrumbSegment segment, string text)
+    {
+        segment.DropdownItems.Clear();
+        segment.DropdownItems.Add(new BreadcrumbDropdownItem
+        {
+            DisplayName = text,
+            IsEnabled = false
+        });
     }
 
     private void AddToRecentFolders(string path)

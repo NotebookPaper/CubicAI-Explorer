@@ -40,6 +40,7 @@ internal static class Program
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
             Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
             Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
+            Run("breadcrumb dropdown navigation", failures, () => TestBreadcrumbDropdownNavigation(tempRoot));
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
             Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
             Run("known folder display names", failures, TestKnownFolderDisplayNames);
@@ -2239,6 +2240,50 @@ internal static class Program
         }
     }
 
+    private static void TestBreadcrumbDropdownNavigation(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+
+        var bookmarkFile = Path.Combine(root, "breadcrumb_dropdown_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+
+            var parent = CreateCleanSubdir(root, "breadcrumb_dropdown_parent");
+            var current = CreateCleanSubdir(parent, "current");
+            var branch = CreateCleanSubdir(parent, "branch");
+
+            vm.NavigateToPath(current);
+
+            var parentSegment = vm.BreadcrumbSegments.Single(segment => string.Equals(segment.FullPath, parent, StringComparison.OrdinalIgnoreCase));
+            Assert(parentSegment.DropdownVisibility == Visibility.Visible, "Non-terminal breadcrumb segments should expose a dropdown.");
+
+            vm.LoadBreadcrumbDropdownAsync(parentSegment).GetAwaiter().GetResult();
+
+            var branchItem = parentSegment.DropdownItems.Single(item => string.Equals(item.FullPath, branch, StringComparison.OrdinalIgnoreCase));
+            Assert(branchItem.DisplayName == "branch", "Breadcrumb dropdown should list immediate child folders.");
+
+            vm.NavigateBreadcrumbDropdownItem(branchItem);
+
+            Assert(string.Equals(vm.CurrentPanePath, branch, StringComparison.OrdinalIgnoreCase),
+                "Selecting a breadcrumb dropdown item should navigate to that folder.");
+            Assert(vm.CurrentPaneTab?.CanGoBack == true,
+                "Breadcrumb dropdown navigation should preserve back history.");
+
+            vm.CurrentPaneTab!.GoBackCommand.Execute(null);
+
+            Assert(string.Equals(vm.CurrentPanePath, current, StringComparison.OrdinalIgnoreCase),
+                "Back navigation should return to the previous folder after breadcrumb dropdown navigation.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
     private static void TestSettingsWatcherReloadsAfterExternalRecreate(string root)
     {
         var settingsPath = Path.Combine(root, "settings_watcher.json");
@@ -2689,6 +2734,9 @@ internal static class Program
         Assert(main.Contains("AllowDrop=\"True\""), "Drop should be enabled.");
         Assert(main.Contains("BreadcrumbSegments"), "Breadcrumb segments binding should exist.");
         Assert(main.Contains("BreadcrumbSegment_Click"), "Breadcrumb click handler should be wired.");
+        Assert(main.Contains("DropdownItems"), "Breadcrumb dropdown menus should bind their submenu items.");
+        Assert(main.Contains("BreadcrumbDropdownButton_Click"), "Breadcrumb dropdown buttons should be wired.");
+        Assert(mainCs.Contains("BreadcrumbDropdownItem_Click"), "Breadcrumb dropdown item handler should be implemented.");
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
         Assert(main.Contains("BookmarkTree_MouseMove"), "Bookmark drag/drop handler should be wired.");

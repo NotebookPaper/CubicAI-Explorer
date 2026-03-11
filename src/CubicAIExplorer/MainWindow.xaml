@@ -248,6 +248,40 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
+                                            <Button Content="v"
+                                                    Click="BreadcrumbDropdownButton_Click"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Padding="2,1"
+                                                    Margin="0,0,2,0"
+                                                    Cursor="Hand"
+                                                    FontSize="10"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding DropdownVisibility}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Foreground" Value="#2255AA" />
+                                                                <Setter Property="Background" Value="#E0EEFF" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                                <Button.ContextMenu>
+                                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                                 ItemsSource="{Binding DropdownItems}">
+                                                        <ContextMenu.ItemContainerStyle>
+                                                            <Style TargetType="MenuItem">
+                                                                <Setter Property="Header" Value="{Binding DisplayName}" />
+                                                                <Setter Property="Tag" Value="{Binding FullPath}" />
+                                                                <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                                                <EventSetter Event="Click" Handler="BreadcrumbDropdownItem_Click" />
+                                                            </Style>
+                                                        </ContextMenu.ItemContainerStyle>
+                                                    </ContextMenu>
+                                                </Button.ContextMenu>
+                                            </Button>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

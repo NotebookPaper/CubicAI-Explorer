@@ -294,6 +294,31 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void BreadcrumbDropdownButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || button.DataContext is not BreadcrumbSegment segment
+            || button.ContextMenu is not ContextMenu menu)
+        {
+            return;
+        }
+
+        menu.PlacementTarget = button;
+        menu.IsOpen = true;
+        await ViewModel.LoadBreadcrumbDropdownAsync(segment);
+        e.Handled = true;
+    }
+
+    private void BreadcrumbDropdownItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.MenuItem menuItem
+            && menuItem.DataContext is BreadcrumbDropdownItem item)
+        {
+            ViewModel.NavigateBreadcrumbDropdownItem(item);
+            e.Handled = true;
+        }
+    }
+
     private void SwitchToEditMode_Click(object sender, RoutedEventArgs e)
     {
         SwitchToEditMode();

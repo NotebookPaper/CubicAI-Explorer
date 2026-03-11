@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after advanced batch rename
-> Status: Advanced batch rename is implemented and verified.
+> HEAD: current local `master` after breadcrumb dropdown navigation
+> Status: Breadcrumb dropdown navigation is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -13,6 +13,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - The branch builds and the smoke harness passes, including queue failure-history coverage and the forced symbolic-link failure regression.
 - Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009-empty-recycle-bin`, `010-shell-verb-execution`, and `011-file-watcher-hardening` are complete in this checkout.
 - Spec `009-batch-rename` is now complete in this checkout.
+- Spec `010-breadcrumb-dropdowns` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -30,6 +31,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added `BatchRenameService` to compute collision-safe preview names and apply grouped two-phase renames safely.
   - Updated `FileListViewModel.Rename` so multi-select rename routes through the batch dialog while single-item rename stays inline.
   - Added smoke coverage for preview generation, command routing, and grouped undo/redo.
+- **Spec 010: Breadcrumb Dropdown Navigation** (New in this session)
+  - Added per-segment dropdown buttons to the breadcrumb bar for every path segment except the current folder.
+  - Populated breadcrumb branch menus asynchronously from `IFileSystemService.GetSubDirectories` with loading and empty-folder placeholder states.
+  - Routed dropdown selections through the existing current-pane navigation path so tab history stays intact.
+  - Added smoke coverage for dropdown loading, branch navigation, back-history preservation, and XAML/code-behind wiring.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -83,8 +89,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next incomplete spec is `specs/010-breadcrumb-dropdowns.md`.
-- After that, `specs/011-content-search.md` remains planned.
+- Next incomplete spec is `specs/011-content-search.md`.
 
 ## Key Files
 
@@ -102,6 +107,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/PreferencesWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Models/BreadcrumbSegment.cs`
+- `src/CubicAIExplorer/Models/BreadcrumbDropdownItem.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 - `src/CubicAIExplorer/Services/ShellPropertyHelper.cs`
 - `src/CubicAIExplorer/Services/FileSystemService.cs`
@@ -112,7 +119,7 @@ Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
-- `specs/009-batch-rename.md` is now complete; `specs/010-breadcrumb-dropdowns.md` and `specs/011-content-search.md` remain planned.
+- `specs/009-batch-rename.md` and `specs/010-breadcrumb-dropdowns.md` are now complete; `specs/011-content-search.md` remains planned.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -124,7 +131,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including batch rename preview/undo coverage, queue failure-history coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including breadcrumb dropdown navigation/history coverage, batch rename preview/undo coverage, queue failure-history coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 
