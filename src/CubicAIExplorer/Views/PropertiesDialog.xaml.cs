@@ -1,5 +1,7 @@
 using System.IO;
+using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Views;
@@ -21,6 +23,7 @@ public partial class PropertiesDialog : Window
         if (item.ItemType == FileSystemItemType.File)
         {
             SizeText.Text = FormatDetailedSize(item.Size);
+            PopulateShellProperties(item.ShellProperties);
         }
         else if (item.ItemType == FileSystemItemType.Directory)
         {
@@ -41,6 +44,46 @@ public partial class PropertiesDialog : Window
         }
 
         Title = $"{item.Name} Properties";
+    }
+
+    private void PopulateShellProperties(ShellProperties props)
+    {
+        DetailsStack.Children.Clear();
+        if (props.IsEmpty)
+        {
+            DetailsStack.Children.Add(new TextBlock
+            {
+                Text = "No additional details available.",
+                FontStyle = FontStyles.Italic,
+                Foreground = System.Windows.Media.Brushes.Gray,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+            return;
+        }
+
+        AddDetailIfNotEmpty("Company:", props.Company);
+        AddDetailIfNotEmpty("Version:", props.FileVersion);
+        AddDetailIfNotEmpty("Description:", props.FileDescription);
+        AddDetailIfNotEmpty("Copyright:", props.Copyright);
+        AddDetailIfNotEmpty("Dimensions:", props.Dimensions);
+        AddDetailIfNotEmpty("Duration:", props.Duration);
+    }
+
+    private void AddDetailIfNotEmpty(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var labelBlock = new TextBlock { Text = label, Foreground = System.Windows.Media.Brushes.Gray };
+        var valueBlock = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap };
+        Grid.SetColumn(valueBlock, 1);
+
+        grid.Children.Add(labelBlock);
+        grid.Children.Add(valueBlock);
+        DetailsStack.Children.Add(grid);
     }
 
     private void OK_Click(object sender, RoutedEventArgs e) => Close();

@@ -99,8 +99,13 @@
                               Click="DetailsColumnVisibility_Click" />
                     <MenuItem x:Name="TypeColumnMenuItem" Header="_Type" IsCheckable="True" Tag="Type"
                               Click="DetailsColumnVisibility_Click" />
-                    <MenuItem x:Name="DateModifiedColumnMenuItem" Header="_Date Modified" IsCheckable="True" Tag="DateModified"
-                              Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="DateModifiedColumnMenuItem" Header="Date Modified" IsCheckable="True" Tag="DateModified" Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="CompanyColumnMenuItem" Header="Company" IsCheckable="True" Tag="Company" Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="VersionColumnMenuItem" Header="Version" IsCheckable="True" Tag="Version" Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="DimensionsColumnMenuItem" Header="Dimensions" IsCheckable="True" Tag="Dimensions" Click="DetailsColumnVisibility_Click" />
+                    <MenuItem x:Name="DurationColumnMenuItem" Header="Duration" IsCheckable="True" Tag="Duration" Click="DetailsColumnVisibility_Click" />
+                    <Separator />
+
                     <Separator />
                     <MenuItem Header="Move Left">
                         <MenuItem Header="_Name" Tag="Name:-1" Click="MoveDetailsColumn_Click" />

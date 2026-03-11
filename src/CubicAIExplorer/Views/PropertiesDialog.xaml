@@ -64,8 +64,14 @@
         <TextBlock Grid.Row="8" Grid.Column="1" x:Name="ContainsText" Margin="0,4"
                    Visibility="Collapsed" />
 
+        <Separator Grid.Row="9" Grid.ColumnSpan="2" Margin="0,8" />
+        
+        <ScrollViewer Grid.Row="10" Grid.ColumnSpan="2" MaxHeight="120" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="DetailsStack" Margin="0,0,8,0" />
+        </ScrollViewer>
+
         <!-- OK button -->
-        <Button Grid.Row="10" Grid.ColumnSpan="2" Content="OK" Width="80"
+        <Button Grid.Row="11" Grid.ColumnSpan="2" Content="OK" Width="80"
                 HorizontalAlignment="Right" Padding="8,4" IsDefault="True"
                 Click="OK_Click" />
     </Grid>

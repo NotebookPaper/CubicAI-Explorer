@@ -25,6 +25,8 @@ public sealed class FileSystemItem
     public bool IsSystem => Attributes.HasFlag(FileAttributes.System);
     public bool IsReadOnly => Attributes.HasFlag(FileAttributes.ReadOnly);
 
+    public ShellProperties ShellProperties { get; init; } = ShellProperties.Empty;
+
     public string DisplaySize => ItemType == FileSystemItemType.File
         ? FormatSize(Size)
         : string.Empty;

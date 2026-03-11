@@ -5,5 +5,9 @@ public enum DetailsColumnId
     Name,
     Size,
     Type,
-    DateModified
+    DateModified,
+    Company,
+    Version,
+    Dimensions,
+    Duration
 }

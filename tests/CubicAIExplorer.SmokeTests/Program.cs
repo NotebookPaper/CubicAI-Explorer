@@ -29,6 +29,19 @@ internal static class Program
             Run("undo permanent delete", failures, () => TestUndoPermanentDelete(tempRoot));
             Run("clear history", failures, () => TestClearHistory(tempRoot));
             Run("select-all event", failures, () => TestSelectAllEvent(tempRoot));
+            Run("bookmark open in new tab reuses existing", failures, () => TestBookmarkOpenInNewTabReusesExisting(tempRoot));
+            Run("bookmark open all in tabs reuses existing", failures, () => TestBookmarkOpenAllInTabsReusesExisting(tempRoot));
+            Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
+            Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
+            Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
+            Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
+            Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
+            Run("recent folders", failures, () => TestRecentFolders(tempRoot));
+            Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
+            Run("known folder display names", failures, TestKnownFolderDisplayNames);
+            Run("shell type descriptions", failures, () => TestShellTypeDescriptions(tempRoot));
+            Run("open in explorer reveals selection", failures, () => TestOpenInExplorerRevealsSelection(tempRoot));
+            Run("open in explorer reveals multiple selections", failures, () => TestOpenInExplorerRevealsMultipleSelections(tempRoot));
             Run("create folder collision suffix", failures, () => TestCreateFolderCollision(tempRoot));
             Run("move same folder no-op", failures, () => TestMoveSameFolderNoOp(tempRoot));
             Run("move collision keep both", failures, () => TestMoveCollisionKeepBoth(tempRoot));
@@ -53,21 +66,6 @@ internal static class Program
             Run("filter text", failures, () => TestFilterText(tempRoot));
             Run("filter match modes", failures, () => TestFilterMatchModes(tempRoot));
             Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
-            Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
-            Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
-            Run("bookmark open in new tab reuses existing", failures, () => TestBookmarkOpenInNewTabReusesExisting(tempRoot));
-            Run("bookmark open all in tabs reuses existing", failures, () => TestBookmarkOpenAllInTabsReusesExisting(tempRoot));
-            Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
-            Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
-            Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
-            Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
-            Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
-            Run("recent folders", failures, () => TestRecentFolders(tempRoot));
-            Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
-            Run("known folder display names", failures, TestKnownFolderDisplayNames);
-            Run("shell type descriptions", failures, () => TestShellTypeDescriptions(tempRoot));
-            Run("open in explorer reveals selection", failures, () => TestOpenInExplorerRevealsSelection(tempRoot));
-            Run("open in explorer reveals multiple selections", failures, () => TestOpenInExplorerRevealsMultipleSelections(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
@@ -108,6 +106,9 @@ internal static class Program
             Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
             Run("xaml wiring checks", failures, TestXamlWiring);
+            Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
+            Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
+            Run("shell properties retrieval", failures, () => TestShellProperties(tempRoot));
         }
         finally
         {
@@ -895,6 +896,32 @@ internal static class Program
 
         Assert(requested != null, "Properties command should raise PropertiesRequested event.");
         Assert(requested!.Name == "test.txt", "Properties should be for selected item.");
+    }
+
+    private static void TestShellProperties(string root)
+    {
+        var fs = new FileSystemService();
+        var folder = CreateCleanSubdir(root, "shell_props");
+        var testFile = Path.Combine(folder, "test.txt");
+        File.WriteAllText(testFile, "hello");
+
+        var items = fs.GetDirectoryContents(folder);
+        var item = items.Single(i => i.Name == "test.txt");
+
+        // For a plain .txt file, shell properties might be empty or limited,
+        // but it shouldn't crash and should be initialized.
+        Assert(item.ShellProperties != null, "ShellProperties should not be null.");
+
+        // We can't easily test specific values like Company/Version without an actual EXE,
+        // but we can verify the PropertiesDialog displays the "No additional details" message for a plain file.
+        EnsureSmokeApplication();
+        var dialog = new PropertiesDialog(item);
+        var detailsStack = dialog.FindName("DetailsStack") as StackPanel;
+        Assert(detailsStack != null, "Properties dialog should contain a DetailsStack.");
+        
+        // If it's empty, it should have one child (the italic "No additional details" message)
+        Assert(detailsStack!.Children.Count > 0, "DetailsStack should be populated.");
+        dialog.Close();
     }
 
     private static void TestDuplicateTab(string root)
@@ -2021,9 +2048,11 @@ internal static class Program
         var vm = new MainViewModel(new FileSystemService(), new FakeClipboardService());
         var settings = vm.GetDetailsColumnSettings().ToList();
 
-        Assert(settings.Count == 4, "Default details layout should expose all four columns.");
-        Assert(settings.All(static setting => setting.IsVisible), "Default details layout should show all columns.");
-        Assert(settings.Select(static setting => setting.ColumnId).SequenceEqual(
+        Assert(settings.Count == 8, $"Default details layout should expose all eight columns (got {settings.Count}).");
+        Assert(settings.Take(4).All(static setting => setting.IsVisible), "Primary default columns should be visible.");
+        Assert(settings.Skip(4).All(static setting => !setting.IsVisible), "Extended shell property columns should be hidden by default.");
+        
+        Assert(settings.Select(static setting => setting.ColumnId).Take(4).SequenceEqual(
             [DetailsColumnId.Name, DetailsColumnId.Size, DetailsColumnId.Type, DetailsColumnId.DateModified]),
             "Default details layout should preserve the expected column order.");
     }
@@ -2057,7 +2086,7 @@ internal static class Program
         ]);
 
         var saved = vm.GetDetailsColumnSettings().ToList();
-        Assert(saved.Count == 4, "Saved details layout should normalize missing columns.");
+        Assert(saved.Count == 8, $"Saved details layout should normalize missing columns (got {saved.Count}).");
         Assert(saved[0].ColumnId == DetailsColumnId.Type, "Saved details layout should preserve custom order.");
         Assert(saved[1].ColumnId == DetailsColumnId.Name, "Saved details layout should preserve subsequent column order.");
         Assert(saved.Any(c => c.ColumnId == DetailsColumnId.Size && !c.IsVisible),

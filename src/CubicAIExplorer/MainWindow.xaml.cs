@@ -23,7 +23,11 @@ public partial class MainWindow : Window
         DetailsColumnId.Name,
         DetailsColumnId.Size,
         DetailsColumnId.Type,
-        DetailsColumnId.DateModified
+        DetailsColumnId.DateModified,
+        DetailsColumnId.Company,
+        DetailsColumnId.Version,
+        DetailsColumnId.Dimensions,
+        DetailsColumnId.Duration
     ];
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
@@ -735,6 +739,10 @@ public partial class MainWindow : Window
             "Size" => nameof(FileSystemItem.Size),
             "Type" => nameof(FileSystemItem.TypeDescription),
             "Date Modified" => nameof(FileSystemItem.DateModified),
+            "Company" => "ShellProperties.Company",
+            "Version" => "ShellProperties.FileVersion",
+            "Dimensions" => "ShellProperties.Dimensions",
+            "Duration" => "ShellProperties.Duration",
             _ => null
         };
 
@@ -995,6 +1003,10 @@ public partial class MainWindow : Window
         SizeColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Size && setting.IsVisible);
         TypeColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Type && setting.IsVisible);
         DateModifiedColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.DateModified && setting.IsVisible);
+        CompanyColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Company && setting.IsVisible);
+        VersionColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Version && setting.IsVisible);
+        DimensionsColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Dimensions && setting.IsVisible);
+        DurationColumnMenuItem.IsChecked = settings.Any(static setting => setting.ColumnId == DetailsColumnId.Duration && setting.IsVisible);
     }
 
     private void DetailsColumnVisibility_Click(object sender, RoutedEventArgs e)
@@ -1857,6 +1869,30 @@ public partial class MainWindow : Window
                     StringFormat = "{0:yyyy-MM-dd HH:mm}"
                 }
             },
+            DetailsColumnId.Company => new GridViewColumn
+            {
+                Header = "Company",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("ShellProperties.Company")
+            },
+            DetailsColumnId.Version => new GridViewColumn
+            {
+                Header = "Version",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("ShellProperties.FileVersion")
+            },
+            DetailsColumnId.Dimensions => new GridViewColumn
+            {
+                Header = "Dimensions",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("ShellProperties.Dimensions")
+            },
+            DetailsColumnId.Duration => new GridViewColumn
+            {
+                Header = "Duration",
+                Width = setting.Width,
+                DisplayMemberBinding = new System.Windows.Data.Binding("ShellProperties.Duration")
+            },
             _ => throw new InvalidOperationException($"Unsupported details column: {setting.ColumnId}")
         };
     }
@@ -1977,6 +2013,10 @@ public partial class MainWindow : Window
             "Size" => SetColumnId(DetailsColumnId.Size, out columnId),
             "Type" => SetColumnId(DetailsColumnId.Type, out columnId),
             "Date Modified" => SetColumnId(DetailsColumnId.DateModified, out columnId),
+            "Company" => SetColumnId(DetailsColumnId.Company, out columnId),
+            "Version" => SetColumnId(DetailsColumnId.Version, out columnId),
+            "Dimensions" => SetColumnId(DetailsColumnId.Dimensions, out columnId),
+            "Duration" => SetColumnId(DetailsColumnId.Duration, out columnId),
             _ => SetColumnId(default, out columnId, false)
         };
     }

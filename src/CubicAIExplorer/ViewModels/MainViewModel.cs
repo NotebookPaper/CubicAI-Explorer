@@ -675,7 +675,11 @@ public partial class MainViewModel : ObservableObject
             new DetailsColumnSetting { ColumnId = DetailsColumnId.Name, Width = 350, IsVisible = true, DisplayOrder = 0 },
             new DetailsColumnSetting { ColumnId = DetailsColumnId.Size, Width = 100, IsVisible = true, DisplayOrder = 1 },
             new DetailsColumnSetting { ColumnId = DetailsColumnId.Type, Width = 120, IsVisible = true, DisplayOrder = 2 },
-            new DetailsColumnSetting { ColumnId = DetailsColumnId.DateModified, Width = 160, IsVisible = true, DisplayOrder = 3 }
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.DateModified, Width = 160, IsVisible = true, DisplayOrder = 3 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Company, Width = 150, IsVisible = false, DisplayOrder = 4 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Version, Width = 100, IsVisible = false, DisplayOrder = 5 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Dimensions, Width = 100, IsVisible = false, DisplayOrder = 6 },
+            new DetailsColumnSetting { ColumnId = DetailsColumnId.Duration, Width = 80, IsVisible = false, DisplayOrder = 7 }
         ];
     }
 
