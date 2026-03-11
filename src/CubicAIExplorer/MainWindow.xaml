@@ -58,6 +58,9 @@
                     <MenuItem x:Name="StartupSessionMenuItem" Header="_Startup Session" />
                 </MenuItem>
                 <Separator />
+                <MenuItem Header="Open in New _Window" Command="{Binding OpenInNewWindowCommand}" />
+                <MenuItem Header="Run as _Administrator" Command="{Binding RunAsAdministratorCommand}" />
+                <Separator />
                 <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="OnExitClick" />
             </MenuItem>
             <MenuItem Header="_Edit">
@@ -849,6 +852,8 @@
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                 <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
+                                <MenuItem x:Name="OpenInNewWindowMenuItem" Header="Open in New Window" Click="OpenInNewWindow_Click" />
+                                <MenuItem x:Name="RunAsAdministratorMenuItem" Header="Run as Administrator" Click="RunAsAdministrator_Click" />
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                 <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
                             </ContextMenu>
@@ -990,6 +995,8 @@
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                     <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />
+                                    <MenuItem x:Name="RightOpenInNewWindowMenuItem" Header="Open in New Window" Click="OpenInNewWindow_Click" />
+                                    <MenuItem x:Name="RightRunAsAdministratorMenuItem" Header="Run as Administrator" Click="RunAsAdministrator_Click" />
                                     <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                     <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
                                 </ContextMenu>

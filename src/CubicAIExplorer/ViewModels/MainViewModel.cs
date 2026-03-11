@@ -1194,6 +1194,42 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenInNewWindow()
+    {
+        var targetPath = GetOpenInNewWindowTargetPath();
+        if (string.IsNullOrWhiteSpace(targetPath))
+            return;
+
+        try
+        {
+            _fileSystemService.ExecuteShellVerb(targetPath, "opennewwindow");
+            StatusText = $"Opened {_fileSystemService.GetDisplayName(targetPath)} in a new window.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Open in new window failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void RunAsAdministrator()
+    {
+        var selectedItem = GetSingleSelectedShellItem();
+        if (selectedItem == null)
+            return;
+
+        try
+        {
+            _fileSystemService.ExecuteShellVerb(selectedItem.FullPath, "runas");
+            StatusText = $"Requested administrator launch for {selectedItem.Name}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Run as administrator failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     private void SearchInFolder()
     {
         ExecuteCurrentPaneFileListCommand(static fileList => fileList.SearchInFolderCommand);
@@ -1343,6 +1379,35 @@ public partial class MainViewModel : ObservableObject
     {
         if (command.CanExecute(parameter))
             command.Execute(parameter);
+    }
+
+    private FileSystemItem? GetSingleSelectedShellItem()
+    {
+        var fileList = CurrentPaneFileList;
+        if (fileList == null)
+            return null;
+
+        if (fileList.SelectedItems.Count > 1)
+            return null;
+
+        if (fileList.SelectedItems.Count == 1)
+            return fileList.SelectedItems[0];
+
+        return fileList.SelectedItem;
+    }
+
+    private string? GetOpenInNewWindowTargetPath()
+    {
+        var selectedItem = GetSingleSelectedShellItem();
+        if (selectedItem != null
+            && selectedItem.ItemType is FileSystemItemType.Directory or FileSystemItemType.Drive)
+        {
+            return selectedItem.FullPath;
+        }
+
+        return !string.IsNullOrWhiteSpace(CurrentPanePath) && _fileSystemService.DirectoryExists(CurrentPanePath)
+            ? CurrentPanePath
+            : null;
     }
 
     private void RaiseCurrentPaneStateProperties()

@@ -41,6 +41,7 @@ public interface IFileSystemService
     void RevealInExplorer(string path);
     void RevealInExplorer(IEnumerable<string> paths);
     void OpenInDefaultApp(string path);
+    void ExecuteShellVerb(string path, string verb);
     void EmptyRecycleBin();
     void ShowNativeProperties(string path);
     void ShowNativeProperties(IEnumerable<string> paths);

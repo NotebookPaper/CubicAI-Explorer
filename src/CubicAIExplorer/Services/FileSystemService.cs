@@ -220,6 +220,31 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public void ExecuteShellVerb(string path, string verb)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null)
+            throw new ArgumentException("The path is invalid.", nameof(path));
+
+        if (!File.Exists(sanitized) && !Directory.Exists(sanitized))
+            throw new FileNotFoundException("The target path does not exist.", sanitized);
+
+        if (string.IsNullOrWhiteSpace(verb))
+            throw new ArgumentException("The shell verb is required.", nameof(verb));
+
+        var info = new SHELLEXECUTEINFO
+        {
+            cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
+            lpVerb = verb.Trim(),
+            lpFile = sanitized,
+            nShow = 5,
+            fMask = 0x0000000C
+        };
+
+        if (!ShellExecuteEx(ref info))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
+
     public void EmptyRecycleBin()
     {
         const uint flags = (uint)(ShEmptyRecycleBinFlags.NoProgressUi | ShEmptyRecycleBinFlags.NoSound);
@@ -251,7 +276,7 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHEmptyRecycleBinW")]

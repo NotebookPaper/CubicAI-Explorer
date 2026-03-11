@@ -49,6 +49,13 @@ The app currently includes:
 - routed recycle-bin emptying through `IFileSystemService` and `SHEmptyRecycleBinW` instead of direct filesystem deletion
 - added smoke coverage for the command path and success status messaging
 
+### Shell verb execution for alternate launches
+
+- added `IFileSystemService.ExecuteShellVerb` so shell verbs stay routed through the filesystem abstraction
+- added `Open in New Window` for folders/current pane paths via the Windows `opennewwindow` shell verb
+- added `Run as Administrator` for a single selected item via the Windows `runas` shell verb
+- added smoke coverage that records the requested verb and path without invoking real shell UI
+
 ### App icon refresh (v2)
 
 - updated the project output icon metadata to use `Resources\appicon-v2.ico`
@@ -162,13 +169,6 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-### 0. App Icon Refresh (v2)
-Status: PLANNED
-Scope:
-- Update Project file (`.csproj`) to use `Resources\appicon-v2.ico` as the `ApplicationIcon`.
-- Update `App.xaml` or `MainWindow.xaml` to ensure the window icon also reflects the new asset.
-- Verify that the multi-size ICO renders correctly at all standard shell sizes (16-256px).
-
 ### 1. UX polish and advanced operations
 Status: COMPLETE
 Scope:
@@ -176,10 +176,10 @@ Scope:
 - completed: app icon refresh with the v2 multi-size icon asset
 
 ### 2. Deeper shell integration (continued)
-Status: PARTIALLY COMPLETE
+Status: COMPLETE
 Scope:
 - completed: recycle bin management (empty recycle bin from app)
-- shell execution with different verbs (Run as administrator, etc.)
+- completed: shell execution with different verbs (`opennewwindow`, `runas`)
 
 ### 3. Infrastructure and reliability
 Status: PLANNED

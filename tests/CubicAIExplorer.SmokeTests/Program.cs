@@ -105,6 +105,8 @@ internal static class Program
             Run("new file templates catalog", failures, () => TestNewFileTemplatesCatalog(tempRoot));
             Run("new file template creation", failures, () => TestNewFileTemplateCreation(tempRoot));
             Run("empty recycle bin command", failures, TestEmptyRecycleBinCommand);
+            Run("open in new window command", failures, () => TestOpenInNewWindowCommand(tempRoot));
+            Run("run as administrator command", failures, () => TestRunAsAdministratorCommand(tempRoot));
             Run("undo/redo after duplicate", failures, () => TestUndoRedoAfterDuplicate(tempRoot));
             Run("undo/redo after new file and link creation", failures, () => TestUndoRedoAfterNewFileAndLink(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
@@ -2880,6 +2882,55 @@ internal static class Program
             "Empty Recycle Bin should update the status text on success.");
     }
 
+    private static void TestOpenInNewWindowCommand(string root)
+    {
+        var folder = CreateCleanSubdir(root, "open_new_window");
+        var child = Directory.CreateDirectory(Path.Combine(folder, "child"));
+
+        var fs = new RecordingFileSystemService(new FileSystemService());
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateCurrentPaneToPath(folder);
+
+        var selected = vm.CurrentPaneFileList!.Items.Single(item =>
+            string.Equals(item.FullPath, child.FullName, StringComparison.OrdinalIgnoreCase));
+        vm.CurrentPaneFileList.SelectedItem = selected;
+
+        vm.OpenInNewWindowCommand.Execute(null);
+
+        Assert(string.Equals(fs.LastShellVerbPath, child.FullName, StringComparison.OrdinalIgnoreCase),
+            "Open in New Window should target the selected folder when one folder is selected.");
+        Assert(string.Equals(fs.LastShellVerb, "opennewwindow", StringComparison.OrdinalIgnoreCase),
+            "Open in New Window should invoke the shell opennewwindow verb.");
+        Assert(vm.StatusText.Contains("new window", StringComparison.OrdinalIgnoreCase),
+            "Open in New Window should report a success status.");
+    }
+
+    private static void TestRunAsAdministratorCommand(string root)
+    {
+        var folder = CreateCleanSubdir(root, "runas");
+        var filePath = Path.Combine(folder, "tool.exe");
+        File.WriteAllText(filePath, "stub");
+
+        var fs = new RecordingFileSystemService(new FileSystemService());
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateCurrentPaneToPath(folder);
+
+        var selected = vm.CurrentPaneFileList!.Items.Single(item =>
+            string.Equals(item.FullPath, filePath, StringComparison.OrdinalIgnoreCase));
+        vm.CurrentPaneFileList.SelectedItem = selected;
+
+        vm.RunAsAdministratorCommand.Execute(null);
+
+        Assert(string.Equals(fs.LastShellVerbPath, filePath, StringComparison.OrdinalIgnoreCase),
+            "Run as Administrator should target the selected item.");
+        Assert(string.Equals(fs.LastShellVerb, "runas", StringComparison.OrdinalIgnoreCase),
+            "Run as Administrator should invoke the runas shell verb.");
+        Assert(vm.StatusText.Contains("administrator", StringComparison.OrdinalIgnoreCase),
+            "Run as Administrator should report a success status.");
+    }
+
     private static string CreateCleanSubdir(string root, string name)
     {
         var path = Path.Combine(root, name);
@@ -2968,6 +3019,8 @@ internal static class Program
         public string? LastRevealPath { get; private set; }
         public List<string> LastRevealPaths { get; } = [];
         public string? LastOpenedFolderPath { get; private set; }
+        public string? LastShellVerbPath { get; private set; }
+        public string? LastShellVerb { get; private set; }
         public int EmptyRecycleBinCallCount { get; private set; }
 
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
@@ -2998,6 +3051,12 @@ internal static class Program
         public void OpenInDefaultApp(string path)
         {
             LastOpenedFolderPath = path;
+        }
+
+        public void ExecuteShellVerb(string path, string verb)
+        {
+            LastShellVerbPath = path;
+            LastShellVerb = verb;
         }
 
         public void EmptyRecycleBin()

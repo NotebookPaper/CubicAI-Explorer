@@ -1202,6 +1202,16 @@ public partial class MainWindow : Window
         ViewModel.OpenInExplorerCommand.Execute(null);
     }
 
+    private void OpenInNewWindow_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.OpenInNewWindowCommand.Execute(null);
+    }
+
+    private void RunAsAdministrator_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.RunAsAdministratorCommand.Execute(null);
+    }
+
     private void OnExitClick(object sender, RoutedEventArgs e) => Close();
 
     private void SessionsMenu_SubmenuOpened(object sender, RoutedEventArgs e)

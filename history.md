@@ -19,3 +19,4 @@
 - 2026-03-11: Completed spec 008 app icon refresh with the v2 ICO wired into project output, window chrome, and smoke coverage for icon-frame availability.
 - 2026-03-11: Completed new-file templates support with configurable template-folder settings, dynamic New-menu population, template-backed file creation, and smoke coverage.
 - 2026-03-11: Completed spec 009 empty recycle bin with a Tools-menu action, shell-backed `SHEmptyRecycleBinW` integration, and smoke coverage.
+- 2026-03-11: Completed spec 010 shell verb execution with `opennewwindow` and `runas` commands routed through `ShellExecuteEx` plus smoke coverage.
