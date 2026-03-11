@@ -141,6 +141,15 @@ public partial class MainViewModel : ObservableObject
     private bool _isSavedSearchesVisible = true;
 
     [ObservableProperty]
+    private bool _isDropStackVisible;
+
+    [ObservableProperty]
+    private bool _isDropStackDropTarget;
+
+    [ObservableProperty]
+    private DropStackItem? _selectedDropStackItem;
+
+    [ObservableProperty]
     private string _bookmarkDragFeedbackText = string.Empty;
 
     [ObservableProperty]
@@ -170,6 +179,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
     public ObservableCollection<NewFileTemplateItem> NewFileTemplates { get; } = [];
+    public ObservableCollection<DropStackItem> DropStackItems { get; } = [];
     public ObservableCollection<string> AddressSuggestions { get; } = [];
     public ObservableCollection<string> RightPaneAddressSuggestions { get; } = [];
     public TabViewModel? CurrentPaneTab => IsRightPaneActive && IsDualPaneMode ? _rightPaneTab : ActiveTab;
@@ -179,6 +189,8 @@ public partial class MainViewModel : ObservableObject
     public string CurrentPaneLabel => IsRightPaneActive && IsDualPaneMode ? "Right Pane" : "Left Pane";
     public string LeftPaneStatusText => ActiveTab?.FileList.StatusText ?? "Ready";
     public string RightPaneStatusText => _rightPaneTab?.FileList.StatusText ?? "Ready";
+    public bool HasDropStackItems => DropStackItems.Count > 0;
+    public int DropStackItemCount => DropStackItems.Count;
     public bool IsFileOperationQueueBusy => _fileOperationQueueService.IsBusy;
     public bool CanShowQueueDetails => _fileOperationQueueService.IsBusy
         || _fileOperationQueueService.PendingCount > 0
@@ -236,6 +248,7 @@ public partial class MainViewModel : ObservableObject
         _isBookmarksVisible = _userSettings.ShowBookmarks;
         _isBookmarksBarVisible = _userSettings.ShowBookmarksBar;
         _isSavedSearchesVisible = _userSettings.ShowSavedSearches;
+        _isDropStackVisible = _userSettings.ShowDropStack;
 
         // Initialize Window state
         _sidebarWidth = _userSettings.SidebarWidth;
@@ -251,6 +264,12 @@ public partial class MainViewModel : ObservableObject
 
         if (_bookmarkService != null)
             _bookmarkService.BookmarksChanged += OnExternalBookmarksChanged;
+
+        DropStackItems.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasDropStackItems));
+            OnPropertyChanged(nameof(DropStackItemCount));
+        };
 
         LoadBookmarks();
         LoadRecentFolders();
@@ -310,6 +329,7 @@ public partial class MainViewModel : ObservableObject
             IsBookmarksVisible = newSettings.ShowBookmarks;
             IsBookmarksBarVisible = newSettings.ShowBookmarksBar;
             IsSavedSearchesVisible = newSettings.ShowSavedSearches;
+            IsDropStackVisible = newSettings.ShowDropStack;
             SidebarWidth = newSettings.SidebarWidth;
             PreviewWidth = newSettings.PreviewWidth;
             _userSettings.OpenTabs = newSettings.OpenTabs ?? [];
@@ -1761,6 +1781,175 @@ public partial class MainViewModel : ObservableObject
         if (SelectedSavedSearch == savedSearch)
             SelectedSavedSearch = null;
         SaveSavedSearches();
+    }
+
+    public void AddDropStackPaths(IEnumerable<string> paths)
+    {
+        var added = 0;
+
+        foreach (var path in paths
+                     .Where(static path => !string.IsNullOrWhiteSpace(path))
+                     .Select(static path => path.Trim())
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var isDirectory = _fileSystemService.DirectoryExists(path);
+            var isFile = !isDirectory && _fileSystemService.FileExists(path);
+            if (!isDirectory && !isFile)
+                continue;
+
+            if (DropStackItems.Any(item => string.Equals(item.FullPath, path, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            DropStackItems.Add(new DropStackItem
+            {
+                FullPath = path,
+                Name = Path.GetFileName(path.TrimEnd('\\')),
+                ParentPath = Path.GetDirectoryName(path.TrimEnd('\\')) ?? path,
+                IsDirectory = isDirectory
+            });
+            added++;
+        }
+
+        if (added <= 0)
+            return;
+
+        OnPropertyChanged(nameof(HasDropStackItems));
+        OnPropertyChanged(nameof(DropStackItemCount));
+        StatusText = added == 1
+            ? "Added 1 item to the Drop Stack."
+            : $"Added {added} items to the Drop Stack.";
+    }
+
+    [RelayCommand]
+    private void RemoveDropStackItem(DropStackItem? item)
+    {
+        if (item == null)
+            return;
+
+        if (!DropStackItems.Remove(item))
+            return;
+
+        if (SelectedDropStackItem == item)
+            SelectedDropStackItem = null;
+
+        OnPropertyChanged(nameof(HasDropStackItems));
+        OnPropertyChanged(nameof(DropStackItemCount));
+        StatusText = $"Removed {item.Name} from the Drop Stack.";
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedDropStackItem()
+    {
+        RemoveDropStackItem(SelectedDropStackItem);
+    }
+
+    [RelayCommand]
+    private void ClearDropStack()
+    {
+        if (DropStackItems.Count == 0)
+            return;
+
+        DropStackItems.Clear();
+        SelectedDropStackItem = null;
+        OnPropertyChanged(nameof(HasDropStackItems));
+        OnPropertyChanged(nameof(DropStackItemCount));
+        StatusText = "Cleared the Drop Stack.";
+    }
+
+    public async Task TransferDropStackAsync(string destinationPath, bool moveItems)
+    {
+        if (string.IsNullOrWhiteSpace(destinationPath) || DropStackItems.Count == 0)
+            return;
+
+        var sanitizedDestination = _fileSystemService.EnsureDirectoryExists(destinationPath);
+        if (string.IsNullOrWhiteSpace(sanitizedDestination) || !_fileSystemService.DirectoryExists(sanitizedDestination))
+        {
+            StatusText = "Drop Stack destination is invalid.";
+            return;
+        }
+
+        var sourcePaths = DropStackItems
+            .Select(static item => item.FullPath)
+            .Where(path => _fileSystemService.FileExists(path) || _fileSystemService.DirectoryExists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sourcePaths.Length == 0)
+        {
+            StatusText = "Drop Stack is empty or the collected items no longer exist.";
+            return;
+        }
+
+        try
+        {
+            var operationText = $"{(moveItems ? "Moving" : "Copying")} {sourcePaths.Length} Drop Stack item(s)";
+            var transferResults = await _fileOperationQueueService.EnqueueAsync(
+                operationText,
+                context => moveItems
+                    ? _fileSystemService.MoveFiles(sourcePaths, sanitizedDestination, FileTransferCollisionResolution.KeepBoth, context)
+                    : _fileSystemService.CopyFiles(sourcePaths, sanitizedDestination, FileTransferCollisionResolution.KeepBoth, context));
+
+            var successfulTransfers = transferResults
+                .Where(static result => result.Status == FileTransferStatus.Success)
+                .ToArray();
+
+            if (moveItems && successfulTransfers.Length > 0)
+            {
+                var movedPaths = successfulTransfers
+                    .Select(static result => result.SourcePath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                for (var i = DropStackItems.Count - 1; i >= 0; i--)
+                {
+                    if (movedPaths.Contains(DropStackItems[i].FullPath))
+                        DropStackItems.RemoveAt(i);
+                }
+
+                if (SelectedDropStackItem != null && movedPaths.Contains(SelectedDropStackItem.FullPath))
+                    SelectedDropStackItem = null;
+
+                OnPropertyChanged(nameof(HasDropStackItems));
+                OnPropertyChanged(nameof(DropStackItemCount));
+            }
+
+            var refreshedDirectories = successfulTransfers
+                .Select(static result => Path.GetDirectoryName(result.SourcePath))
+                .Append(sanitizedDestination)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            RefreshOpenPanesForDirectories(refreshedDirectories);
+
+            StatusText = BuildDropStackTransferSummary(moveItems, transferResults);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = $"Drop Stack {(moveItems ? "move" : "copy")} canceled.";
+            throw;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Drop Stack {(moveItems ? "move" : "copy")} failed: {ex.Message}";
+            throw;
+        }
+    }
+
+    private static string BuildDropStackTransferSummary(bool moveItems, IReadOnlyList<FileTransferResult> transferResults)
+    {
+        var successCount = transferResults.Count(static result => result.Status == FileTransferStatus.Success);
+        var skippedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Skipped);
+        var failedCount = transferResults.Count(static result => result.Status == FileTransferStatus.Failed);
+
+        var parts = new List<string>();
+        if (successCount > 0)
+            parts.Add($"{(moveItems ? "Moved" : "Copied")} {successCount} item(s)");
+        if (skippedCount > 0)
+            parts.Add($"Skipped {skippedCount}");
+        if (failedCount > 0)
+            parts.Add($"Failed {failedCount}");
+
+        return parts.Count == 0
+            ? $"Drop Stack {(moveItems ? "move" : "copy")} completed with no changes."
+            : $"Drop Stack: {string.Join(" | ", parts)}";
     }
 
     [RelayCommand]
@@ -4111,4 +4300,5 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsBookmarksVisibleChanged(bool value) { _userSettings.ShowBookmarks = value; SaveSettings(); }
     partial void OnIsBookmarksBarVisibleChanged(bool value) { _userSettings.ShowBookmarksBar = value; SaveSettings(); }
     partial void OnIsSavedSearchesVisibleChanged(bool value) { _userSettings.ShowSavedSearches = value; SaveSettings(); }
+    partial void OnIsDropStackVisibleChanged(bool value) { _userSettings.ShowDropStack = value; SaveSettings(); }
 }

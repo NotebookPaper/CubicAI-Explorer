@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after external tools
-> Status: External tools configuration is implemented and verified.
+> HEAD: current local `master` after drop stack
+> Status: Drop Stack is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -22,6 +22,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `016-advanced-search-filters` is now complete in this checkout.
 - Spec `017-grouping-manual-sort` is now complete in this checkout.
 - Spec `018-external-tools` is now complete in this checkout.
+- Spec `019-drop-stack` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
@@ -32,6 +33,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Persisted user-defined tools in `UserSettings` and surfaced them through `MainViewModel` so settings reloads keep the menu catalog current.
   - Added `Tools > External Tools` and pane `Open with... (Tools)` submenus, with launches routed through `IFileSystemService.LaunchExternalTool`.
   - Added smoke coverage for settings round-trip persistence, window loading, argument expansion, launch routing, and XAML/code-behind wiring.
+- **Spec 019: Drop Stack (Virtual Collection)** (New in this session)
+  - Added a toggleable `Drop Stack` sidebar pane with View-menu visibility control, drag/drop collection, bulk copy/move actions, and clear/remove affordances.
+  - Kept the shelf non-destructive during collection so dragging items into the pane only records source paths and delete actions only remove the shelf entry.
+  - Routed `Copy all to...` and `Move all to...` through the existing queue-backed filesystem transfer path and refreshed open panes after successful transfers.
+  - Added smoke coverage for cross-folder collection persistence, entry removal, copy retention, move clearing, and XAML/code-behind wiring.
 - **Roadmap: Queue history error reporting** (New in this session)
   - Added bounded recent-operation history to `FileOperationQueueService` with explicit success, failure, and canceled states plus retained detail text.
   - Exposed the recent queue history through `MainViewModel` and wired the existing status-bar queue-details toggle to a popup showing active progress and recent results.
@@ -135,7 +141,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next highest-priority incomplete spec is `019-drop-stack.md`.
+- Next highest-priority incomplete spec is `020-code-review-fixes.md`.
 - Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting another roadmap slice.
 
 ## Key Files
@@ -148,6 +154,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/Services/DebouncedJsonFileWatcher.cs`
 - `src/CubicAIExplorer/Models/FileChecksumSet.cs`
+- `src/CubicAIExplorer/Models/DropStackItem.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `src/CubicAIExplorer/Views/BatchRenameDialog.xaml`
@@ -171,7 +178,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- External tools configuration is the latest verified feature slice in this checkout.
+- Drop Stack is the latest verified feature slice in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
 - `specs/015-layout-manager.md` and `specs/016-advanced-search-filters.md` are now complete.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
@@ -185,7 +192,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 
@@ -199,3 +206,4 @@ Verification run on the updated checkout on 2026-03-11:
 - **Content Search Scope**: Content scanning is intentionally limited to a small text-extension allowlist and files at or below 10 MB; widen that list carefully if future specs ask for richer grep behavior.
 - **Chunk Join Safety**: Join now requires a contiguous numeric chunk sequence starting from the selected `.001`-style file, so later work should preserve that validation rather than silently skipping gaps.
 - **External Tool Arguments**: `%p` is the only placeholder currently expanded for external tools. If future work adds more tokens, keep the selected-file path quoted and continue routing process launch through `IFileSystemService`.
+- **Drop Stack Lifetime**: The collected entries are intentionally session-local and not persisted. If future work extends the feature, decide explicitly whether stale-path cleanup or persistence is desirable before adding either.

@@ -147,6 +147,7 @@
                     <MenuItem Header="_Bookmarks" IsCheckable="True" IsChecked="{Binding IsBookmarksVisible}" />
                     <MenuItem Header="Bookmarks _Bar" IsCheckable="True" IsChecked="{Binding IsBookmarksBarVisible}" />
                     <MenuItem Header="_Saved Searches" IsCheckable="True" IsChecked="{Binding IsSavedSearchesVisible}" />
+                    <MenuItem Header="_Drop Stack" IsCheckable="True" IsChecked="{Binding IsDropStackVisible}" />
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="_Search in Folder..." InputGestureText="Ctrl+E"
@@ -729,7 +730,22 @@
                         </RowDefinition.Style>
                     </RowDefinition>
                     <RowDefinition Height="Auto" /> <!-- Splitter 5 -->
-                    
+
+                    <!-- Drop Stack -->
+                    <RowDefinition MinHeight="0">
+                        <RowDefinition.Style>
+                            <Style TargetType="RowDefinition">
+                                <Setter Property="Height" Value="180" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDropStackVisible}" Value="False">
+                                        <Setter Property="Height" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RowDefinition.Style>
+                    </RowDefinition>
+                    <RowDefinition Height="Auto" /> <!-- Splitter 7 -->
+
                     <!-- Folders -->
                     <RowDefinition Height="2*" MinHeight="100" />
                 </Grid.RowDefinitions>
@@ -917,8 +933,102 @@
                 <GridSplitter Grid.Row="5" Height="4" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#96B3D8"
                               Visibility="{Binding IsSavedSearchesVisible, Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- Folders (Row 6) -->
-                <DockPanel Grid.Row="6">
+                <!-- Drop Stack (Row 6) -->
+                <DockPanel Grid.Row="6" Visibility="{Binding IsDropStackVisible, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock DockPanel.Dock="Top" Text="Drop Stack" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
+                    <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+                        <Button Content="Copy all to..."
+                                Padding="6,2"
+                                Margin="0,0,4,0"
+                                Click="DropStackCopyTo_Click"
+                                IsEnabled="{Binding HasDropStackItems}" />
+                        <Button Content="Move all to..."
+                                Padding="6,2"
+                                Margin="0,0,4,0"
+                                Click="DropStackMoveTo_Click"
+                                IsEnabled="{Binding HasDropStackItems}" />
+                        <Button Content="Clear"
+                                Padding="6,2"
+                                Command="{Binding ClearDropStackCommand}"
+                                IsEnabled="{Binding HasDropStackItems}" />
+                    </DockPanel>
+                    <Border Margin="4,0,4,4"
+                            AllowDrop="True"
+                            DragEnter="DropStack_DragEnter"
+                            DragOver="DropStack_DragOver"
+                            DragLeave="DropStack_DragLeave"
+                            Drop="DropStack_Drop">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource ClassicPaneSurfaceStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDropStackDropTarget}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#D39B1A" />
+                                        <Setter Property="Background" Value="#FFF8DD" />
+                                        <Setter Property="BorderThickness" Value="2" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <TextBlock Margin="8"
+                                       Text="Drag files or folders here to collect them for a later batch copy or move."
+                                       TextWrapping="Wrap"
+                                       Foreground="#6A7888">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasDropStackItems}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <ListBox x:Name="DropStackList"
+                                     ItemsSource="{Binding DropStackItems}"
+                                     SelectedItem="{Binding SelectedDropStackItem}"
+                                     KeyDown="DropStackList_KeyDown"
+                                     TabIndex="38">
+                                <ListBox.Style>
+                                    <Style TargetType="ListBox">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasDropStackItems}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.Style>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:DropStackItem}">
+                                        <DockPanel Margin="2">
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="Delete"
+                                                    Padding="6,1"
+                                                    Margin="8,0,0,0"
+                                                    Command="{Binding DataContext.RemoveDropStackItemCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    CommandParameter="{Binding}" />
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                <TextBlock Foreground="#5A6F89">
+                                                    <Run Text="{Binding ItemTypeText}" />
+                                                    <Run Text=" | " />
+                                                    <Run Text="{Binding ParentPath}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+                <GridSplitter Grid.Row="7" Height="4" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#96B3D8"
+                              Visibility="{Binding IsDropStackVisible, Converter={StaticResource BoolToVisibility}}" />
+
+                <!-- Folders (Row 8) -->
+                <DockPanel Grid.Row="8">
                     <TextBlock DockPanel.Dock="Top" Text="Folders" Style="{StaticResource ClassicPaneHeaderTextStyle}" />
                     <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource ClassicPaneBorderBrush}" Background="{StaticResource ClassicHeaderBrush}" Visibility="{Binding IsDrivesVisible, Converter={StaticResource BoolToVisibility}}">
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">

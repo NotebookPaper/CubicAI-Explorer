@@ -1,12 +1,14 @@
 # 019 - Drop-Stack (Virtual Collection)
 
+<!-- NR_OF_TRIES: 1 -->
+
 ## Status
 
-PLANNED
+COMPLETE
 
 ## Summary
 
-Implement a temporary "shelf" area where users can collect items from various folders before performing a batch operation (copy, move, delete).
+Implement a temporary "shelf" area where users can collect items from various folders before performing a batch copy/move operation without changing anything on disk during collection.
 
 ## Proposed Changes
 
@@ -21,8 +23,8 @@ Implement a temporary "shelf" area where users can collect items from various fo
 
 ## Acceptance Criteria
 
-- [ ] A Drop Stack pane is available via the View menu.
-- [ ] Dragging items into the stack "collects" them (does not move/copy them on disk).
-- [ ] Users can navigate between folders and continue collecting items.
-- [ ] Clicking "Copy/Move to..." prompts for a destination and processes all items in the stack.
-- [ ] Deleting an item from the stack only removes its entry, not the file on disk.
+- [x] A Drop Stack pane is available via the View menu.
+- [x] Dragging items into the stack "collects" them (does not move/copy them on disk).
+- [x] Users can navigate between folders and continue collecting items.
+- [x] Clicking "Copy/Move to..." prompts for a destination and processes all items in the stack.
+- [x] Deleting an item from the stack only removes its entry, not the file on disk.

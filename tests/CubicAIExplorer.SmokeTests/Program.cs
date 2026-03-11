@@ -69,6 +69,8 @@ internal static class Program
             Run("bookmarks bar behavior", failures, () => TestBookmarksBarBehavior(tempRoot));
             Run("bookmark watcher reloads after external replace", failures, () => TestBookmarkWatcherReloadsAfterExternalReplace(tempRoot));
             Run("bookmark drag feedback", failures, () => TestBookmarkDragFeedback(tempRoot));
+            Run("drop stack collection", failures, () => TestDropStackCollection(tempRoot));
+            Run("drop stack transfer", failures, () => TestDropStackTransfer(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
             Run("redo move", failures, () => TestRedoMove(tempRoot));
             Run("view mode property", failures, () => TestViewModeProperty(tempRoot));
@@ -3335,6 +3337,14 @@ internal static class Program
         Assert(main.Contains("BookmarksBar_Drop"), "Bookmarks bar drop handler should be wired.");
         Assert(main.Contains("BookmarkBarButton_Click"), "Bookmarks bar click handler should be wired.");
         Assert(mainCs.Contains("BookmarkBarRename_Click"), "Bookmarks bar context menu handlers should be implemented.");
+        Assert(main.Contains("Header=\"_Drop Stack\""), "View menu should expose the Drop Stack toggle.");
+        Assert(main.Contains("IsDropStackVisible"), "Drop Stack visibility should be bound.");
+        Assert(main.Contains("DropStack_Drop"), "Drop Stack drop handler should be wired.");
+        Assert(main.Contains("DropStackList"), "Drop Stack list should exist.");
+        Assert(main.Contains("Copy all to..."), "Drop Stack should expose a bulk copy action.");
+        Assert(main.Contains("Move all to..."), "Drop Stack should expose a bulk move action.");
+        Assert(main.Contains("RemoveDropStackItemCommand"), "Drop Stack delete routing should be wired.");
+        Assert(main.Contains("IsDropStackDropTarget"), "Drop Stack drag highlight should be bound.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("ContentSearchTextBox"), "Content search text box should exist.");
@@ -3416,6 +3426,8 @@ internal static class Program
         Assert(mainCs.Contains("ApplyGrouping"), "Grouping should be applied from code-behind for both panes.");
         Assert(mainCs.Contains("InternalManualReorderFormat"), "Manual sort drag/drop should use a dedicated internal format.");
         Assert(mainCs.Contains("ManualSorting_Click"), "Manual sorting handler should be implemented.");
+        Assert(mainCs.Contains("DropStackCopyTo_Click"), "Drop Stack action handlers should be implemented.");
+        Assert(mainCs.Contains("DropStackList_KeyDown"), "Drop Stack keyboard delete handler should be implemented.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(mainCs.Contains("EmptyRecycleBin_Click"), "Empty Recycle Bin confirmation handler should be wired.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
@@ -3877,6 +3889,70 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
         }
+    }
+
+    private static void TestDropStackCollection(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        var left = CreateCleanSubdir(root, "drop_stack_left");
+        var right = CreateCleanSubdir(root, "drop_stack_right");
+        var leftFile = Path.Combine(left, "alpha.txt");
+        var rightFile = Path.Combine(right, "beta.txt");
+        File.WriteAllText(leftFile, "alpha");
+        File.WriteAllText(rightFile, "beta");
+
+        vm.IsDropStackVisible = true;
+        vm.NavigateCurrentPaneToPath(left);
+        vm.AddDropStackPaths([leftFile]);
+        vm.NavigateCurrentPaneToPath(right);
+        vm.AddDropStackPaths([rightFile]);
+        vm.AddDropStackPaths([rightFile]);
+
+        Assert(vm.DropStackItems.Count == 2, "Drop Stack should collect distinct items across folder navigation.");
+        Assert(vm.DropStackItems.Any(item => string.Equals(item.FullPath, leftFile, StringComparison.OrdinalIgnoreCase)),
+            "Drop Stack should retain earlier collected paths.");
+        Assert(vm.DropStackItems.Any(item => string.Equals(item.FullPath, rightFile, StringComparison.OrdinalIgnoreCase)),
+            "Drop Stack should collect items from the current folder.");
+
+        var removed = vm.DropStackItems.First(item => string.Equals(item.FullPath, leftFile, StringComparison.OrdinalIgnoreCase));
+        vm.RemoveDropStackItemCommand.Execute(removed);
+        Assert(vm.DropStackItems.Count == 1, "Removing from the Drop Stack should only remove the entry.");
+        Assert(File.Exists(leftFile), "Removing from the Drop Stack should not delete the file on disk.");
+    }
+
+    private static void TestDropStackTransfer(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        var sourceA = CreateCleanSubdir(root, "drop_stack_source_a");
+        var sourceB = CreateCleanSubdir(root, "drop_stack_source_b");
+        var copyTarget = CreateCleanSubdir(root, "drop_stack_copy_target");
+        var moveTarget = CreateCleanSubdir(root, "drop_stack_move_target");
+        var filePath = Path.Combine(sourceA, "copy-me.txt");
+        var folderPath = Path.Combine(sourceB, "folder-me");
+        Directory.CreateDirectory(folderPath);
+        File.WriteAllText(filePath, "copy me");
+        File.WriteAllText(Path.Combine(folderPath, "child.txt"), "child");
+
+        vm.AddDropStackPaths([filePath, folderPath]);
+        vm.TransferDropStackAsync(copyTarget, moveItems: false).GetAwaiter().GetResult();
+
+        Assert(File.Exists(filePath), "Drop Stack copy should keep the original file.");
+        Assert(Directory.Exists(folderPath), "Drop Stack copy should keep the original folder.");
+        Assert(File.Exists(Path.Combine(copyTarget, "copy-me.txt")), "Drop Stack copy should copy files to the chosen destination.");
+        Assert(File.Exists(Path.Combine(copyTarget, "folder-me", "child.txt")), "Drop Stack copy should copy folders recursively.");
+        Assert(vm.DropStackItems.Count == 2, "Copying from the Drop Stack should keep collected entries for later reuse.");
+
+        vm.TransferDropStackAsync(moveTarget, moveItems: true).GetAwaiter().GetResult();
+
+        Assert(!File.Exists(filePath), "Drop Stack move should remove the original file.");
+        Assert(!Directory.Exists(folderPath), "Drop Stack move should remove the original folder.");
+        Assert(File.Exists(Path.Combine(moveTarget, "copy-me.txt")), "Drop Stack move should place files in the chosen destination.");
+        Assert(File.Exists(Path.Combine(moveTarget, "folder-me", "child.txt")), "Drop Stack move should place folders in the chosen destination.");
+        Assert(vm.DropStackItems.Count == 0, "Successful Drop Stack moves should clear transferred entries.");
     }
 
     private static void TestFileSplitAndJoin(string root)

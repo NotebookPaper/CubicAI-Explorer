@@ -59,6 +59,12 @@ The app currently includes:
 - added a `Tools > External Tools` submenu plus file-list `Open with... (Tools)` context-menu entries populated from the saved tool catalog
 - routed tool launches through `IFileSystemService` with selected-file argument expansion and smoke coverage for settings round-trips plus launch behavior
 
+### Drop Stack virtual collection
+
+- added a toggleable `Drop Stack` sidebar pane in the View menu for collecting files and folders across folder changes
+- dragging onto the pane now shelves paths without copying or moving anything on disk, and per-entry delete actions only remove the shelf entry
+- added `Copy all to...`, `Move all to...`, and `Clear` actions wired through the existing filesystem abstraction and queue service, with smoke coverage for collection and transfer flows
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -223,7 +229,8 @@ Scope:
 - completed: 016 advanced attribute/date search filter
 - completed: 017 group by and manual sorting
 - completed: 018 external tools configuration
-- **019: Drop-Stack (Virtual Collection):** Implement a temporary "shelf" area where users can collect items from multiple folders before performing a batch operation.
+- completed: 019 drop-stack (virtual collection)
+- **020: Code review fixes:** Address the prioritized security, serialization, architecture, performance, and leak issues captured in the review spec.
 
 ### 4. Power User Parity (Cubic Original)
 Status: COMPLETE

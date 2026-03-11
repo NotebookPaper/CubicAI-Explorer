@@ -2924,6 +2924,95 @@ public partial class MainWindow : Window
         SetBookmarksBarDropHighlight(false);
     }
 
+    private async void DropStackCopyTo_Click(object sender, RoutedEventArgs e)
+    {
+        await PromptAndTransferDropStackAsync(moveItems: false);
+    }
+
+    private async void DropStackMoveTo_Click(object sender, RoutedEventArgs e)
+    {
+        await PromptAndTransferDropStackAsync(moveItems: true);
+    }
+
+    private async Task PromptAndTransferDropStackAsync(bool moveItems)
+    {
+        if (!ViewModel.HasDropStackItems)
+            return;
+
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = moveItems ? "Move Drop Stack Items To" : "Copy Drop Stack Items To"
+        };
+
+        if (!string.IsNullOrWhiteSpace(ViewModel.CurrentPanePath)
+            && Directory.Exists(ViewModel.CurrentPanePath))
+        {
+            dialog.InitialDirectory = ViewModel.CurrentPanePath;
+        }
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            await ViewModel.TransferDropStackAsync(dialog.FolderName, moveItems);
+        }
+        catch (OperationCanceledException)
+        {
+            // Status text already reflects cancellation.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Drop Stack {(moveItems ? "move" : "copy")} failed: {ex.Message}",
+                "Drop Stack",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private void DropStack_DragEnter(object sender, DragEventArgs e)
+    {
+        UpdateDropStackDragState(e);
+    }
+
+    private void DropStack_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateDropStackDragState(e);
+        e.Handled = true;
+    }
+
+    private void DropStack_DragLeave(object sender, DragEventArgs e)
+    {
+        ViewModel.IsDropStackDropTarget = false;
+    }
+
+    private void DropStack_Drop(object sender, DragEventArgs e)
+    {
+        var droppedPaths = GetDroppedPaths(e).ToArray();
+        ViewModel.IsDropStackDropTarget = false;
+        if (droppedPaths.Length == 0)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        ViewModel.AddDropStackPaths(droppedPaths);
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void DropStackList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete)
+            return;
+
+        ViewModel.DeleteSelectedDropStackItemCommand.Execute(null);
+        e.Handled = true;
+    }
+
     private void BookmarksBar_Drop(object sender, DragEventArgs e)
     {
         var droppedDirectories = GetDroppedDirectories(e).ToList();
@@ -2942,7 +3031,14 @@ public partial class MainWindow : Window
         SetBookmarksBarDropHighlight(hasDroppedDirectories);
     }
 
-    private IEnumerable<string> GetDroppedDirectories(DragEventArgs e)
+    private void UpdateDropStackDragState(DragEventArgs e)
+    {
+        var hasDroppedPaths = GetDroppedPaths(e).Any();
+        ViewModel.IsDropStackDropTarget = hasDroppedPaths;
+        e.Effects = hasDroppedPaths ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private IEnumerable<string> GetDroppedPaths(DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop))
             return [];
@@ -2952,7 +3048,14 @@ public partial class MainWindow : Window
             return [];
 
         return droppedPaths
-            .Where(path => !string.IsNullOrWhiteSpace(path) && ViewModel.FileSystemService.DirectoryExists(path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<string> GetDroppedDirectories(DragEventArgs e)
+    {
+        return GetDroppedPaths(e)
+            .Where(path => ViewModel.FileSystemService.DirectoryExists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 

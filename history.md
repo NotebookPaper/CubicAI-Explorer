@@ -33,3 +33,4 @@
 - 2026-03-11: Completed spec 016 advanced attribute/date search filters with combined metadata criteria, saved-search persistence, and smoke coverage.
 - 2026-03-11: Completed spec 017 group by and manual sorting with WPF group headers, per-folder manual drag reordering, persisted order metadata, and smoke coverage.
 - 2026-03-11: Completed spec 018 external tools with a Preferences editor, persisted tool definitions, Tools/context-menu launch entries, and smoke coverage for argument expansion.
+- 2026-03-11: Completed spec 019 drop stack with a toggleable collection pane, drag-drop shelf behavior, batch copy/move actions, and smoke coverage for collection/removal/transfer flows.
