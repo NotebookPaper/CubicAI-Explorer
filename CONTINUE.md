@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after headless symbolic-link failure handling
-> Status: Headless symbolic-link failure handling is implemented and verified.
+> HEAD: current local `master` after advanced batch rename
+> Status: Advanced batch rename is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -11,7 +11,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes, including queue failure-history coverage and the forced symbolic-link failure regression.
-- Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009`, `010`, and `011` are complete in this checkout.
+- Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009-empty-recycle-bin`, `010-shell-verb-execution`, and `011-file-watcher-hardening` are complete in this checkout.
+- Spec `009-batch-rename` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -24,6 +25,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - **Reliability: Headless symbolic-link failure handling** (New in this session)
   - Updated `FileListViewModel.CreateSymbolicLinkWithHistory` so headless callers rethrow symbolic-link failures instead of trying to open a blocking modal dialog.
   - Added smoke coverage with a throwing filesystem test double to verify the original privilege error reaches the caller and no undo history is recorded on failure.
+- **Spec 009: Advanced Batch Rename** (New in this session)
+  - Added `BatchRenameDialog` with live preview columns for original and computed new names.
+  - Added `BatchRenameService` to compute collision-safe preview names and apply grouped two-phase renames safely.
+  - Updated `FileListViewModel.Rename` so multi-select rename routes through the batch dialog while single-item rename stays inline.
+  - Added smoke coverage for preview generation, command routing, and grouped undo/redo.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -77,17 +83,21 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- No incomplete numbered specs remain.
-- No roadmap items remain in `IMPLEMENTATION_PLAN.md` at this time.
+- Next incomplete spec is `specs/010-breadcrumb-dropdowns.md`.
+- After that, `specs/011-content-search.md` remains planned.
 
 ## Key Files
 
 - `src/CubicAIExplorer/Models/FileOperationQueueHistoryEntry.cs`
+- `src/CubicAIExplorer/Models/BatchRenameModels.cs`
 - `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
+- `src/CubicAIExplorer/Services/BatchRenameService.cs`
 - `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/Services/DebouncedJsonFileWatcher.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/Views/BatchRenameDialog.xaml`
 - `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
 - `src/CubicAIExplorer/PreferencesWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml`
@@ -101,7 +111,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
-- Numbered specs `001` through `011` remain complete in this checkout.
+- Legacy numbered specs already completed in this checkout remain complete.
+- `specs/009-batch-rename.md` is now complete; `specs/010-breadcrumb-dropdowns.md` and `specs/011-content-search.md` remain planned.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -113,7 +124,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including queue failure-history coverage and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including batch rename preview/undo coverage, queue failure-history coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

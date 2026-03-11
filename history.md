@@ -23,3 +23,4 @@
 - 2026-03-11: Completed spec 011 file watcher hardening with debounced create/change/delete/rename handling for settings/bookmark sync, watcher-error recovery, and smoke coverage.
 - 2026-03-11: Completed queue history error reporting with bounded recent-operation history, failure/cancel detail surfaced in the status-bar popup, and smoke coverage for failed queue entries.
 - 2026-03-11: Completed headless symbolic-link failure handling so smoke/headless callers receive the original privilege error instead of blocking on modal UI, with regression coverage.
+- 2026-03-11: Completed spec 009 advanced batch rename with a live-preview dialog, grouped two-phase rename execution, and one-step undo/redo coverage.

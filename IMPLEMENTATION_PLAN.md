@@ -30,6 +30,12 @@ The app currently includes:
 - Implemented regex-based syntax highlighting for C#, XML, JSON, and Python.
 - Enhanced `UpdatePreview` to detect and route to rich previews for relevant extensions.
 
+### Advanced batch rename
+
+- added a dedicated batch-rename dialog with live original/new-name preview for multi-selection
+- supports search/replace, case transforms, counters, and extension keep/remove/replace options
+- applied grouped batch renames through a two-phase rename service so one undo/redo step replays the whole operation safely
+
 ### Bookmark drag/drop feedback and visual cues
 
 - added inline bookmark drag hint text so the sidebar explains folder, sibling, root, and invalid drops in plain language
@@ -174,6 +180,12 @@ Smoke coverage explicitly includes:
 - cross-session tab restoration
 
 ## Next Planned Work
+
+### 4. Power User Parity (Cubic Original)
+Status: PLANNED
+Scope:
+- **010: Breadcrumb Dropdown Navigation:** Add interactive dropdown buttons between breadcrumb segments to allow quick sub-folder branching.
+- **011: Content Search (Grep):** Extend the recursive search engine to support "Contains Text" filtering for file content matching.
 
 ### 1. UX polish and advanced operations
 Status: COMPLETE

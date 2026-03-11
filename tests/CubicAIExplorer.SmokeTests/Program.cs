@@ -21,6 +21,9 @@ internal static class Program
         try
         {
             Run("rename event + rename commit", failures, () => TestRenameFlow(tempRoot));
+            Run("batch rename preview", failures, () => TestBatchRenamePreview(tempRoot));
+            Run("batch rename command opens dialog", failures, () => TestBatchRenameCommandOpensDialog(tempRoot));
+            Run("batch rename undo/redo", failures, () => TestBatchRenameUndoRedo(tempRoot));
             Run("undo rename", failures, () => TestUndoRename(tempRoot));
             Run("redo rename", failures, () => TestRedoRename(tempRoot));
             Run("multi-select copy command", failures, () => TestMultiSelectCopy(tempRoot));
@@ -179,6 +182,121 @@ internal static class Program
 
         Assert(File.Exists(Path.Combine(folder, "new.txt")), "Renamed file should exist.");
         Assert(!File.Exists(original), "Original file should not exist after rename.");
+    }
+
+    private static void TestBatchRenamePreview(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "batch_rename_preview");
+        File.WriteAllText(Path.Combine(folder, "Report draft.txt"), "1");
+        File.WriteAllText(Path.Combine(folder, "Second draft.txt"), "2");
+        File.WriteAllText(Path.Combine(folder, "REPORT FINAL_01.txt"), "reserved");
+
+        vm.LoadDirectory(folder);
+
+        var selected = vm.Items
+            .Where(item => item.Name.EndsWith("draft.txt", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.Name)
+            .ToArray();
+
+        var preview = vm.BuildBatchRenamePreview(
+            selected,
+            new BatchRenameOptions(
+                "draft",
+                "final",
+                BatchRenameCaseMode.Uppercase,
+                BatchRenameCounterPosition.Suffix,
+                1,
+                2,
+                "_",
+                BatchRenameExtensionMode.Keep,
+                string.Empty));
+
+        Assert(preview.Count == 2, "Batch rename preview should include each selected item.");
+        Assert(preview[0].NewName == "REPORT FINAL_01 (2).txt", "Batch rename preview should avoid collisions with existing sibling names.");
+        Assert(preview[1].NewName == "SECOND FINAL_02.txt", "Batch rename preview should apply search/replace, case conversion, and counters.");
+    }
+
+    private static void TestBatchRenameCommandOpensDialog(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "batch_rename_command");
+        File.WriteAllText(Path.Combine(folder, "one.txt"), "1");
+        File.WriteAllText(Path.Combine(folder, "two.txt"), "2");
+
+        vm.LoadDirectory(folder);
+        vm.SelectedItems.Clear();
+        vm.SelectedItems.Add(vm.Items.Single(item => item.Name == "one.txt"));
+        vm.SelectedItems.Add(vm.Items.Single(item => item.Name == "two.txt"));
+
+        var opened = false;
+        vm.BatchRenameDialogFactory = (items, siblingNames) =>
+        {
+            opened = true;
+            return vm.BuildBatchRenamePreview(
+                items,
+                new BatchRenameOptions(
+                    string.Empty,
+                    string.Empty,
+                    BatchRenameCaseMode.None,
+                    BatchRenameCounterPosition.Prefix,
+                    1,
+                    2,
+                    "_",
+                    BatchRenameExtensionMode.Keep,
+                    string.Empty));
+        };
+
+        vm.RenameCommand.Execute(null);
+
+        Assert(opened, "Rename command should open the batch rename dialog path when multiple items are selected.");
+        Assert(File.Exists(Path.Combine(folder, "01_one.txt")), "Batch rename command should apply the dialog plan to the first item.");
+        Assert(File.Exists(Path.Combine(folder, "02_two.txt")), "Batch rename command should apply the dialog plan to the second item.");
+    }
+
+    private static void TestBatchRenameUndoRedo(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "batch_rename_undo");
+        File.WriteAllText(Path.Combine(folder, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "beta.txt"), "b");
+
+        vm.LoadDirectory(folder);
+
+        var plan = vm.BuildBatchRenamePreview(
+            vm.Items.OrderBy(item => item.Name).ToArray(),
+            new BatchRenameOptions(
+                string.Empty,
+                string.Empty,
+                BatchRenameCaseMode.TitleCase,
+                BatchRenameCounterPosition.Suffix,
+                7,
+                2,
+                "-",
+                BatchRenameExtensionMode.Replace,
+                "md"));
+
+        vm.ApplyBatchRename(plan);
+
+        Assert(File.Exists(Path.Combine(folder, "Alpha-07.md")), "Batch rename should rename the first item.");
+        Assert(File.Exists(Path.Combine(folder, "Beta-08.md")), "Batch rename should rename the second item.");
+        Assert(vm.CanUndo, "Batch rename should create one undo history entry.");
+        Assert(vm.UndoDescription.Contains("Batch Rename", StringComparison.OrdinalIgnoreCase),
+            "Undo description should reflect the grouped batch rename operation.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(File.Exists(Path.Combine(folder, "alpha.txt")), "Undo should restore the first original name.");
+        Assert(File.Exists(Path.Combine(folder, "beta.txt")), "Undo should restore the second original name.");
+
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(Path.Combine(folder, "Alpha-07.md")), "Redo should reapply the first batch rename.");
+        Assert(File.Exists(Path.Combine(folder, "Beta-08.md")), "Redo should reapply the second batch rename.");
     }
 
     private static void TestMultiSelectCopy(string root)

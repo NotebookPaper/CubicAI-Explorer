@@ -13,6 +13,7 @@ namespace CubicAIExplorer.ViewModels;
 
 public partial class FileListViewModel : ObservableObject
 {
+    private readonly BatchRenameService _batchRenameService = new();
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
@@ -89,6 +90,7 @@ public partial class FileListViewModel : ObservableObject
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
     public ObservableCollection<string> FilterHistory { get; } = [];
     public IReadOnlyList<NameMatchMode> AvailableMatchModes { get; } = Enum.GetValues<NameMatchMode>();
+    public Func<IReadOnlyList<FileSystemItem>, IReadOnlyList<string>, IReadOnlyList<BatchRenamePreviewItem>?>? BatchRenameDialogFactory { get; set; }
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
@@ -439,6 +441,12 @@ public partial class FileListViewModel : ObservableObject
     [RelayCommand]
     private void Rename()
     {
+        if (SelectedItems.Count > 1)
+        {
+            BatchRenameSelectedItems();
+            return;
+        }
+
         var item = GetSingleSelectedItem();
         if (item == null) return;
         InlineRenameRequested?.Invoke(this, item);
@@ -1039,6 +1047,46 @@ public partial class FileListViewModel : ObservableObject
         }
     }
 
+    public IReadOnlyList<BatchRenamePreviewItem> BuildBatchRenamePreview(
+        IReadOnlyList<FileSystemItem> items,
+        BatchRenameOptions options)
+    {
+        return _batchRenameService.BuildPreview(items, Items.Select(static item => item.Name).ToArray(), options);
+    }
+
+    public void ApplyBatchRename(IReadOnlyList<BatchRenamePreviewItem> plan)
+    {
+        if (plan.Count == 0)
+            return;
+
+        try
+        {
+            _batchRenameService.ApplyRenamePlan(_fileSystemService, plan);
+
+            var undoPlan = plan
+                .Select(item => new BatchRenamePreviewItem(
+                    Path.Combine(Path.GetDirectoryName(item.OriginalPath) ?? CurrentPath, item.NewName),
+                    item.NewName,
+                    item.OriginalName))
+                .ToArray();
+
+            PushHistory(
+                "Undo Batch Rename",
+                () => _batchRenameService.ApplyRenamePlan(_fileSystemService, undoPlan),
+                "Redo Batch Rename",
+                () => _batchRenameService.ApplyRenamePlan(_fileSystemService, plan));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Batch rename failed: {ex.Message}",
+                "Batch Rename Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     public void ImportDroppedFiles(IEnumerable<string> paths, string destinationPath, bool moveFiles)
     {
         ImportDroppedFilesAsync(paths, destinationPath, moveFiles).GetAwaiter().GetResult();
@@ -1157,6 +1205,33 @@ public partial class FileListViewModel : ObservableObject
     {
         var normalizedPath = sourcePath.TrimEnd('\\');
         return Path.GetFileName(normalizedPath);
+    }
+
+    private void BatchRenameSelectedItems()
+    {
+        var selection = SelectedItems
+            .DistinctBy(static item => item.FullPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (selection.Length < 2)
+            return;
+
+        var plan = BatchRenameDialogFactory?.Invoke(selection, Items.Select(static item => item.Name).ToArray());
+        if (plan == null)
+        {
+            if (Application.Current?.MainWindow == null)
+                return;
+
+            var dialog = new BatchRenameDialog(selection, Items.Select(static item => item.Name).ToArray(), _batchRenameService)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            plan = dialog.RenamePlan;
+        }
+
+        ApplyBatchRename(plan);
     }
 
     private void SetTransferSummary(string summary)
