@@ -133,6 +133,7 @@
                     <Separator />
                     <MenuItem Header="_Recent Folders" IsCheckable="True" IsChecked="{Binding IsRecentFoldersVisible}" />
                     <MenuItem Header="_Bookmarks" IsCheckable="True" IsChecked="{Binding IsBookmarksVisible}" />
+                    <MenuItem Header="Bookmarks _Bar" IsCheckable="True" IsChecked="{Binding IsBookmarksBarVisible}" />
                     <MenuItem Header="_Saved Searches" IsCheckable="True" IsChecked="{Binding IsSavedSearchesVisible}" />
                 </MenuItem>
                 <Separator />
@@ -544,6 +545,61 @@
                 </StackPanel>
             </Border>
         </Popup>
+
+        <Border x:Name="BookmarksBarDropZone"
+                DockPanel.Dock="Top"
+                Margin="4,0,4,4"
+                Padding="4"
+                AllowDrop="True"
+                Visibility="{Binding IsBookmarksBarVisible, Converter={StaticResource BoolToVisibility}}"
+                BorderBrush="{StaticResource ClassicPaneBorderBrush}"
+                BorderThickness="1"
+                Background="#F5F6F8"
+                DragEnter="BookmarksBar_DragEnter"
+                DragOver="BookmarksBar_DragOver"
+                DragLeave="BookmarksBar_DragLeave"
+                Drop="BookmarksBar_Drop">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          Focusable="False">
+                <ItemsControl x:Name="BookmarksBarItemsControl"
+                              ItemsSource="{Binding Bookmarks}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:BookmarkItem}">
+                            <Button Margin="0,0,6,0"
+                                    Padding="8,4"
+                                    MinHeight="28"
+                                    Click="BookmarkBarButton_Click"
+                                    Cursor="Hand"
+                                    ToolTip="{Binding Path}">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open" Click="BookmarkBarOpen_Click" />
+                                        <MenuItem Header="Open in New Tab" Click="BookmarkBarOpenInNewTab_Click" />
+                                        <Separator />
+                                        <MenuItem Header="Rename" Click="BookmarkBarRename_Click" />
+                                        <MenuItem Header="Delete" Click="BookmarkBarDelete_Click" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
+                                           Width="16"
+                                           Height="16"
+                                           Margin="0,0,6,0" />
+                                    <TextBlock Text="{Binding Name}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
 
         <!-- Main Content: Folder Tree + File List -->
         <Grid>

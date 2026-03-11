@@ -30,24 +30,11 @@ The app currently includes:
 - Implemented regex-based syntax highlighting for C#, XML, JSON, and Python.
 - Enhanced `UpdatePreview` to detect and route to rich previews for relevant extensions.
 
-### Advanced batch rename
+### Horizontal bookmarks bar
 
-- added a dedicated batch-rename dialog with live original/new-name preview for multi-selection
-- supports search/replace, case transforms, counters, and extension keep/remove/replace options
-- applied grouped batch renames through a two-phase rename service so one undo/redo step replays the whole operation safely
-
-### Breadcrumb dropdown navigation
-
-- added per-segment dropdown buttons in the breadcrumb bar for non-terminal path segments
-- dropdown menus populate immediate child folders asynchronously so slow drives do not block the UI thread
-- selecting a dropdown folder routes through existing pane navigation, preserving the current tab's back/forward history
-
-### Content search (grep-style recursive file scanning)
-
-- added an optional content-search field and `Include Content` toggle to the existing folder-search bar
-- extended recursive search to combine filename matching with safe chunked file-content scanning for eligible text files only
-- skipped files larger than 10 MB and non-text extensions to keep recursive content search responsive
-- persisted content-search criteria in saved searches so replayed searches restore both the name filter and text filter
+- added a dedicated bookmarks bar below the address area for one-click access to top-level bookmarks
+- added a separate View-menu toggle and persisted visibility setting so the bar can be shown independently from the sidebar bookmark tree
+- added drag/drop folder bookmarking and direct rename/delete actions from the bar itself
 
 ### Bookmark drag/drop feedback and visual cues
 
@@ -194,7 +181,19 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-No incomplete spec-backed roadmap slices remain in this checkout.
+### 4. Power User Parity (Cubic Original)
+Status: COMPLETE
+Scope:
+- completed: advanced batch rename
+- completed: breadcrumb dropdown navigation
+- completed: content search (grep-style recursive file scanning)
+
+### 5. Advanced Parity (Cubic Final)
+Status: PLANNED
+Scope:
+- **013: Tab Locking and Coloring:** Add support for locking tabs to a path and assigning custom visual colors to tab headers.
+- **014: File Utilities (Split/Join/Checksum):** Implement a tools menu for file splitting, joining, and MD5/SHA1 checksum generation.
+- **015: UI Layout Manager:** Allow users to save and restore named window layouts (e.g., "Preview Mode", "Dual Pane Mode").
 
 ### 1. UX polish and advanced operations
 Status: COMPLETE

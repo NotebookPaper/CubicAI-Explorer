@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after content search
-> Status: Content search is implemented and verified.
+> HEAD: current local `master` after horizontal bookmarks bar
+> Status: Horizontal bookmarks bar is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -15,6 +15,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `009-batch-rename` is now complete in this checkout.
 - Spec `010-breadcrumb-dropdowns` is now complete in this checkout.
 - Spec `011-content-search` is now complete in this checkout.
+- Spec `012-bookmarks-bar` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -42,6 +43,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Extended `FileListViewModel` recursive search to combine filename matching with safe chunked text scanning for eligible file types only.
   - Skipped files larger than 10 MB and non-text extensions so grep-style searches stay responsive and avoid binary scans.
   - Persisted content-search criteria through saved searches and added smoke coverage for content-only search, search limits, saved-search replay, and XAML wiring.
+- **Spec 012: Horizontal Bookmarks Bar** (New in this session)
+  - Added a toggleable bookmarks bar below the address area bound to the top-level bookmark collection.
+  - Added bookmark-bar button navigation, direct rename/delete context actions, and a separate persisted `ShowBookmarksBar` setting.
+  - Added drag/drop folder bookmarking onto the bar through the existing bookmark persistence path with duplicate suppression.
+  - Added smoke coverage for bookmarks-bar visibility persistence, navigation routing, drop-path persistence, and XAML wiring.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -95,8 +101,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- No incomplete specs remain in `specs/`.
-- Re-check `IMPLEMENTATION_PLAN.md` and `CONTINUE.md` before starting any new roadmap slice.
+- The next incomplete specs are `013-tab-locking-coloring`, `014-file-utilities`, and `015-layout-manager`.
+- Re-check `IMPLEMENTATION_PLAN.md` and `CONTINUE.md` before starting the next roadmap slice.
 
 ## Key Files
 
@@ -111,6 +117,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `src/CubicAIExplorer/Views/BatchRenameDialog.xaml`
 - `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
 - `src/CubicAIExplorer/PreferencesWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
@@ -127,7 +134,7 @@ Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
-- `specs/011-content-search.md` is now complete, and no incomplete spec files remain in this checkout.
+- `specs/012-bookmarks-bar.md` is now complete, and the remaining incomplete spec files are `013`, `014`, and `015`.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -139,7 +146,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed (after rerun following the known transient WPF output-file lock)
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including content-only search, content-search file-size/type limits, saved-search content replay, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

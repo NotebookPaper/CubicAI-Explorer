@@ -135,6 +135,9 @@ public partial class MainViewModel : ObservableObject
     private bool _isBookmarksVisible = true;
 
     [ObservableProperty]
+    private bool _isBookmarksBarVisible = true;
+
+    [ObservableProperty]
     private bool _isSavedSearchesVisible = true;
 
     [ObservableProperty]
@@ -222,6 +225,7 @@ public partial class MainViewModel : ObservableObject
         _isTabsVisible = _userSettings.ShowTabs;
         _isRecentFoldersVisible = _userSettings.ShowRecentFolders;
         _isBookmarksVisible = _userSettings.ShowBookmarks;
+        _isBookmarksBarVisible = _userSettings.ShowBookmarksBar;
         _isSavedSearchesVisible = _userSettings.ShowSavedSearches;
 
         // Initialize Window state
@@ -293,6 +297,7 @@ public partial class MainViewModel : ObservableObject
             IsTabsVisible = newSettings.ShowTabs;
             IsRecentFoldersVisible = newSettings.ShowRecentFolders;
             IsBookmarksVisible = newSettings.ShowBookmarks;
+            IsBookmarksBarVisible = newSettings.ShowBookmarksBar;
             IsSavedSearchesVisible = newSettings.ShowSavedSearches;
             SidebarWidth = newSettings.SidebarWidth;
             PreviewWidth = newSettings.PreviewWidth;
@@ -820,6 +825,13 @@ public partial class MainViewModel : ObservableObject
     public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
+        if (!_fileSystemService.DirectoryExists(path)) return;
+
+        var targetCollection = targetParent != null && targetParent.IsFolder
+            ? targetParent.Children
+            : Bookmarks;
+        if (targetCollection.Any(bookmark => string.Equals(bookmark.Path, path, StringComparison.OrdinalIgnoreCase)))
+            return;
 
         var newItem = new BookmarkItem
         {
@@ -831,12 +843,12 @@ public partial class MainViewModel : ObservableObject
 
         if (targetParent != null && targetParent.IsFolder)
         {
-            targetParent.Children.Add(newItem);
+            targetCollection.Add(newItem);
             targetParent.IsExpanded = true;
         }
         else
         {
-            Bookmarks.Add(newItem);
+            targetCollection.Add(newItem);
         }
 
         SelectedBookmark = newItem;
@@ -3352,5 +3364,6 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsTabsVisibleChanged(bool value) { _userSettings.ShowTabs = value; SaveSettings(); }
     partial void OnIsRecentFoldersVisibleChanged(bool value) { _userSettings.ShowRecentFolders = value; SaveSettings(); }
     partial void OnIsBookmarksVisibleChanged(bool value) { _userSettings.ShowBookmarks = value; SaveSettings(); }
+    partial void OnIsBookmarksBarVisibleChanged(bool value) { _userSettings.ShowBookmarksBar = value; SaveSettings(); }
     partial void OnIsSavedSearchesVisibleChanged(bool value) { _userSettings.ShowSavedSearches = value; SaveSettings(); }
 }

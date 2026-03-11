@@ -31,6 +31,7 @@ public sealed class UserSettings
     public bool ShowTabs { get; set; } = true;
     public bool ShowRecentFolders { get; set; } = true;
     public bool ShowBookmarks { get; set; } = true;
+    public bool ShowBookmarksBar { get; set; } = true;
     public bool ShowSavedSearches { get; set; } = true;
     public NameMatchMode FilterMatchMode { get; set; } = NameMatchMode.Contains;
     public NameMatchMode SearchMatchMode { get; set; } = NameMatchMode.Contains;

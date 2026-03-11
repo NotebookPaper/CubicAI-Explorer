@@ -64,6 +64,7 @@ internal static class Program
             Run("archive browser filter", failures, TestArchiveBrowserFilter);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
+            Run("bookmarks bar behavior", failures, () => TestBookmarksBarBehavior(tempRoot));
             Run("bookmark watcher reloads after external replace", failures, () => TestBookmarkWatcherReloadsAfterExternalReplace(tempRoot));
             Run("bookmark drag feedback", failures, () => TestBookmarkDragFeedback(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -2200,6 +2201,7 @@ internal static class Program
         Assert(settings.FilterMatchMode == NameMatchMode.Contains, "Filter mode should default to contains.");
         Assert(settings.SearchMatchMode == NameMatchMode.Contains, "Search mode should default to contains.");
         Assert(!settings.ClearFilterOnFolderChange, "Clear-on-navigation should be off by default.");
+        Assert(settings.ShowBookmarksBar, "Bookmarks bar should be visible by default.");
         Assert(settings.FilterHistory.Count == 0, "Filter history should default to empty.");
         Assert(settings.DetailsColumns.Count == 0, "Column settings should default to empty so the app can supply defaults.");
     }
@@ -2225,6 +2227,7 @@ internal static class Program
                 NewFileTemplatesPath = Path.Combine(root, "templates"),
                 StartInDualPane = true,
                 StartWithPreview = true,
+                ShowBookmarksBar = false,
                 FilterMatchMode = NameMatchMode.Wildcard,
                 SearchMatchMode = NameMatchMode.Exact,
                 ClearFilterOnFolderChange = true,
@@ -2271,6 +2274,7 @@ internal static class Program
                 "Settings round-trip should persist template folder.");
             Assert(reloaded.StartInDualPane, "Settings round-trip should persist dual-pane startup.");
             Assert(reloaded.StartWithPreview, "Settings round-trip should persist preview startup.");
+            Assert(!reloaded.ShowBookmarksBar, "Settings round-trip should persist bookmarks bar visibility.");
             Assert(reloaded.FilterMatchMode == NameMatchMode.Wildcard, "Settings round-trip should persist filter match mode.");
             Assert(reloaded.SearchMatchMode == NameMatchMode.Exact, "Settings round-trip should persist search match mode.");
             Assert(reloaded.ClearFilterOnFolderChange, "Settings round-trip should persist clear-on-navigation.");
@@ -2841,6 +2845,10 @@ internal static class Program
         Assert(main.Contains("BookmarkDragFeedbackText"), "Bookmark drag feedback should be bound.");
         Assert(main.Contains("IsBookmarkRootDropTarget"), "Bookmark root drop styling should be bound.");
         Assert(main.Contains("IsDropTarget"), "Bookmark drop target styling should be bound.");
+        Assert(main.Contains("IsBookmarksBarVisible"), "Bookmarks bar visibility should be bound.");
+        Assert(main.Contains("BookmarksBar_Drop"), "Bookmarks bar drop handler should be wired.");
+        Assert(main.Contains("BookmarkBarButton_Click"), "Bookmarks bar click handler should be wired.");
+        Assert(mainCs.Contains("BookmarkBarRename_Click"), "Bookmarks bar context menu handlers should be implemented.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("ContentSearchTextBox"), "Content search text box should exist.");
@@ -3108,6 +3116,62 @@ internal static class Program
             var vmReloaded = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService2);
             Assert(vmReloaded.Bookmarks.Any(b => string.Equals(b.Path, folder, StringComparison.OrdinalIgnoreCase)),
                 "Bookmarks should persist across MainViewModel instances.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestBookmarksBarBehavior(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "bookmarks_bar");
+        var target = CreateCleanSubdir(folder, "target");
+        var dropped = CreateCleanSubdir(folder, "dropped");
+        var bookmarkFile = Path.Combine(root, "bookmarks_bar.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
+
+        try
+        {
+            using var bookmarkService = new BookmarkService();
+            var settings = new UserSettings { ShowBookmarksBar = false };
+            var vm = new MainViewModel(fs, clipboard, userSettings: settings, bookmarkService: bookmarkService);
+
+            Assert(!vm.IsBookmarksBarVisible, "Bookmarks bar visibility should come from user settings.");
+
+            vm.IsBookmarksBarVisible = true;
+            Assert(vm.CurrentSettings.ShowBookmarksBar, "Changing the bookmarks bar visibility should update user settings.");
+
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
+
+            vm.Bookmarks.Clear();
+            var bookmark = new BookmarkItem
+            {
+                Name = "Target",
+                Path = target,
+                IsFolder = true
+            };
+            vm.Bookmarks.Add(bookmark);
+
+            vm.NavigateBookmarkCommand.Execute(bookmark);
+            Assert(string.Equals(vm.CurrentPanePath, target, StringComparison.OrdinalIgnoreCase),
+                "Bookmark-bar button navigation should route through the active pane.");
+
+            vm.AddBookmarkFromPath(dropped, null);
+            vm.AddBookmarkFromPath(dropped, null);
+
+            Assert(vm.Bookmarks.Count(item => string.Equals(item.Path, dropped, StringComparison.OrdinalIgnoreCase)) == 1,
+                "Bookmark-bar drops should create one top-level bookmark without duplicates.");
+            Assert(File.Exists(bookmarkFile), "Bookmark-bar additions should persist bookmarks.");
+
+            using var bookmarkServiceReloaded = new BookmarkService();
+            var reloaded = new MainViewModel(fs, clipboard, bookmarkService: bookmarkServiceReloaded);
+            Assert(reloaded.Bookmarks.Any(item => string.Equals(item.Path, dropped, StringComparison.OrdinalIgnoreCase)),
+                "Bookmarks added through the bar path should reload from disk.");
         }
         finally
         {

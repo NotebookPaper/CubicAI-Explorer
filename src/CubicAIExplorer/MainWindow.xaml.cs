@@ -560,6 +560,66 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BookmarkBarButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BookmarkItem bookmark })
+        {
+            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private void BookmarkBarOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetBookmarkBarContextBookmark(sender, out var bookmark))
+        {
+            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private void BookmarkBarOpenInNewTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetBookmarkBarContextBookmark(sender, out var bookmark))
+        {
+            ViewModel.OpenBookmarkInNewTabCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private void BookmarkBarRename_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetBookmarkBarContextBookmark(sender, out var bookmark))
+        {
+            ViewModel.RenameBookmarkCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private void BookmarkBarDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetBookmarkBarContextBookmark(sender, out var bookmark))
+        {
+            ViewModel.RemoveBookmarkCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private static bool TryGetBookmarkBarContextBookmark(object sender, out BookmarkItem? bookmark)
+    {
+        bookmark = (sender as FrameworkElement)?.DataContext as BookmarkItem;
+        if (bookmark != null)
+            return true;
+
+        if (sender is MenuItem { Parent: ContextMenu { PlacementTarget: FrameworkElement target } })
+        {
+            bookmark = target.DataContext as BookmarkItem;
+            return bookmark != null;
+        }
+
+        return false;
+    }
+
     private void BookmarkTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _bookmarkDragStart = e.GetPosition(BookmarkTree);
@@ -2417,6 +2477,67 @@ public partial class MainWindow : Window
     private async void RightPane_Drop(object sender, DragEventArgs e)
     {
         await HandleDropAsync(e, ViewModel.RightPaneTab?.FileList);
+    }
+
+    private void BookmarksBar_DragEnter(object sender, DragEventArgs e)
+    {
+        UpdateBookmarksBarDragState(e);
+    }
+
+    private void BookmarksBar_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateBookmarksBarDragState(e);
+        e.Handled = true;
+    }
+
+    private void BookmarksBar_DragLeave(object sender, DragEventArgs e)
+    {
+        SetBookmarksBarDropHighlight(false);
+    }
+
+    private void BookmarksBar_Drop(object sender, DragEventArgs e)
+    {
+        var droppedDirectories = GetDroppedDirectories(e).ToList();
+        foreach (var path in droppedDirectories)
+            ViewModel.AddBookmarkFromPath(path, null);
+
+        SetBookmarksBarDropHighlight(false);
+        e.Effects = droppedDirectories.Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void UpdateBookmarksBarDragState(DragEventArgs e)
+    {
+        var hasDroppedDirectories = GetDroppedDirectories(e).Any();
+        e.Effects = hasDroppedDirectories ? DragDropEffects.Copy : DragDropEffects.None;
+        SetBookmarksBarDropHighlight(hasDroppedDirectories);
+    }
+
+    private IEnumerable<string> GetDroppedDirectories(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+            return [];
+
+        var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
+        if (droppedPaths == null || droppedPaths.Length == 0)
+            return [];
+
+        return droppedPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path) && ViewModel.FileSystemService.DirectoryExists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void SetBookmarksBarDropHighlight(bool isActive)
+    {
+        if (BookmarksBarDropZone == null)
+            return;
+
+        BookmarksBarDropZone.BorderBrush = isActive
+            ? new SolidColorBrush(Color.FromRgb(0xD3, 0x9B, 0x1A))
+            : (Brush)FindResource("ClassicPaneBorderBrush");
+        BookmarksBarDropZone.Background = isActive
+            ? new SolidColorBrush(Color.FromRgb(0xFF, 0xF8, 0xDD))
+            : new SolidColorBrush(Color.FromRgb(0xF5, 0xF6, 0xF8));
     }
 
     private async Task HandleDropAsync(DragEventArgs e, FileListViewModel? fileList)
