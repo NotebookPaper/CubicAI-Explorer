@@ -2,7 +2,7 @@
 
 ## Status
 
-COMPLETED
+COMPLETE
 
 ## Summary
 
