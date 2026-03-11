@@ -11,7 +11,16 @@ public static class ShellContextMenuHelper
     private const uint TPM_RIGHTBUTTON = 0x0002;
 
     private const uint CMF_NORMAL = 0x00000000;
-    private const uint GCS_VERBW = 0x00000004;
+    
+    private const uint WM_INITMENUPOPUP = 0x0117;
+    private const uint WM_DRAWITEM = 0x002B;
+    private const uint WM_MEASUREITEM = 0x002C;
+    private const uint WM_MENUCHAR = 0x0120;
+    private const uint WM_MENUSELECT = 0x011F;
+
+    private static IContextMenu? _currentContextMenu;
+    private static IContextMenu2? _currentContextMenu2;
+    private static IContextMenu3? _currentContextMenu3;
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHGetDesktopFolder(out IShellFolder ppshf);
@@ -25,6 +34,18 @@ public static class ShellContextMenuHelper
     [DllImport("user32.dll")]
     private static extern int TrackPopupMenuEx(IntPtr hMenu, uint uFlags, int x, int y, IntPtr hWnd, IntPtr lpcpm);
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private const int GWLP_WNDPROC = -4;
+    private static IntPtr _oldWndProc = IntPtr.Zero;
+    private static WndProcDelegate? _wndProcDelegate;
+
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
     public static bool ShowContextMenu(IntPtr hWnd, List<string> paths, int x, int y)
     {
         if (paths.Count == 0) return false;
@@ -32,7 +53,6 @@ public static class ShellContextMenuHelper
         IShellFolder? desktop = null;
         IShellFolder? parentFolder = null;
         IntPtr pidlParent = IntPtr.Zero;
-        IntPtr pidlFull = IntPtr.Zero;
         IntPtr[]? pidls = null;
         IContextMenu? contextMenu = null;
         IntPtr hMenu = IntPtr.Zero;
@@ -41,15 +61,12 @@ public static class ShellContextMenuHelper
         {
             if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
 
-            // For simplicity in this implementation, we'll handle the first item's parent.
-            // In a full implementation, we'd need to ensure all items share the same parent.
             string firstPath = paths[0];
             string? parentPath = Path.GetDirectoryName(firstPath);
             string[] names = paths.Select(Path.GetFileName).Where(n => n != null).Cast<string>().ToArray();
 
             if (string.IsNullOrEmpty(parentPath))
             {
-                // Desktop or root
                 parentFolder = desktop;
             }
             else
@@ -73,7 +90,6 @@ public static class ShellContextMenuHelper
                 uint pdwAttributes = 0;
                 if (parentFolder.ParseDisplayName(IntPtr.Zero, IntPtr.Zero, names[i], ref pchEaten, out pidls[i], ref pdwAttributes) != 0)
                 {
-                    // Clean up already allocated pidls
                     for (int j = 0; j < i; j++) Marshal.FreeCoTaskMem(pidls[j]);
                     return false;
                 }
@@ -84,6 +100,9 @@ public static class ShellContextMenuHelper
                 return false;
 
             contextMenu = (IContextMenu)pvContextMenu;
+            _currentContextMenu = contextMenu;
+            _currentContextMenu2 = contextMenu as IContextMenu2;
+            _currentContextMenu3 = contextMenu as IContextMenu3;
 
             hMenu = CreatePopupMenu();
             if (hMenu == IntPtr.Zero) return false;
@@ -91,7 +110,19 @@ public static class ShellContextMenuHelper
             if (contextMenu.QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL) < 0)
                 return false;
 
+            // Subclass the window to handle context menu messages
+            _wndProcDelegate = new WndProcDelegate(HookWndProc);
+            _oldWndProc = SetWindowLongPtr(hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
+
             uint command = (uint)TrackPopupMenuEx(hMenu, TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, hWnd, IntPtr.Zero);
+
+            // Un-subclass
+            if (_oldWndProc != IntPtr.Zero)
+            {
+                SetWindowLongPtr(hWnd, GWLP_WNDPROC, _oldWndProc);
+                _oldWndProc = IntPtr.Zero;
+                _wndProcDelegate = null;
+            }
 
             if (command > 0)
             {
@@ -112,6 +143,10 @@ public static class ShellContextMenuHelper
         }
         finally
         {
+            _currentContextMenu = null;
+            _currentContextMenu2 = null;
+            _currentContextMenu3 = null;
+
             if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
             if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
             if (pidls != null)
@@ -122,6 +157,22 @@ public static class ShellContextMenuHelper
             if (parentFolder != null && parentFolder != desktop) Marshal.ReleaseComObject(parentFolder);
             if (desktop != null) Marshal.ReleaseComObject(desktop);
         }
+    }
+
+    private static IntPtr HookWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (_currentContextMenu3 != null)
+        {
+            if (_currentContextMenu3.HandleMenuMsg2(msg, wParam, lParam, out var lResult) == 0)
+                return lResult;
+        }
+        else if (_currentContextMenu2 != null)
+        {
+            if (_currentContextMenu2.HandleMenuMsg(msg, wParam, lParam) == 0)
+                return IntPtr.Zero;
+        }
+
+        return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
     }
 
     [ComImport]
@@ -162,6 +213,24 @@ public static class ShellContextMenuHelper
         int InvokeCommand(ref CMINVOKECOMMANDINFOEX pici);
         [PreserveSig]
         int GetCommandString(UIntPtr idCmd, uint uType, IntPtr pReserved, [MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, uint cchMax);
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("000214f4-0000-0000-c000-000000000046")]
+    private interface IContextMenu2 : IContextMenu
+    {
+        [PreserveSig]
+        int HandleMenuMsg(uint uMsg, IntPtr wParam, IntPtr lParam);
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("bcfce0a0-182d-11d1-b350-00a0c9055d8e")]
+    private interface IContextMenu3 : IContextMenu2
+    {
+        [PreserveSig]
+        int HandleMenuMsg2(uint uMsg, IntPtr wParam, IntPtr lParam, out IntPtr plResult);
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

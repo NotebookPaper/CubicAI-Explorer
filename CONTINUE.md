@@ -19,7 +19,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - Windows Shell context menu integration:
   - Added `UseShellContextMenu` property to `UserSettings` with a preference toggle in the UI.
-  - Implemented `ShellContextMenuHelper` to host the native `IContextMenu` for file items and directories.
+  - Implemented `ShellContextMenuHelper` with support for `IContextMenu`, `IContextMenu2`, and `IContextMenu3` to handle submenus (e.g., "Send To", "Open With") correctly via window subclassing.
+  - Added shell context menu support to `FileListView`, `FolderTree`, and `BookmarkTree` (for filesystem bookmarks).
   - Updated `MainWindow` to intercept context menu events and show the native menu when enabled.
 - Multi-select Explorer reveal:
   - Updated `Open in Explorer` command to use a single shell API call for highlighting all selected items.
@@ -84,7 +85,6 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 1. Continue deeper shell integration.
    - review shell-context and remaining Explorer interop edge cases beyond reveal/select behavior
    - decide whether any remaining Explorer actions should move off `explorer.exe` and onto shell-native APIs
-   - explore showing the REAL Windows shell context menu in `FileListView`
 2. UX polish and advanced operations:
    - add broader preview type support (e.g., more image formats, syntax highlighting for text)
    - improve bookmark drag/drop feedback and visual cues

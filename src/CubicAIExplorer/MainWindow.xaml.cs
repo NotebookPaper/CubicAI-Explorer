@@ -1,3 +1,4 @@
+using System.IO;
 using System.ComponentModel;
 using System.Collections.Specialized;
 using System.Runtime.InteropServices;
@@ -775,6 +776,40 @@ public partial class MainWindow : Window
         ViewModel.ActivateLeftPane();
     }
 
+    private void FolderTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        {
+            if (FolderTree.SelectedItem is FolderTreeNodeViewModel node && !string.IsNullOrWhiteSpace(node.FullPath))
+            {
+                if (ShowShellContextMenuForPaths(FolderTree, new List<string> { node.FullPath }))
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    private void BookmarkTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        {
+            if (BookmarkTree.SelectedItem is BookmarkItem item && !string.IsNullOrWhiteSpace(item.Path))
+            {
+                // Only use shell menu if it's a real filesystem path
+                if (Path.IsPathRooted(item.Path) && (Directory.Exists(item.Path) || File.Exists(item.Path)))
+                {
+                    if (ShowShellContextMenuForPaths(BookmarkTree, new List<string> { item.Path }))
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateLeftPane();
@@ -823,18 +858,17 @@ public partial class MainWindow : Window
                 ? [fileList.CurrentPath]
                 : new List<string>();
 
+        return ShowShellContextMenuForPaths(listView, paths);
+    }
+
+    private bool ShowShellContextMenuForPaths(FrameworkElement element, List<string> paths)
+    {
         if (paths.Count == 0) return false;
 
         try
         {
-            var pOrigin = listView.PointToScreen(new Point(0, 0));
             var cursor = GetCursorPos();
             
-            // If the context menu was triggered by keyboard (Apps key or Shift+F10), 
-            // the cursor might be elsewhere. 
-            // However, ContextMenuEventArgs doesn't easily tell us if it was keyboard or mouse.
-            // For now, cursor pos is the best we have for a "real" feel.
-
             return ShellContextMenuHelper.ShowContextMenu(
                 new WindowInteropHelper(this).Handle,
                 paths,

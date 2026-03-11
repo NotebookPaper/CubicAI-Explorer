@@ -518,6 +518,7 @@
                                   MouseMove="BookmarkTree_MouseMove"
                                   DragOver="BookmarkTree_DragOver"
                                   Drop="BookmarkTree_Drop"
+                                  ContextMenuOpening="BookmarkTree_ContextMenuOpening"
                                   TabIndex="30">
                             <TreeView.Resources>
                                 <Storyboard x:Key="FlashNodeStoryboard">
@@ -654,6 +655,7 @@
                                   AllowDrop="True"
                                   DragOver="FolderTree_DragOver"
                                   Drop="FolderTree_Drop"
+                                  ContextMenuOpening="FolderTree_ContextMenuOpening"
                                   TabIndex="40">
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
