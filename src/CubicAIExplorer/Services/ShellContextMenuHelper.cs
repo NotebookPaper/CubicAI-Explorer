@@ -46,6 +46,92 @@ public static class ShellContextMenuHelper
 
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    public static bool ShowBackgroundContextMenu(IntPtr hWnd, string folderPath, int x, int y)
+    {
+        if (string.IsNullOrEmpty(folderPath)) return false;
+
+        IShellFolder? desktop = null;
+        IShellFolder? folder = null;
+        IntPtr pidlFolder = IntPtr.Zero;
+        IContextMenu? contextMenu = null;
+        IntPtr hMenu = IntPtr.Zero;
+
+        try
+        {
+            if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
+
+            uint pchEaten = 0;
+            uint pdwAttributes = 0;
+            if (desktop.ParseDisplayName(IntPtr.Zero, IntPtr.Zero, folderPath, ref pchEaten, out pidlFolder, ref pdwAttributes) != 0)
+                return false;
+
+            Guid guidIShellFolder = typeof(IShellFolder).GUID;
+            if (desktop.BindToObject(pidlFolder, IntPtr.Zero, ref guidIShellFolder, out var pv) != 0)
+                return false;
+
+            folder = (IShellFolder)pv;
+
+            Guid guidIContextMenu = typeof(IContextMenu).GUID;
+            // CreateViewObject with IID_IContextMenu on a folder gets the background context menu
+            if (folder.CreateViewObject(hWnd, ref guidIContextMenu, out var pvContextMenu) != 0)
+                return false;
+
+            contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(pvContextMenu);
+            _currentContextMenu = contextMenu;
+            _currentContextMenu2 = contextMenu as IContextMenu2;
+            _currentContextMenu3 = contextMenu as IContextMenu3;
+
+            hMenu = CreatePopupMenu();
+            if (hMenu == IntPtr.Zero) return false;
+
+            if (contextMenu.QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL) < 0)
+                return false;
+
+            // Subclass the window to handle context menu messages
+            _wndProcDelegate = new WndProcDelegate(HookWndProc);
+            _oldWndProc = SetWindowLongPtr(hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
+
+            uint command = (uint)TrackPopupMenuEx(hMenu, TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, hWnd, IntPtr.Zero);
+
+            // Un-subclass
+            if (_oldWndProc != IntPtr.Zero)
+            {
+                SetWindowLongPtr(hWnd, GWLP_WNDPROC, _oldWndProc);
+                _oldWndProc = IntPtr.Zero;
+                _wndProcDelegate = null;
+            }
+
+            if (command > 0)
+            {
+                CMINVOKECOMMANDINFOEX invoke = new CMINVOKECOMMANDINFOEX();
+                invoke.cbSize = (uint)Marshal.SizeOf(invoke);
+                invoke.hwnd = hWnd;
+                invoke.lpVerb = (IntPtr)(command - 1);
+                invoke.nShow = 1; // SW_SHOWNORMAL
+
+                contextMenu.InvokeCommand(ref invoke);
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            _currentContextMenu = null;
+            _currentContextMenu2 = null;
+            _currentContextMenu3 = null;
+
+            if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
+            if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
+            if (pidlFolder != IntPtr.Zero) Marshal.FreeCoTaskMem(pidlFolder);
+            if (folder != null && folder != desktop) Marshal.ReleaseComObject(folder);
+            if (desktop != null) Marshal.ReleaseComObject(desktop);
+        }
+    }
+
     public static bool ShowContextMenu(IntPtr hWnd, List<string> paths, int x, int y)
     {
         if (paths.Count == 0) return false;

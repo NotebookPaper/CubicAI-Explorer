@@ -816,7 +816,7 @@ public partial class MainWindow : Window
 
         if (ViewModel.CurrentSettings.UseShellContextMenu)
         {
-            if (ShowShellContextMenu(FileListView, ViewModel.ActiveTab?.FileList))
+            if (ShowShellContextMenu(FileListView, ViewModel.ActiveTab?.FileList, e))
             {
                 e.Handled = true;
                 return;
@@ -835,7 +835,7 @@ public partial class MainWindow : Window
 
         if (ViewModel.CurrentSettings.UseShellContextMenu)
         {
-            if (ShowShellContextMenu(RightPaneListView, ViewModel.RightPaneTab?.FileList))
+            if (ShowShellContextMenu(RightPaneListView, ViewModel.RightPaneTab?.FileList, e))
             {
                 e.Handled = true;
                 return;
@@ -848,9 +848,39 @@ public partial class MainWindow : Window
             RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
     }
 
-    private bool ShowShellContextMenu(ListView listView, FileListViewModel? fileList)
+    private bool ShowShellContextMenu(ListView listView, FileListViewModel? fileList, ContextMenuEventArgs e)
     {
         if (fileList == null) return false;
+
+        // Determine if an item was clicked or if it's background
+        bool isBackground = true;
+        if (e.OriginalSource is DependencyObject dep)
+        {
+            var item = FindVisualParent<ListViewItem>(dep);
+            if (item != null)
+            {
+                isBackground = false;
+            }
+        }
+
+        if (isBackground)
+        {
+            if (string.IsNullOrWhiteSpace(fileList.CurrentPath)) return false;
+
+            try
+            {
+                var cursor = GetCursorPos();
+                return ShellContextMenuHelper.ShowBackgroundContextMenu(
+                    new WindowInteropHelper(this).Handle,
+                    fileList.CurrentPath,
+                    cursor.X,
+                    cursor.Y);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         var paths = fileList.SelectedItems.Count > 0
             ? fileList.SelectedItems.Select(static i => i.FullPath).ToList()

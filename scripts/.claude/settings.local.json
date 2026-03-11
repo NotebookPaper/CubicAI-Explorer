@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which node:*)",
+      "Bash(where.exe npm:*)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" \"/c/Program Files/nodejs/node_modules/npm/bin/npm-cli.js\" install -g @google/gemini-cli)",
+      "Bash(where.exe gemini:*)"
+    ]
+  }
+}

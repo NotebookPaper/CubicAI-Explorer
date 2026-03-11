@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(svn:*)",
+      "Bash(git:*)",
+      "WebSearch",
+      "WebFetch(domain:sourceforge.net)",
+      "Bash(grep:*)",
+      "Bash(dotnet:*)",
+      "Bash(winget install:*)",
+      "Bash(export:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(gh auth:*)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/ralph-loop-gemini.ps1 1 2>&1 | head -30)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/ralph-loop-gemini.ps1 -- --help 2>&1 | head -30)",
+      "Bash(gemini --help 2>&1)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/ralph-loop-gemini.ps1 1 2>&1 | head -40)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/ralph-loop-gemini.ps1 -Help 2>&1)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"Set-Location 'C:\\\\dev\\\\CubicAI_rewrite'; .\\\\scripts\\\\ralph-loop-gemini.ps1 1\" 2>&1)"
+    ]
+  }
+}
