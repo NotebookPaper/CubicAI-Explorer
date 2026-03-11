@@ -112,6 +112,7 @@ internal static class Program
             Run("run as administrator command", failures, () => TestRunAsAdministratorCommand(tempRoot));
             Run("undo/redo after duplicate", failures, () => TestUndoRedoAfterDuplicate(tempRoot));
             Run("undo/redo after new file and link creation", failures, () => TestUndoRedoAfterNewFileAndLink(tempRoot));
+            Run("headless symbolic link failure surfaces to caller", failures, () => TestHeadlessSymbolicLinkFailureSurfacesToCaller(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
             Run("main window xaml loads", failures, TestMainWindowXamlLoads);
@@ -2848,6 +2849,32 @@ internal static class Program
         }
     }
 
+    private static void TestHeadlessSymbolicLinkFailureSurfacesToCaller(string root)
+    {
+        var fs = new ThrowingSymbolicLinkFileSystemService(new FileSystemService(), new UnauthorizedAccessException("Symlink privilege missing."));
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "headless_symlink_failure");
+        var targetFile = Path.Combine(folder, "target.txt");
+        File.WriteAllText(targetFile, "target");
+
+        vm.LoadDirectory(folder);
+
+        var threw = false;
+        try
+        {
+            vm.CreateSymbolicLinkWithHistory("link.txt", targetFile);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            threw = true;
+            Assert(ex.Message.Contains("Symlink privilege missing.", StringComparison.Ordinal), "The original symbolic-link failure should bubble to the caller.");
+        }
+
+        Assert(threw, "Headless symbolic-link failures should surface to the caller instead of showing modal UI.");
+        Assert(!vm.CanUndo, "Failed symbolic-link creation should not add undo history.");
+    }
+
     private static void TestBookmarkWatcherReloadsAfterExternalReplace(string root)
     {
         var bookmarkPath = Path.Combine(root, "bookmarks_watcher.json");
@@ -3204,6 +3231,63 @@ internal static class Program
         public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
             => _inner.CreateFileFromTemplate(parentPath, templatePath, fileName);
         public void CreateSymbolicLink(string linkPath, string targetPath) => _inner.CreateSymbolicLink(linkPath, targetPath);
+        public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
+        public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);
+        public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
+            => _inner.ExtractArchive(archivePath, destinationDirectory, operationContext);
+        public void ExtractArchiveEntries(
+            string archivePath,
+            string destinationDirectory,
+            IEnumerable<string> entryPaths,
+            IFileOperationContext? operationContext = null) => _inner.ExtractArchiveEntries(archivePath, destinationDirectory, entryPaths, operationContext);
+    }
+
+    private sealed class ThrowingSymbolicLinkFileSystemService : IFileSystemService
+    {
+        private readonly IFileSystemService _inner;
+        private readonly Exception _exception;
+
+        public ThrowingSymbolicLinkFileSystemService(IFileSystemService inner, Exception exception)
+        {
+            _inner = inner;
+            _exception = exception;
+        }
+
+        public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
+        public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
+        public IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false) => _inner.GetSubDirectories(path, showHidden);
+        public IReadOnlyList<string> GetFiles(string path, bool showHidden = false) => _inner.GetFiles(path, showHidden);
+        public string GetDisplayName(string path) => _inner.GetDisplayName(path);
+        public string? ResolveDirectoryPath(string path) => _inner.ResolveDirectoryPath(path);
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+        public bool FileExists(string path) => _inner.FileExists(path);
+        public string GetParentPath(string path) => _inner.GetParentPath(path);
+        public void OpenFile(string path) => _inner.OpenFile(path);
+        public void RevealInExplorer(string path) => _inner.RevealInExplorer(path);
+        public void RevealInExplorer(IEnumerable<string> paths) => _inner.RevealInExplorer(paths);
+        public void OpenInDefaultApp(string path) => _inner.OpenInDefaultApp(path);
+        public void ExecuteShellVerb(string path, string verb) => _inner.ExecuteShellVerb(path, verb);
+        public void EmptyRecycleBin() => _inner.EmptyRecycleBin();
+        public void ShowNativeProperties(string path) => _inner.ShowNativeProperties(path);
+        public void ShowNativeProperties(IEnumerable<string> paths) => _inner.ShowNativeProperties(paths);
+        public IReadOnlyList<FileTransferResult> CopyFiles(
+            IEnumerable<string> sourcePaths,
+            string destinationDirectory,
+            FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+            IFileOperationContext? operationContext = null) => _inner.CopyFiles(sourcePaths, destinationDirectory, collisionResolution, operationContext);
+        public IReadOnlyList<FileTransferResult> MoveFiles(
+            IEnumerable<string> sourcePaths,
+            string destinationDirectory,
+            FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+            IFileOperationContext? operationContext = null) => _inner.MoveFiles(sourcePaths, destinationDirectory, collisionResolution, operationContext);
+        public void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false, IFileOperationContext? operationContext = null)
+            => _inner.DeleteFiles(paths, permanentDelete, operationContext);
+        public string RenameFile(string path, string newName) => _inner.RenameFile(path, newName);
+        public string CreateFolder(string parentPath, string folderName) => _inner.CreateFolder(parentPath, folderName);
+        public string CreateFile(string parentPath, string fileName) => _inner.CreateFile(parentPath, fileName);
+        public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
+            => _inner.CreateFileFromTemplate(parentPath, templatePath, fileName);
+        public void CreateSymbolicLink(string linkPath, string targetPath) => throw _exception;
         public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
         public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);
         public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)

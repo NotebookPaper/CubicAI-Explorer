@@ -222,11 +222,19 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Could not create symbolic link: {ex.Message}",
-                "Symbolic Link Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            if (Application.Current?.MainWindow != null)
+            {
+                MessageBox.Show(
+                    $"Could not create symbolic link: {ex.Message}",
+                    "Symbolic Link Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            else
+            {
+                // Re-throw when running headless (e.g. smoke tests) so callers can catch
+                throw;
+            }
         }
     }
 
