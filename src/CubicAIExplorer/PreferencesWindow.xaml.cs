@@ -18,7 +18,8 @@ public partial class PreferencesWindow : Window
             ShowHiddenFiles = settings.ShowHiddenFiles,
             StartupFolder = settings.StartupFolder,
             StartInDualPane = settings.StartInDualPane,
-            StartWithPreview = settings.StartWithPreview
+            StartWithPreview = settings.StartWithPreview,
+            UseShellContextMenu = settings.UseShellContextMenu
         };
 
         DataContext = Settings;

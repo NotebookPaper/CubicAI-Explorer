@@ -667,23 +667,20 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
 
-        string? backupPath = null;
         if (collisionResolution == FileTransferCollisionResolution.Replace && File.Exists(targetPath))
         {
-            backupPath = CreateBackup(targetPath);
-            if (backupPath == null)
-                return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, "Could not create backup for replace.");
+            return PerformStageAndRename(source, targetPath, isDirectory: false, 
+                (src, dst) => File.Copy(src, dst, overwrite: false),
+                DeleteBackup);
         }
 
         try
         {
             File.Copy(source, targetPath, overwrite: false);
-            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false);
         }
         catch (Exception ex)
         {
-            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -694,23 +691,20 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
 
-        string? backupPath = null;
         if (collisionResolution == FileTransferCollisionResolution.Replace && Directory.Exists(targetPath))
         {
-            backupPath = CreateBackup(targetPath);
-            if (backupPath == null)
-                return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, "Could not create backup for replace.");
+            return PerformStageAndRename(source, targetPath, isDirectory: true,
+                CopyDirectoryRecursive,
+                DeleteBackup);
         }
 
         try
         {
             CopyDirectoryRecursive(source, targetPath);
-            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true);
         }
         catch (Exception ex)
         {
-            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -721,23 +715,20 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: false, FileTransferStatus.Skipped);
 
-        string? backupPath = null;
         if (collisionResolution == FileTransferCollisionResolution.Replace && File.Exists(targetPath))
         {
-            backupPath = CreateBackup(targetPath);
-            if (backupPath == null)
-                return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, "Could not create backup for replace.");
+            return PerformStageAndRename(source, targetPath, isDirectory: false,
+                (src, dst) => File.Move(src, dst, overwrite: false),
+                DeleteBackup);
         }
 
         try
         {
             File.Move(source, targetPath, overwrite: false);
-            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false);
         }
         catch (Exception ex)
         {
-            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: false, FileTransferStatus.Failed, ex.Message);
         }
     }
@@ -748,24 +739,70 @@ public sealed class FileSystemService : IFileSystemService
         if (skipped)
             return new FileTransferResult(source, string.Empty, IsDirectory: true, FileTransferStatus.Skipped);
 
-        string? backupPath = null;
         if (collisionResolution == FileTransferCollisionResolution.Replace && Directory.Exists(targetPath))
         {
-            backupPath = CreateBackup(targetPath);
-            if (backupPath == null)
-                return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, "Could not create backup for replace.");
+            return PerformStageAndRename(source, targetPath, isDirectory: true,
+                MoveDirectory,
+                DeleteBackup);
         }
 
         try
         {
             MoveDirectory(source, targetPath);
-            if (backupPath != null) DeleteBackup(backupPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true);
         }
         catch (Exception ex)
         {
-            if (backupPath != null) RestoreBackup(backupPath, targetPath);
             return new FileTransferResult(source, targetPath, IsDirectory: true, FileTransferStatus.Failed, ex.Message);
+        }
+    }
+
+    private FileTransferResult PerformStageAndRename(
+        string source,
+        string targetPath,
+        bool isDirectory,
+        Action<string, string> transferAction,
+        Action<string> cleanupAction)
+    {
+        var tempPath = targetPath + ".tmp_" + Guid.NewGuid().ToString("N")[..8];
+        try
+        {
+            transferAction(source, tempPath);
+
+            string? backupPath = CreateBackup(targetPath);
+            if (backupPath == null)
+            {
+                cleanupAction(tempPath);
+                return new FileTransferResult(source, targetPath, isDirectory, FileTransferStatus.Failed, "Could not create backup for replace.");
+            }
+
+            try
+            {
+                if (isDirectory)
+                {
+                    if (Directory.Exists(targetPath)) Directory.Delete(targetPath, recursive: true); // Should be gone but just in case
+                    Directory.Move(tempPath, targetPath);
+                }
+                else
+                {
+                    if (File.Exists(targetPath)) File.Delete(targetPath); // Should be gone but just in case
+                    File.Move(tempPath, targetPath);
+                }
+
+                DeleteBackup(backupPath);
+                return new FileTransferResult(source, targetPath, isDirectory);
+            }
+            catch (Exception ex)
+            {
+                RestoreBackup(backupPath, targetPath);
+                cleanupAction(tempPath);
+                return new FileTransferResult(source, targetPath, isDirectory, FileTransferStatus.Failed, "Final swap failed: " + ex.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            cleanupAction(tempPath);
+            return new FileTransferResult(source, targetPath, isDirectory, FileTransferStatus.Failed, ex.Message);
         }
     }
 

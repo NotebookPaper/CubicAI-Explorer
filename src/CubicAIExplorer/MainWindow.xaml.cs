@@ -1,12 +1,15 @@
 using System.ComponentModel;
 using System.Collections.Specialized;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using CubicAIExplorer.Models;
+using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
 using CubicAIExplorer.Views;
 
@@ -775,6 +778,16 @@ public partial class MainWindow : Window
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateLeftPane();
+
+        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        {
+            if (ShowShellContextMenu(FileListView, ViewModel.ActiveTab?.FileList))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
         ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
             OpenMenuItem, BrowseArchiveMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
             DeleteMenuItem, RenameMenuItem, NewFolderMenuItem, RefreshMenuItem,
@@ -784,10 +797,71 @@ public partial class MainWindow : Window
     private void RightPane_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         ViewModel.ActivateRightPane();
+
+        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        {
+            if (ShowShellContextMenu(RightPaneListView, ViewModel.RightPaneTab?.FileList))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
         ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
             RightOpenMenuItem, RightBrowseArchiveMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
             RightDeleteMenuItem, RightRenameMenuItem, RightNewFolderMenuItem, RightRefreshMenuItem,
             RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
+    }
+
+    private bool ShowShellContextMenu(ListView listView, FileListViewModel? fileList)
+    {
+        if (fileList == null) return false;
+
+        var paths = fileList.SelectedItems.Count > 0
+            ? fileList.SelectedItems.Select(static i => i.FullPath).ToList()
+            : !string.IsNullOrWhiteSpace(fileList.CurrentPath)
+                ? [fileList.CurrentPath]
+                : new List<string>();
+
+        if (paths.Count == 0) return false;
+
+        try
+        {
+            var pOrigin = listView.PointToScreen(new Point(0, 0));
+            var cursor = GetCursorPos();
+            
+            // If the context menu was triggered by keyboard (Apps key or Shift+F10), 
+            // the cursor might be elsewhere. 
+            // However, ContextMenuEventArgs doesn't easily tell us if it was keyboard or mouse.
+            // For now, cursor pos is the best we have for a "real" feel.
+
+            return ShellContextMenuHelper.ShowContextMenu(
+                new WindowInteropHelper(this).Handle,
+                paths,
+                cursor.X,
+                cursor.Y);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    private static POINT GetCursorPos()
+    {
+        GetCursorPos(out var lpPoint);
+        return lpPoint;
     }
 
     private void ConfigureContextMenu(

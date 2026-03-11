@@ -3,7 +3,7 @@
 > Last updated: 2026-03-11
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: shell-aware display names, known-folder alias navigation, shell-backed type metadata, and Explorer reveal-with-selection behavior including multi-select Explorer selection are now implemented and verified; next roadmap work remains deeper shell context/interoperability follow-up.
+> Status: Windows Shell context menu integration and multi-select Explorer reveal are now implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -11,13 +11,20 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes again.
-- Specs `001-named-session-manager.md` and `002-richer-filter-search-model.md` are complete in this checkout.
-- The next completed roadmap slice after those specs is crowded-tab overflow handling for the main tab strip.
+- Specs `001-named-session-manager.md`, `002-richer-filter-search-model.md`, and `003-safer-file-operations.md` are complete in this checkout.
+- The latest roadmap slice after those specs is REAL Windows Shell context menu integration for file lists.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
 
-- Named session manager:
+- Windows Shell context menu integration:
+  - Added `UseShellContextMenu` property to `UserSettings` with a preference toggle in the UI.
+  - Implemented `ShellContextMenuHelper` to host the native `IContextMenu` for file items and directories.
+  - Updated `MainWindow` to intercept context menu events and show the native menu when enabled.
+- Multi-select Explorer reveal:
+  - Updated `Open in Explorer` command to use a single shell API call for highlighting all selected items.
+  - Smoke coverage now verifies multi-selection reveal logic.
+- Crowded-tab affordances:
   - added persisted `NamedSession` records inside `UserSettings`
   - added File > Sessions UI for save-as, update, load, delete, and startup-session selection
   - startup now restores a configured named session before falling back to generic last-state restore
@@ -136,4 +143,3 @@ Verification run on the updated checkout on 2026-03-11:
 - Avoid keyed `DataTemplate` plus `DataType` combinations in `App.xaml`.
 - Do not enable WinForms just to get a folder picker.
 - Keep all path handling routed through `FileSystemService` sanitization helpers.
-- `FileTransferCollisionResolution.Replace` is currently unsafe because it deletes the destination before the incoming transfer succeeds; do not ship that behavior unchanged.

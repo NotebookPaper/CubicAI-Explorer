@@ -1985,6 +1985,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.StartupFolder = newSettings.StartupFolder;
         _userSettings.StartInDualPane = newSettings.StartInDualPane;
         _userSettings.StartWithPreview = newSettings.StartWithPreview;
+        _userSettings.UseShellContextMenu = newSettings.UseShellContextMenu;
         _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
         _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
         _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;

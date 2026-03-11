@@ -46,17 +46,22 @@
                   Content="Start with preview panel open" Margin="0,0,0,8"
                   IsChecked="{Binding StartWithPreview}" />
 
+        <!-- Shell Context Menu -->
+        <CheckBox x:Name="ShellContextMenuCheck" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                  Content="Use Windows Shell context menu" Margin="0,0,0,8"
+                  IsChecked="{Binding UseShellContextMenu}" />
+
         <!-- Startup Folder -->
-        <TextBlock Grid.Row="4" Grid.Column="0" Text="Startup folder:"
+        <TextBlock Grid.Row="5" Grid.Column="0" Text="Startup folder:"
                    VerticalAlignment="Center" Margin="0,0,12,8" />
-        <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,8">
+        <DockPanel Grid.Row="5" Grid.Column="1" Margin="0,0,0,8">
             <Button DockPanel.Dock="Right" Content="Browse..." Padding="8,2"
                     Margin="4,0,0,0" Click="BrowseFolder_Click" />
             <TextBox x:Name="StartupFolderBox" Text="{Binding StartupFolder, UpdateSourceTrigger=PropertyChanged}"
                      VerticalContentAlignment="Center" Padding="4,2" />
         </DockPanel>
 
-        <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+        <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
                    Text="Leave startup folder empty to use your user profile."
                    Foreground="Gray" FontSize="10" Margin="0,0,0,12" />
 

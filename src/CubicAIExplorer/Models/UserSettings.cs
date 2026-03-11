@@ -8,6 +8,7 @@ public sealed class UserSettings
     public string StartupFolder { get; set; } = string.Empty;
     public bool StartInDualPane { get; set; }
     public bool StartWithPreview { get; set; }
+    public bool UseShellContextMenu { get; set; } = true;
 
     // UI Visibility
     public bool ShowToolbar { get; set; } = true;
