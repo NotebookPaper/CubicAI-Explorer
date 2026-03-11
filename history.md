@@ -12,3 +12,4 @@
 - 2026-03-11: Completed multi-select Explorer reveal so Open in Explorer uses the Windows shell selection API to highlight every selected item from the current folder.
 - 2026-03-11: Completed spec 003 safer file operations with stage-and-rename flow for file/directory replacement and atomic-like restoration on failure.
 - 2026-03-11: Completed REAL Windows Shell context menu integration for file lists, including a preference toggle and native interop for IContextMenu.
+- 2026-03-11: Unified RevealInExplorer with native shell APIs (SHOpenFolderAndSelectItems) and added ShowNativeProperties integration using ShellExecuteEx.

@@ -3,7 +3,7 @@
 > Last updated: 2026-03-11
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: Windows Shell context menu integration and multi-select Explorer reveal are now implemented and verified.
+> Status: Windows Shell context menu integration, multi-select Explorer reveal, and native properties dialog support are now implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -22,6 +22,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Implemented `ShellContextMenuHelper` with support for `IContextMenu`, `IContextMenu2`, and `IContextMenu3` to handle submenus (e.g., "Send To", "Open With") correctly via window subclassing.
   - Added shell context menu support to `FileListView`, `FolderTree`, and `BookmarkTree` (for filesystem bookmarks).
   - Updated `MainWindow` to intercept context menu events and show the native menu when enabled.
+- Unified Reveal and Native Properties:
+  - Unified `RevealInExplorer` to use the native `SHOpenFolderAndSelectItems` API for both single and multiple selections, providing a more consistent and robust experience than calling `explorer.exe /select`.
+  - Added `ShowNativeProperties` integration using `ShellExecuteEx` with `SEE_MASK_INVOKEIDLIST` to host the official Windows properties dialog.
+  - Updated `MainWindow` and `MainViewModel` to prefer the native properties dialog when shell integration is enabled, covering file list items and bookmarks.
+  - Modernized `OpenInDefaultApp` to use `ShellExecute` directly on paths for standard folder and file launches.
 - Multi-select Explorer reveal:
   - Updated `Open in Explorer` command to use a single shell API call for highlighting all selected items.
   - Smoke coverage now verifies multi-selection reveal logic.
@@ -83,9 +88,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue deeper shell integration.
-   - review shell-context and remaining Explorer interop edge cases beyond reveal/select behavior
-   - decide whether any remaining Explorer actions should move off `explorer.exe` and onto shell-native APIs
+   - implement "background" shell context menu when right-clicking empty space in the file list
+   - review remaining Explorer interop edge cases beyond reveal/select behavior
 2. UX polish and advanced operations:
+
    - add broader preview type support (e.g., more image formats, syntax highlighting for text)
    - improve bookmark drag/drop feedback and visual cues
    - add new-file templates support (parity with original CubicExplorer)
