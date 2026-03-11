@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after breadcrumb dropdown navigation
-> Status: Breadcrumb dropdown navigation is implemented and verified.
+> HEAD: current local `master` after content search
+> Status: Content search is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -14,6 +14,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009-empty-recycle-bin`, `010-shell-verb-execution`, and `011-file-watcher-hardening` are complete in this checkout.
 - Spec `009-batch-rename` is now complete in this checkout.
 - Spec `010-breadcrumb-dropdowns` is now complete in this checkout.
+- Spec `011-content-search` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -36,6 +37,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Populated breadcrumb branch menus asynchronously from `IFileSystemService.GetSubDirectories` with loading and empty-folder placeholder states.
   - Routed dropdown selections through the existing current-pane navigation path so tab history stays intact.
   - Added smoke coverage for dropdown loading, branch navigation, back-history preservation, and XAML/code-behind wiring.
+- **Spec 011: Content Search** (New in this session)
+  - Added an optional content-search field and `Include Content` toggle to the search bar so folder search can target file contents in addition to names.
+  - Extended `FileListViewModel` recursive search to combine filename matching with safe chunked text scanning for eligible file types only.
+  - Skipped files larger than 10 MB and non-text extensions so grep-style searches stay responsive and avoid binary scans.
+  - Persisted content-search criteria through saved searches and added smoke coverage for content-only search, search limits, saved-search replay, and XAML wiring.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -89,7 +95,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next incomplete spec is `specs/011-content-search.md`.
+- No incomplete specs remain in `specs/`.
+- Re-check `IMPLEMENTATION_PLAN.md` and `CONTINUE.md` before starting any new roadmap slice.
 
 ## Key Files
 
@@ -109,6 +116,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
 - `src/CubicAIExplorer/Models/BreadcrumbSegment.cs`
 - `src/CubicAIExplorer/Models/BreadcrumbDropdownItem.cs`
+- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 - `src/CubicAIExplorer/Services/ShellPropertyHelper.cs`
 - `src/CubicAIExplorer/Services/FileSystemService.cs`
@@ -119,7 +127,7 @@ Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
-- `specs/009-batch-rename.md` and `specs/010-breadcrumb-dropdowns.md` are now complete; `specs/011-content-search.md` remains planned.
+- `specs/011-content-search.md` is now complete, and no incomplete spec files remain in this checkout.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -129,9 +137,9 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build CubicAIExplorer.sln -v minimal`
   - passed
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
-  - passed
+  - passed (after rerun following the known transient WPF output-file lock)
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including breadcrumb dropdown navigation/history coverage, batch rename preview/undo coverage, queue failure-history coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including content-only search, content-search file-size/type limits, saved-search content replay, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 
@@ -142,3 +150,4 @@ Verification run on the updated checkout on 2026-03-11:
 - **Watcher Semantics**: Cross-instance settings/bookmark sync now depends on the shared debounced watcher helper handling create/delete/rename/error events. Keep service-owned saves wrapped in watcher suppression to avoid self-triggered reloads.
 - **Queue History Bound**: Recent file-operation history is intentionally capped to a small in-memory list so the status-bar popup stays readable; if you expand it later, keep it bounded and avoid modal failure reporting for queue-level summaries.
 - **Headless Symbolic-Link Failures**: Keep symbolic-link privilege failures non-modal when `Application.Current?.MainWindow` is unavailable so Ralph/smoke runs can skip or assert on the exception instead of hanging on `MessageBox`.
+- **Content Search Scope**: Content scanning is intentionally limited to a small text-extension allowlist and files at or below 10 MB; widen that list carefully if future specs ask for richer grep behavior.

@@ -42,6 +42,13 @@ The app currently includes:
 - dropdown menus populate immediate child folders asynchronously so slow drives do not block the UI thread
 - selecting a dropdown folder routes through existing pane navigation, preserving the current tab's back/forward history
 
+### Content search (grep-style recursive file scanning)
+
+- added an optional content-search field and `Include Content` toggle to the existing folder-search bar
+- extended recursive search to combine filename matching with safe chunked file-content scanning for eligible text files only
+- skipped files larger than 10 MB and non-text extensions to keep recursive content search responsive
+- persisted content-search criteria in saved searches so replayed searches restore both the name filter and text filter
+
 ### Bookmark drag/drop feedback and visual cues
 
 - added inline bookmark drag hint text so the sidebar explains folder, sibling, root, and invalid drops in plain language
@@ -187,10 +194,7 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-### 4. Power User Parity (Cubic Original)
-Status: PLANNED
-Scope:
-- **011: Content Search (Grep):** Extend the recursive search engine to support "Contains Text" filtering for file content matching.
+No incomplete spec-backed roadmap slices remain in this checkout.
 
 ### 1. UX polish and advanced operations
 Status: COMPLETE

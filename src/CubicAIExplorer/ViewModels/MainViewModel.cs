@@ -1263,15 +1263,28 @@ public partial class MainViewModel : ObservableObject
     private void AddCurrentSearch()
     {
         var fileList = CurrentPaneFileList;
-        if (fileList == null || string.IsNullOrWhiteSpace(CurrentPanePath) || string.IsNullOrWhiteSpace(fileList.SearchText))
+        if (fileList == null || string.IsNullOrWhiteSpace(CurrentPanePath))
             return;
 
         var searchTerm = fileList.SearchText.Trim();
-        var name = $"{GetDisplayName(CurrentPanePath)}: {searchTerm}";
+        var contentSearchTerm = fileList.ContentSearchText.Trim();
+        var includeContent = fileList.IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
+        if (string.IsNullOrWhiteSpace(searchTerm) && !includeContent)
+            return;
+
+        var criteria = new List<string>();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            criteria.Add(searchTerm);
+        if (includeContent)
+            criteria.Add($"text:{contentSearchTerm}");
+
+        var name = $"{GetDisplayName(CurrentPanePath)}: {string.Join(" | ", criteria)}";
         var existing = SavedSearches.FirstOrDefault(saved =>
             string.Equals(saved.SearchPath, CurrentPanePath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(saved.SearchTerm, searchTerm, StringComparison.OrdinalIgnoreCase)
-            && saved.MatchMode == fileList.SearchMatchMode);
+            && saved.MatchMode == fileList.SearchMatchMode
+            && saved.IncludeContent == includeContent
+            && string.Equals(saved.ContentSearchTerm, contentSearchTerm, StringComparison.OrdinalIgnoreCase));
         if (existing != null)
         {
             SelectedSavedSearch = existing;
@@ -1283,7 +1296,9 @@ public partial class MainViewModel : ObservableObject
             Name = name,
             SearchPath = CurrentPanePath,
             SearchTerm = searchTerm,
-            MatchMode = fileList.SearchMatchMode
+            MatchMode = fileList.SearchMatchMode,
+            IncludeContent = includeContent,
+            ContentSearchTerm = contentSearchTerm
         };
         SavedSearches.Insert(0, item);
         SelectedSavedSearch = item;
@@ -1318,13 +1333,23 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void RunSavedSearch(SavedSearchItem? savedSearch)
     {
-        if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath) || string.IsNullOrWhiteSpace(savedSearch.SearchTerm))
+        if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath))
             return;
+        if (string.IsNullOrWhiteSpace(savedSearch.SearchTerm)
+            && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentSearchTerm)))
+        {
+            return;
+        }
         if (!_fileSystemService.DirectoryExists(savedSearch.SearchPath))
             return;
 
         NavigateCurrentPaneToPath(savedSearch.SearchPath);
-        CurrentPaneFileList?.ApplySavedSearch(savedSearch.SearchPath, savedSearch.SearchTerm, savedSearch.MatchMode);
+        CurrentPaneFileList?.ApplySavedSearch(
+            savedSearch.SearchPath,
+            savedSearch.SearchTerm,
+            savedSearch.MatchMode,
+            savedSearch.IncludeContent,
+            savedSearch.ContentSearchTerm);
     }
 
     [RelayCommand]
@@ -2173,6 +2198,8 @@ public partial class MainViewModel : ObservableObject
         public string Path { get; set; } = string.Empty;
         public string Term { get; set; } = string.Empty;
         public NameMatchMode MatchMode { get; set; } = NameMatchMode.Contains;
+        public bool IncludeContent { get; set; }
+        public string ContentTerm { get; set; } = string.Empty;
     }
 
     // --- Dual Pane ---
@@ -3237,15 +3264,23 @@ public partial class MainViewModel : ObservableObject
 
             foreach (var savedSearch in savedSearches)
             {
-                if (string.IsNullOrWhiteSpace(savedSearch.Path) || string.IsNullOrWhiteSpace(savedSearch.Term))
+                if (string.IsNullOrWhiteSpace(savedSearch.Path))
                     continue;
+
+                if (string.IsNullOrWhiteSpace(savedSearch.Term)
+                    && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentTerm)))
+                {
+                    continue;
+                }
 
                 SavedSearches.Add(new SavedSearchItem
                 {
                     Name = string.IsNullOrWhiteSpace(savedSearch.Name) ? savedSearch.Term : savedSearch.Name,
                     SearchPath = savedSearch.Path,
                     SearchTerm = savedSearch.Term,
-                    MatchMode = savedSearch.MatchMode
+                    MatchMode = savedSearch.MatchMode,
+                    IncludeContent = savedSearch.IncludeContent,
+                    ContentSearchTerm = savedSearch.ContentTerm
                 });
             }
         }
@@ -3270,7 +3305,9 @@ public partial class MainViewModel : ObservableObject
                     Name = s.Name,
                     Path = s.SearchPath,
                     Term = s.SearchTerm,
-                    MatchMode = s.MatchMode
+                    MatchMode = s.MatchMode,
+                    IncludeContent = s.IncludeContent,
+                    ContentTerm = s.ContentSearchTerm
                 })
                 .ToList();
             File.WriteAllText(path, JsonSerializer.Serialize(payload, BookmarkJsonOptions));

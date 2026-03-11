@@ -25,3 +25,4 @@
 - 2026-03-11: Completed headless symbolic-link failure handling so smoke/headless callers receive the original privilege error instead of blocking on modal UI, with regression coverage.
 - 2026-03-11: Completed spec 009 advanced batch rename with a live-preview dialog, grouped two-phase rename execution, and one-step undo/redo coverage.
 - 2026-03-11: Completed spec 010 breadcrumb dropdown navigation with async subfolder menus in the breadcrumb bar and preserved back/forward history on branch navigation.
+- 2026-03-11: Completed spec 011 content search with grep-style recursive file scanning, safe text-file limits, saved-search persistence, and smoke coverage.

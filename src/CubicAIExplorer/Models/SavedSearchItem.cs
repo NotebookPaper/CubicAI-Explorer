@@ -17,4 +17,10 @@ public partial class SavedSearchItem : ObservableObject
 
     [ObservableProperty]
     private NameMatchMode _matchMode = NameMatchMode.Contains;
+
+    [ObservableProperty]
+    private bool _includeContent;
+
+    [ObservableProperty]
+    private string _contentSearchTerm = string.Empty;
 }

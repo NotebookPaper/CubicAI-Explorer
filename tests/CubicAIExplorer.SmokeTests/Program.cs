@@ -76,9 +76,12 @@ internal static class Program
             Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
+            Run("search by file content", failures, () => TestSearchByFileContent(tempRoot));
+            Run("search content limits", failures, () => TestSearchContentLimits(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("saved searches", failures, () => TestSavedSearches(tempRoot));
             Run("saved search match mode", failures, () => TestSavedSearchMatchMode(tempRoot));
+            Run("saved search content criteria", failures, () => TestSavedSearchContentCriteria(tempRoot));
             Run("rename saved search", failures, () => TestRenameSavedSearch(tempRoot));
             Run("dual pane toggle", failures, () => TestDualPaneToggle(tempRoot));
             Run("active pane command routing", failures, () => TestActivePaneCommandRouting(tempRoot));
@@ -1403,6 +1406,52 @@ internal static class Program
         Assert(vm.Items.Count == 3, "Wildcard search mode should match all report-prefixed items.");
     }
 
+    private static void TestSearchByFileContent(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "content_search_root");
+        var sub = CreateCleanSubdir(folder, "nested");
+        File.WriteAllText(Path.Combine(folder, "alpha.txt"), "prefix");
+        File.WriteAllText(Path.Combine(sub, "beta.md"), "This file contains the NEEDLE text.");
+
+        vm.LoadDirectory(folder);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.IncludeContentSearch = true;
+        vm.ContentSearchText = "needle";
+        vm.ExecuteSearchSync();
+
+        Assert(vm.IsShowingSearchResults, "Content search should show the search-results banner.");
+        Assert(vm.Items.Count == 1, "Content-only search should find the nested matching file.");
+        Assert(vm.Items[0].Name == "beta.md", "Content search should return the file whose contents match.");
+        Assert(vm.SearchResultsText.Contains("text \"needle\"", StringComparison.OrdinalIgnoreCase),
+            "Search results text should describe the content-search criteria.");
+    }
+
+    private static void TestSearchContentLimits(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "content_search_limits");
+        File.WriteAllText(Path.Combine(folder, "match.txt"), "needle");
+        File.WriteAllText(Path.Combine(folder, "ignored.bin"), "needle");
+        using (var stream = File.Create(Path.Combine(folder, "large.txt")))
+        {
+            stream.SetLength(11L * 1024 * 1024);
+        }
+
+        vm.LoadDirectory(folder);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.IncludeContentSearch = true;
+        vm.ContentSearchText = "needle";
+        vm.ExecuteSearchSync();
+
+        Assert(vm.Items.Count == 1, "Content search should skip non-text extensions and files larger than 10 MB.");
+        Assert(vm.Items[0].Name == "match.txt", "Only the eligible text file should be returned.");
+    }
+
     private static void TestSearchCloseAndClear(string root)
     {
         var fs = new FileSystemService();
@@ -1425,6 +1474,8 @@ internal static class Program
         vm.SearchInFolderCommand.Execute(null);
         vm.CloseSearchCommand.Execute(null);
         Assert(!vm.IsSearchVisible, "CloseSearch should hide search bar.");
+        Assert(string.IsNullOrEmpty(vm.ContentSearchText), "Closing search should clear the content-search text.");
+        Assert(!vm.IncludeContentSearch, "Closing search should turn off content search.");
     }
 
     private static void TestSavedSearches(string root)
@@ -2240,6 +2291,52 @@ internal static class Program
         }
     }
 
+    private static void TestSavedSearchContentCriteria(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "saved_search_content_root");
+        File.WriteAllText(Path.Combine(folder, "alpha.txt"), "nothing here");
+        File.WriteAllText(Path.Combine(folder, "beta.txt"), "contains NEEDLE text");
+        var savedSearchesPath = Path.Combine(root, "saved-searches-content.json");
+        Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", savedSearchesPath);
+        TryDelete(savedSearchesPath);
+
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
+            vm.SearchInFolderCommand.Execute(null);
+            vm.CurrentPaneFileList!.IncludeContentSearch = true;
+            vm.CurrentPaneFileList.ContentSearchText = "needle";
+            vm.CurrentPaneFileList.ExecuteSearchSync();
+
+            vm.AddCurrentSearchCommand.Execute(null);
+
+            Assert(vm.SavedSearches.Count == 1, "Saving a content search should create one saved-search entry.");
+            Assert(vm.SavedSearches[0].IncludeContent, "Saved searches should persist the include-content flag.");
+            Assert(vm.SavedSearches[0].ContentSearchTerm == "needle", "Saved searches should persist the content term.");
+
+            var reloaded = new MainViewModel(fs, clipboard);
+            reloaded.NewTabCommand.Execute(null);
+            var saved = reloaded.SavedSearches[0];
+            Assert(saved.IncludeContent, "Reloaded saved searches should retain the include-content flag.");
+            Assert(saved.ContentSearchTerm == "needle", "Reloaded saved searches should retain the content-search term.");
+
+            reloaded.NavigateToPath(folder);
+            reloaded.RunSavedSearchCommand.Execute(saved);
+
+            Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved content search should show search results.");
+            Assert(reloaded.CurrentPaneFileList.Items.Count == 1 && reloaded.CurrentPaneFileList.Items[0].Name == "beta.txt",
+                "Running a saved content search should reproduce the content-match results.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", null);
+        }
+    }
+
     private static void TestBreadcrumbDropdownNavigation(string root)
     {
         var fs = new FileSystemService();
@@ -2746,7 +2843,9 @@ internal static class Program
         Assert(main.Contains("IsDropTarget"), "Bookmark drop target styling should be bound.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
+        Assert(main.Contains("ContentSearchTextBox"), "Content search text box should exist.");
         Assert(main.Contains("CurrentPaneFileList.SearchMatchMode"), "Search mode selector should bind to the active pane.");
+        Assert(main.Contains("CurrentPaneFileList.IncludeContentSearch"), "Content-search toggle should bind to the active pane.");
         Assert(main.Contains("SearchInFolderCommand"), "Search command binding should exist.");
         Assert(main.Contains("AddCurrentSearchCommand"), "Saved-search add command should exist.");
         Assert(main.Contains("RenameSavedSearchCommand"), "Saved-search rename command should exist.");
@@ -2763,6 +2862,7 @@ internal static class Program
         Assert(main.Contains("SessionsMenu_SubmenuOpened"), "Sessions submenu population should be wired.");
         Assert(main.Contains("CurrentPaneFileList.FilterText"), "Filter bar should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.SearchText"), "Search bar should bind to the current active pane.");
+        Assert(main.Contains("CurrentPaneFileList.ContentSearchText"), "Content search text should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneFileList.IsSearchVisible"), "Search visibility should bind to the current active pane.");
         Assert(main.Contains("CurrentPaneLabel"), "Status bar should include the current pane label.");
         Assert(main.Contains("CurrentPaneLabel, Mode=OneWay"), "CurrentPaneLabel should be OneWay-bound (read-only source).");

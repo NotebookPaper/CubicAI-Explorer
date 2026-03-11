@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Threading.Tasks;
@@ -13,6 +14,13 @@ namespace CubicAIExplorer.ViewModels;
 
 public partial class FileListViewModel : ObservableObject
 {
+    private const long MaxContentSearchFileSizeBytes = 10 * 1024 * 1024;
+    private static readonly HashSet<string> SearchableTextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".bat", ".cmd", ".config", ".cs", ".css", ".csv", ".json", ".log", ".md", ".ps1", ".py",
+        ".txt", ".xml", ".xaml", ".yml", ".yaml"
+    };
+
     private readonly BatchRenameService _batchRenameService = new();
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
@@ -74,6 +82,12 @@ public partial class FileListViewModel : ObservableObject
 
     [ObservableProperty]
     private NameMatchMode _searchMatchMode = NameMatchMode.Contains;
+
+    [ObservableProperty]
+    private bool _includeContentSearch;
+
+    [ObservableProperty]
+    private string _contentSearchText = string.Empty;
 
     [ObservableProperty]
     private bool _isShowingSearchResults;
@@ -623,6 +637,8 @@ public partial class FileListViewModel : ObservableObject
     {
         IsSearchVisible = false;
         SearchText = string.Empty;
+        ContentSearchText = string.Empty;
+        IncludeContentSearch = false;
         if (IsShowingSearchResults)
             ClearSearchResults();
     }
@@ -630,20 +646,22 @@ public partial class FileListViewModel : ObservableObject
     [RelayCommand]
     private async Task ExecuteSearch()
     {
-        if (string.IsNullOrWhiteSpace(SearchText) || string.IsNullOrWhiteSpace(CurrentPath))
+        var nameSearchTerm = SearchText.Trim();
+        var contentSearchTerm = ContentSearchText.Trim();
+        var requireContentMatch = IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
+        if ((string.IsNullOrWhiteSpace(nameSearchTerm) && !requireContentMatch) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
         IsSearching = true;
-        var searchTerm = SearchText;
         var searchPath = CurrentPath;
         var searchMode = SearchMatchMode;
 
         try
         {
             var results = await Task.Run(() =>
-                SearchFilesRecursive(searchPath, searchTerm, searchMode, ShowHiddenFiles));
+                SearchFilesRecursive(searchPath, nameSearchTerm, searchMode, ShowHiddenFiles, requireContentMatch, contentSearchTerm));
 
-            ApplySearchResults(results, searchTerm);
+            ApplySearchResults(results, nameSearchTerm, requireContentMatch, contentSearchTerm);
         }
         catch (Exception ex)
         {
@@ -661,23 +679,41 @@ public partial class FileListViewModel : ObservableObject
 
     public void ExecuteSearchSync()
     {
-        if (string.IsNullOrWhiteSpace(SearchText) || string.IsNullOrWhiteSpace(CurrentPath))
+        var nameSearchTerm = SearchText.Trim();
+        var contentSearchTerm = ContentSearchText.Trim();
+        var requireContentMatch = IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
+        if ((string.IsNullOrWhiteSpace(nameSearchTerm) && !requireContentMatch) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
-        var results = SearchFilesRecursive(CurrentPath, SearchText, SearchMatchMode, ShowHiddenFiles);
-        ApplySearchResults(results, SearchText);
+        var results = SearchFilesRecursive(CurrentPath, nameSearchTerm, SearchMatchMode, ShowHiddenFiles, requireContentMatch, contentSearchTerm);
+        ApplySearchResults(results, nameSearchTerm, requireContentMatch, contentSearchTerm);
     }
 
-    public void ApplySavedSearch(string searchPath, string searchTerm, NameMatchMode matchMode = NameMatchMode.Contains)
+    public void ApplySavedSearch(
+        string searchPath,
+        string searchTerm,
+        NameMatchMode matchMode = NameMatchMode.Contains,
+        bool includeContent = false,
+        string contentSearchTerm = "")
     {
-        if (string.IsNullOrWhiteSpace(searchPath) || string.IsNullOrWhiteSpace(searchTerm))
+        if (string.IsNullOrWhiteSpace(searchPath))
             return;
+
+        var trimmedSearchTerm = searchTerm.Trim();
+        var trimmedContentSearchTerm = contentSearchTerm.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedSearchTerm)
+            && (!includeContent || string.IsNullOrWhiteSpace(trimmedContentSearchTerm)))
+        {
+            return;
+        }
 
         if (!string.Equals(CurrentPath, searchPath, StringComparison.OrdinalIgnoreCase))
             LoadDirectory(searchPath);
 
         SearchMatchMode = matchMode;
-        SearchText = searchTerm;
+        SearchText = trimmedSearchTerm;
+        IncludeContentSearch = includeContent && !string.IsNullOrWhiteSpace(trimmedContentSearchTerm);
+        ContentSearchText = trimmedContentSearchTerm;
         IsSearchVisible = true;
         ExecuteSearchSync();
     }
@@ -796,7 +832,7 @@ public partial class FileListViewModel : ObservableObject
         }
     }
 
-    private void ApplySearchResults(List<FileSystemItem> results, string searchTerm)
+    private void ApplySearchResults(List<FileSystemItem> results, string searchTerm, bool includeContentSearch, string contentSearchTerm)
     {
         Items.Clear();
         _allItems = results;
@@ -805,7 +841,7 @@ public partial class FileListViewModel : ObservableObject
 
         ItemCount = Items.Count;
         IsShowingSearchResults = true;
-        SearchResultsText = $"Search results for \"{searchTerm}\" — {results.Count} item(s) found";
+        SearchResultsText = BuildSearchResultsText(searchTerm, includeContentSearch, contentSearchTerm, results.Count);
         UpdateSelectionStatus();
     }
 
@@ -817,7 +853,13 @@ public partial class FileListViewModel : ObservableObject
         LoadDirectory(CurrentPath);
     }
 
-    private List<FileSystemItem> SearchFilesRecursive(string rootPath, string searchTerm, NameMatchMode matchMode, bool showHidden)
+    private List<FileSystemItem> SearchFilesRecursive(
+        string rootPath,
+        string searchTerm,
+        NameMatchMode matchMode,
+        bool showHidden,
+        bool includeContentSearch,
+        string contentSearchTerm)
     {
         var results = new List<FileSystemItem>();
         var stack = new Stack<string>();
@@ -836,7 +878,8 @@ public partial class FileListViewModel : ObservableObject
                     if (!showHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (file.Attributes.HasFlag(FileAttributes.System)) continue;
 
-                    if (IsNameMatch(file.Name, searchTerm, matchMode))
+                    if (IsNameMatch(file.Name, searchTerm, matchMode)
+                        && (!includeContentSearch || FileContainsSearchText(file, contentSearchTerm)))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -858,7 +901,7 @@ public partial class FileListViewModel : ObservableObject
                     if (!showHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (dir.Attributes.HasFlag(FileAttributes.System)) continue;
 
-                    if (IsNameMatch(dir.Name, searchTerm, matchMode))
+                    if (!includeContentSearch && IsNameMatch(dir.Name, searchTerm, matchMode))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -990,6 +1033,59 @@ public partial class FileListViewModel : ObservableObject
             .Replace("\\*", ".*")
             .Replace("\\?", ".") + "$";
         return Regex.IsMatch(candidate, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static string BuildSearchResultsText(string searchTerm, bool includeContentSearch, string contentSearchTerm, int resultCount)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            parts.Add($"name \"{searchTerm}\"");
+        if (includeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm))
+            parts.Add($"text \"{contentSearchTerm}\"");
+
+        var criteria = parts.Count == 0 ? "current criteria" : string.Join(" + ", parts);
+        return $"Search results for {criteria} — {resultCount} item(s) found";
+    }
+
+    private static bool FileContainsSearchText(FileInfo file, string searchText)
+    {
+        if (string.IsNullOrWhiteSpace(searchText)
+            || file.Length > MaxContentSearchFileSizeBytes
+            || !SearchableTextExtensions.Contains(file.Extension))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+            var buffer = new char[4096];
+            var overlapLength = Math.Max(searchText.Length - 1, 0);
+            var carryOver = string.Empty;
+
+            while (true)
+            {
+                var read = reader.Read(buffer, 0, buffer.Length);
+                if (read <= 0)
+                    break;
+
+                var chunk = carryOver + new string(buffer, 0, read);
+                if (chunk.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                carryOver = overlapLength <= 0
+                    ? string.Empty
+                    : chunk.Length <= overlapLength
+                        ? chunk
+                        : chunk[^overlapLength..];
+            }
+        }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
+        catch (DecoderFallbackException) { }
+
+        return false;
     }
 
     private List<string> GetSelectedPaths()
