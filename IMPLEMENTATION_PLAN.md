@@ -39,6 +39,22 @@ Primary files:
 - `src/CubicAIExplorer/App.xaml.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### Shell-backed type metadata across details, preview, and properties
+
+- centralized shell file-info lookups so Windows-reported type names now replace extension-derived fallbacks where available
+- the Details `Type` column, preview header, recursive search results, and properties dialog now stay aligned on the same shell-backed metadata
+- bookmark properties now populate real timestamps, attributes, size, and shell type labels instead of placeholder defaults
+- smoke coverage now verifies shell-backed type descriptions in directory listings, recursive search results, and the properties dialog
+
+Primary files:
+
+- `src/CubicAIExplorer/Services/ShellFileInfoHelper.cs`
+- `src/CubicAIExplorer/Models/FileSystemItem.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Named sessions and session manager
 
 - added persisted named sessions inside the existing settings file

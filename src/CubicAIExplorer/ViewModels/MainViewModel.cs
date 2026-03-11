@@ -1699,13 +1699,27 @@ public partial class MainViewModel : ObservableObject
     private void ShowBookmarkProperties(BookmarkItem? bookmark)
     {
         if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
-        if (!_fileSystemService.DirectoryExists(bookmark.Path) && !File.Exists(bookmark.Path)) return;
+        var isDirectory = _fileSystemService.DirectoryExists(bookmark.Path);
+        var isFile = File.Exists(bookmark.Path);
+        if (!isDirectory && !isFile) return;
+
+        var itemType = isDirectory ? FileSystemItemType.Directory : FileSystemItemType.File;
 
         var item = new FileSystemItem
         {
             Name = bookmark.Name,
             FullPath = bookmark.Path,
-            ItemType = _fileSystemService.DirectoryExists(bookmark.Path) ? FileSystemItemType.Directory : FileSystemItemType.File
+            ItemType = itemType,
+            Extension = Path.GetExtension(bookmark.Path),
+            DateModified = isFile
+                ? File.GetLastWriteTime(bookmark.Path)
+                : Directory.GetLastWriteTime(bookmark.Path),
+            DateCreated = isFile
+                ? File.GetCreationTime(bookmark.Path)
+                : Directory.GetCreationTime(bookmark.Path),
+            Size = isFile ? new FileInfo(bookmark.Path).Length : 0,
+            Attributes = File.GetAttributes(bookmark.Path),
+            ShellTypeName = ShellFileInfoHelper.TryGetTypeName(bookmark.Path, itemType) ?? string.Empty
         };
 
         BookmarkPropertiesRequested?.Invoke(this, item);
@@ -2022,7 +2036,7 @@ public partial class MainViewModel : ObservableObject
 
         if (item.ItemType == FileSystemItemType.Directory)
         {
-            PreviewFileInfo = "File folder";
+            PreviewFileInfo = item.TypeDescription;
             LoadFolderPreviewAsync(item.FullPath, generation);
             return;
         }

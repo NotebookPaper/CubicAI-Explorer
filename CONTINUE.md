@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: shell-aware display names and known-folder alias navigation are now implemented and verified; next roadmap work remains deeper shell metadata/context integration.
+> Status: shell-aware display names, known-folder alias navigation, and shell-backed type metadata are now implemented and verified; next roadmap work remains shell context/Explorer interop integration.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -51,6 +51,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - the address bar now resolves common aliases such as `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Videos`, and `Home`
   - address autocomplete now suggests matching known folders in addition to normal filesystem completions
   - smoke coverage now verifies alias navigation, shell display-name routing, and known-folder suggestions
+- Shell-backed type metadata:
+  - centralized shell file-info lookup so Windows-reported type names now feed the Details `Type` column, preview header, recursive search results, and properties dialog
+  - bookmark properties now populate real timestamps, attributes, size, and shell type labels instead of placeholder defaults
+  - smoke coverage now verifies shell-backed type descriptions in directory listings, recursive search results, and the properties dialog
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
@@ -58,8 +62,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue deeper shell integration.
-   - expose more shell metadata in details/properties views where practical
    - review shell-context and Explorer interop edge cases
+   - improve `Open in Explorer` / shell-reveal behavior so file selections can be highlighted instead of always opening the containing folder generically
 2. Add smoke-test coverage for the remaining risky file-operation paths:
    - replace failure behavior
    - same-folder duplicate behavior
@@ -76,6 +80,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/Models/NameMatchMode.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Services/ShellFileInfoHelper.cs`
 - `src/CubicAIExplorer/Models/UserSettings.cs`
 - `src/CubicAIExplorer/Models/SavedSearchItem.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
@@ -86,7 +91,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- shell-aware display names, known-folder alias navigation, and verification updates are local and uncommitted in this checkout
+- shell-aware display names, known-folder alias navigation, shell-backed type metadata, and verification updates are local and uncommitted in this checkout
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:

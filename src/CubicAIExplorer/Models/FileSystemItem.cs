@@ -19,6 +19,7 @@ public sealed class FileSystemItem
     public DateTime DateModified { get; init; }
     public DateTime DateCreated { get; init; }
     public string Extension { get; init; } = string.Empty;
+    public string ShellTypeName { get; init; } = string.Empty;
     public FileAttributes Attributes { get; init; }
     public bool IsHidden => Attributes.HasFlag(FileAttributes.Hidden);
     public bool IsSystem => Attributes.HasFlag(FileAttributes.System);
@@ -28,7 +29,9 @@ public sealed class FileSystemItem
         ? FormatSize(Size)
         : string.Empty;
 
-    public string TypeDescription => ItemType switch
+    public string TypeDescription => !string.IsNullOrWhiteSpace(ShellTypeName)
+        ? ShellTypeName
+        : ItemType switch
     {
         FileSystemItemType.Drive => "Drive",
         FileSystemItemType.Directory => "File folder",

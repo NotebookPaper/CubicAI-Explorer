@@ -749,6 +749,7 @@ public partial class FileListViewModel : ObservableObject
                             Extension = file.Extension,
                             DateModified = file.LastWriteTime,
                             DateCreated = file.CreationTime,
+                            ShellTypeName = ShellFileInfoHelper.TryGetTypeName(file.FullName, FileSystemItemType.File) ?? string.Empty,
                             Attributes = file.Attributes
                         });
                     }
@@ -768,6 +769,7 @@ public partial class FileListViewModel : ObservableObject
                             ItemType = FileSystemItemType.Directory,
                             DateModified = dir.LastWriteTime,
                             DateCreated = dir.CreationTime,
+                            ShellTypeName = ShellFileInfoHelper.TryGetTypeName(dir.FullName, FileSystemItemType.Directory) ?? string.Empty,
                             Attributes = dir.Attributes
                         });
                     }

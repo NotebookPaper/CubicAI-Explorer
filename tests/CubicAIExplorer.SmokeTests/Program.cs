@@ -63,6 +63,7 @@ internal static class Program
             Run("recent folders", failures, () => TestRecentFolders(tempRoot));
             Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
             Run("known folder display names", failures, TestKnownFolderDisplayNames);
+            Run("shell type descriptions", failures, () => TestShellTypeDescriptions(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
@@ -1282,6 +1283,42 @@ internal static class Program
             "Recent folders should use the shell display name.");
     }
 
+    private static void TestShellTypeDescriptions(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "shell_types");
+        var nested = Directory.CreateDirectory(Path.Combine(folder, "nested")).FullName;
+        var textFile = Path.Combine(folder, "notes.txt");
+        var nestedTextFile = Path.Combine(nested, "deep.txt");
+        File.WriteAllText(textFile, "hello");
+        File.WriteAllText(nestedTextFile, "world");
+
+        var vm = new FileListViewModel(fs, clipboard);
+        vm.LoadDirectory(folder);
+
+        var listedItem = vm.Items.Single(i => i.Name == "notes.txt");
+        var expectedType = ShellFileInfoHelper.TryGetTypeName(textFile, FileSystemItemType.File);
+        Assert(!string.IsNullOrWhiteSpace(expectedType), "Shell type name should be available for the test file.");
+        Assert(string.Equals(listedItem.TypeDescription, expectedType, StringComparison.Ordinal),
+            "Directory listings should use the shell-reported type description.");
+
+        vm.SearchText = "deep";
+        vm.ExecuteSearchSync();
+
+        var searchedItem = vm.Items.Single(i => i.Name == "deep.txt");
+        var expectedNestedType = ShellFileInfoHelper.TryGetTypeName(nestedTextFile, FileSystemItemType.File);
+        Assert(string.Equals(searchedItem.TypeDescription, expectedNestedType, StringComparison.Ordinal),
+            "Recursive search results should preserve the shell-reported type description.");
+
+        var dialog = new PropertiesDialog(listedItem);
+        var typeText = dialog.FindName("TypeText") as TextBlock;
+        Assert(typeText != null, "Properties dialog should expose the type text block.");
+        Assert(string.Equals(typeText!.Text, listedItem.TypeDescription, StringComparison.Ordinal),
+            "Properties dialog should display the item's shell-backed type description.");
+        dialog.Close();
+    }
+
     private static void TestSavedSearchMatchMode(string root)
     {
         var fs = new FileSystemService();
@@ -1614,7 +1651,8 @@ internal static class Program
         Assert(vm.IsPreviewVisible, "TogglePreview should enable preview mode.");
         Assert(previewEvents == 1, "PreviewModeChanged should fire when enabling preview mode.");
         Assert(vm.PreviewFileName == "preview.txt", "Preview should expose the selected file name.");
-        Assert(vm.PreviewFileInfo.Contains("txt", StringComparison.OrdinalIgnoreCase), "Preview should include file type information.");
+        Assert(vm.PreviewFileInfo.Contains(item.TypeDescription, StringComparison.Ordinal),
+            "Preview should include the selected item's type description.");
         WaitFor(() => vm.HasPreviewText);
         Assert(vm.HasPreviewText, "Text files should produce text preview content.");
         Assert(!vm.HasPreviewImage, "Text files should not produce image preview content.");

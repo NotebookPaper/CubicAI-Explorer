@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using Microsoft.VisualBasic.FileIO;
 using CubicAIExplorer.Models;
 
@@ -9,11 +8,6 @@ namespace CubicAIExplorer.Services;
 
 public sealed class FileSystemService : IFileSystemService
 {
-    private const uint SHGFI_DISPLAYNAME = 0x000000200;
-    private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
-    private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
-    private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
-
     public IReadOnlyList<FileSystemItem> GetDrives()
     {
         return DriveInfo.GetDrives()
@@ -25,7 +19,8 @@ public sealed class FileSystemService : IFileSystemService
                 ItemType = FileSystemItemType.Drive,
                 Size = d.TotalSize,
                 DateModified = DateTime.MinValue,
-                DateCreated = DateTime.MinValue
+                DateCreated = DateTime.MinValue,
+                ShellTypeName = ShellFileInfoHelper.TryGetTypeName(d.RootDirectory.FullName, FileSystemItemType.Drive) ?? string.Empty
             })
             .ToList();
     }
@@ -36,7 +31,7 @@ public sealed class FileSystemService : IFileSystemService
         if (sanitized == null)
             return path;
 
-        var displayName = TryGetShellDisplayName(sanitized);
+        var displayName = ShellFileInfoHelper.TryGetDisplayName(sanitized);
         if (!string.IsNullOrWhiteSpace(displayName))
             return displayName;
 
@@ -515,28 +510,6 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
-    private static string? TryGetShellDisplayName(string path)
-    {
-        var shellInfo = new SHFILEINFO();
-        var flags = SHGFI_DISPLAYNAME;
-        var attributes = FILE_ATTRIBUTE_NORMAL;
-
-        if (!PathExists(path))
-        {
-            flags |= SHGFI_USEFILEATTRIBUTES;
-            attributes = LooksLikeDirectoryPath(path) ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
-        }
-
-        var result = SHGetFileInfo(
-            path,
-            attributes,
-            ref shellInfo,
-            (uint)Marshal.SizeOf<SHFILEINFO>(),
-            flags);
-
-        return result == IntPtr.Zero ? null : shellInfo.szDisplayName;
-    }
-
     private static FileSystemItem CreateItem(DirectoryInfo dir) => new()
     {
         Name = dir.Name,
@@ -544,6 +517,7 @@ public sealed class FileSystemService : IFileSystemService
         ItemType = FileSystemItemType.Directory,
         DateModified = dir.LastWriteTime,
         DateCreated = dir.CreationTime,
+        ShellTypeName = ShellFileInfoHelper.TryGetTypeName(dir.FullName, FileSystemItemType.Directory) ?? string.Empty,
         Attributes = dir.Attributes
     };
 
@@ -556,6 +530,7 @@ public sealed class FileSystemService : IFileSystemService
         Extension = file.Extension,
         DateModified = file.LastWriteTime,
         DateCreated = file.CreationTime,
+        ShellTypeName = ShellFileInfoHelper.TryGetTypeName(file.FullName, FileSystemItemType.File) ?? string.Empty,
         Attributes = file.Attributes
     };
 
@@ -613,15 +588,6 @@ public sealed class FileSystemService : IFileSystemService
 
     private static string? GetExistingPath(string? path)
         => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path) ? path : null;
-
-    private static bool LooksLikeDirectoryPath(string path)
-    {
-        if (path.EndsWith('\\') || path.EndsWith('/'))
-            return true;
-
-        var extension = Path.GetExtension(path);
-        return string.IsNullOrWhiteSpace(extension);
-    }
 
     private static void CopyDirectoryRecursive(string sourcePath, string destinationPath)
     {
@@ -835,23 +801,4 @@ public sealed class FileSystemService : IFileSystemService
 
     private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct SHFILEINFO
-    {
-        public IntPtr hIcon;
-        public int iIcon;
-        public uint dwAttributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string szDisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
-        public string szTypeName;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr SHGetFileInfo(
-        string pszPath,
-        uint dwFileAttributes,
-        ref SHFILEINFO psfi,
-        uint cbFileInfo,
-        uint uFlags);
 }
