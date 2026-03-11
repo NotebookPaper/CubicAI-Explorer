@@ -188,9 +188,9 @@ Scope:
 - completed: shell execution with different verbs (`opennewwindow`, `runas`)
 
 ### 3. Infrastructure and reliability
-Status: PLANNED
+Status: COMPLETE
 Scope:
-- improve error reporting in the file operation queue history
+- completed: bounded file-operation queue history with explicit failure/cancel detail surfaced from the status bar popup
 
 ## Constraints And Decisions
 

@@ -2,21 +2,25 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after file watcher hardening
-> Status: File watcher hardening for settings/bookmark sync is implemented and verified.
+> HEAD: current local `master` after queue history error reporting
+> Status: File-operation queue history/error reporting is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
-- The branch builds and the smoke harness passes, including watcher hardening coverage.
+- The branch builds and the smoke harness passes, including queue failure-history coverage.
 - Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009`, `010`, and `011` are complete in this checkout.
-- The top roadmap item after the numbered specs, new-file templates support, is also complete in this checkout.
+- The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
 
+- **Roadmap: Queue history error reporting** (New in this session)
+  - Added bounded recent-operation history to `FileOperationQueueService` with explicit success, failure, and canceled states plus retained detail text.
+  - Exposed the recent queue history through `MainViewModel` and wired the existing status-bar queue-details toggle to a popup showing active progress and recent results.
+  - Added smoke coverage for failed queue operations and XAML wiring checks for the queue-details popup/history bindings.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -70,11 +74,15 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-3. Infrastructure and reliability:
-   - improve error reporting in the file operation queue history
+- No incomplete numbered specs remain.
+- No roadmap items remain in `IMPLEMENTATION_PLAN.md` at this time.
 
 ## Key Files
 
+- `src/CubicAIExplorer/Models/FileOperationQueueHistoryEntry.cs`
+- `src/CubicAIExplorer/Services/FileOperationQueueService.cs`
+- `src/CubicAIExplorer/Services/IFileOperationQueueService.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/Services/DebouncedJsonFileWatcher.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
@@ -89,9 +97,9 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Spec 011 file watcher hardening is the latest completed roadmap slice in this checkout.
-- New-file templates support, app icon refresh, recycle-bin management, and shell-verb execution remain complete in this checkout.
-- planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation.
+- Queue history error reporting is the latest completed roadmap slice in this checkout.
+- Numbered specs `001` through `011` remain complete in this checkout.
+- planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
 
@@ -102,7 +110,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including settings/bookmark watcher coverage)
+  - passed (all smoke tests pass, including queue failure-history coverage)
 
 ## Gotchas
 
@@ -111,3 +119,4 @@ Verification run on the updated checkout on 2026-03-11:
 - **IShellItem2 Vtable**: When defining `IShellItem2`, ensure all methods are in the correct order (including the 3 methods between `GetPropertyStore` and `GetProperty`).
 - **Smoke Test App State**: Creating a WPF `App` instance in a smoke test can have side effects on subsequent tests. Move app-dependent tests to the end if possible.
 - **Watcher Semantics**: Cross-instance settings/bookmark sync now depends on the shared debounced watcher helper handling create/delete/rename/error events. Keep service-owned saves wrapped in watcher suppression to avoid self-triggered reloads.
+- **Queue History Bound**: Recent file-operation history is intentionally capped to a small in-memory list so the status-bar popup stays readable; if you expand it later, keep it bounded and avoid modal failure reporting for queue-level summaries.

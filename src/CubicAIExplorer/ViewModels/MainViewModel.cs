@@ -185,6 +185,7 @@ public partial class MainViewModel : ObservableObject
     public int FileOperationQueuePendingCount => _fileOperationQueueService.PendingCount;
     public string FileOperationQueueLastCompletedOperationText => _fileOperationQueueService.LastCompletedOperationText;
     public string FileOperationQueueLastCompletedStatusText => _fileOperationQueueService.LastCompletedStatusText;
+    public ReadOnlyObservableCollection<FileOperationQueueHistoryEntry> FileOperationQueueRecentOperations => _fileOperationQueueService.RecentOperations;
     public bool CanCancelFileOperationQueue => _fileOperationQueueService.CanCancel;
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
@@ -623,7 +624,8 @@ public partial class MainViewModel : ObservableObject
             || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationTotalSteps)
             || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationDetailText)
             || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedOperationText)
-            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedStatusText))
+            || e.PropertyName == nameof(IFileOperationQueueService.LastCompletedStatusText)
+            || e.PropertyName == nameof(IFileOperationQueueService.RecentOperations))
         {
             OnPropertyChanged(nameof(FileOperationQueueStatusText));
             OnPropertyChanged(nameof(CanShowQueueDetails));
@@ -637,7 +639,11 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(FileOperationQueuePendingCount));
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedOperationText));
             OnPropertyChanged(nameof(FileOperationQueueLastCompletedStatusText));
+            OnPropertyChanged(nameof(FileOperationQueueRecentOperations));
         }
+
+        if (!CanShowQueueDetails && IsQueueDetailsVisible)
+            IsQueueDetailsVisible = false;
     }
 
     private void OnFilterHistoryEntryAdded(object? sender, string entry)

@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
+using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Services;
 
@@ -23,6 +25,7 @@ public interface IFileOperationQueueService : INotifyPropertyChanged
     string StatusText { get; }
     string LastCompletedOperationText { get; }
     string LastCompletedStatusText { get; }
+    ReadOnlyObservableCollection<FileOperationQueueHistoryEntry> RecentOperations { get; }
     Task<T> EnqueueAsync<T>(string description, Func<T> operation);
     Task<T> EnqueueAsync<T>(string description, Func<IFileOperationContext, T> operation);
     void CancelCurrent();

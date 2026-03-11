@@ -51,6 +51,7 @@ internal static class Program
             Run("clipboard drop effect byte array", failures, TestClipboardDropEffectByteArray);
             Run("file operation queue service", failures, TestFileOperationQueueService);
             Run("queue recent status", failures, TestQueueRecentStatus);
+            Run("queue failed history", failures, TestQueueFailedHistory);
             Run("queue cancel + progress", failures, TestQueueCancelAndProgress);
             Run("zip archive service", failures, () => TestZipArchiveService(tempRoot));
             Run("extract archive command", failures, () => TestExtractArchiveCommand(tempRoot));
@@ -521,6 +522,34 @@ internal static class Program
             "Queue should expose a completion summary after work finishes.");
         Assert(queue.StatusText.Contains("completed", StringComparison.OrdinalIgnoreCase),
             "Idle queue status should show the most recent result.");
+    }
+
+    private static void TestQueueFailedHistory()
+    {
+        var queue = new FileOperationQueueService();
+
+        try
+        {
+            queue.EnqueueAsync<int>("Failing op", () => throw new IOException("Disk full")).GetAwaiter().GetResult();
+            throw new InvalidOperationException("Failing queue work should rethrow the underlying exception.");
+        }
+        catch (IOException)
+        {
+            // expected
+        }
+
+        WaitFor(() => queue.HasRecentActivity && queue.RecentOperations.Count > 0);
+        var entry = queue.RecentOperations[0];
+
+        Assert(queue.LastCompletedStatusText.Contains("failed", StringComparison.OrdinalIgnoreCase),
+            "Failed queue work should update the recent status summary.");
+        Assert(entry.Status == FileOperationQueueHistoryStatus.Failed,
+            "Failed queue work should be recorded as a failed history entry.");
+        Assert(entry.OperationText == "Failing op", "Queue history should remember the failed operation text.");
+        Assert(entry.DetailText.Contains("Disk full", StringComparison.OrdinalIgnoreCase),
+            "Queue history should retain the failure detail.");
+        Assert(queue.StatusText.Contains("failed", StringComparison.OrdinalIgnoreCase),
+            "Idle queue status should surface the most recent failure.");
     }
 
     private static void TestQueueCancelAndProgress()
@@ -2586,6 +2615,9 @@ internal static class Program
         Assert(main.Contains("FileOperationQueueStatusText"), "Status bar should expose background file operation status.");
         Assert(main.Contains("CancelFileOperationQueueCommand"), "Queue cancel command should be wired.");
         Assert(main.Contains("ToggleQueueDetailsCommand"), "Queue details toggle should be wired.");
+        Assert(main.Contains("QueueDetailsButton"), "Queue details button should be named for the popup anchor.");
+        Assert(main.Contains("FileOperationQueueRecentOperations"), "Queue details popup should bind recent operation history.");
+        Assert(main.Contains("IsOpen=\"{Binding IsQueueDetailsVisible}\""), "Queue details popup should bind its open state.");
         Assert(main.Contains("ContextMenuOpening=\"RightPane_ContextMenuOpening\""), "Right pane context menu handler should be wired.");
         Assert(main.Contains("GridViewColumnHeader.Click=\"RightPaneHeader_Click\""), "Right pane sort handler should be wired.");
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");

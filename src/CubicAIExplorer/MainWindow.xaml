@@ -398,7 +398,7 @@
             </StatusBarItem>
             <Separator />
             <StatusBarItem Visibility="{Binding CanShowQueueDetails, Converter={StaticResource BoolToVisibility}}">
-                <Button Command="{Binding ToggleQueueDetailsCommand}" Padding="6,1">
+                <Button x:Name="QueueDetailsButton" Command="{Binding ToggleQueueDetailsCommand}" Padding="6,1">
                     <TextBlock Text="{Binding FileOperationQueueStatusText, Mode=OneWay}" />
                 </Button>
             </StatusBarItem>
@@ -417,6 +417,99 @@
                 </TextBlock>
             </StatusBarItem>
         </StatusBar>
+        <Popup PlacementTarget="{Binding ElementName=QueueDetailsButton}"
+               Placement="Top"
+               StaysOpen="False"
+               IsOpen="{Binding IsQueueDetailsVisible}">
+            <Border Background="#F6F4EA"
+                    BorderBrush="#7F9DB9"
+                    BorderThickness="1"
+                    Padding="10"
+                    MinWidth="360"
+                    MaxWidth="520">
+                <StackPanel>
+                    <TextBlock Text="File Operation Queue"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <Border BorderBrush="#D4D0C8"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,8"
+                            Visibility="{Binding IsFileOperationQueueBusy, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding FileOperationQueueCurrentOperationText}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Text="{Binding FileOperationQueueCurrentOperationProgressText}"
+                                       Foreground="#32527B" />
+                            <TextBlock Text="{Binding FileOperationQueueCurrentOperationDetailText}"
+                                       TextWrapping="Wrap"
+                                       Foreground="#5A6F89" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Margin="0,8,0,6"
+                               Text="Recent operations"
+                               FontWeight="SemiBold" />
+                    <ScrollViewer MaxHeight="260"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding FileOperationQueueRecentOperations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type models:FileOperationQueueHistoryEntry}">
+                                    <Border BorderBrush="#DDD6C8"
+                                            BorderThickness="0,0,0,1"
+                                            Padding="0,6">
+                                        <StackPanel>
+                                            <DockPanel LastChildFill="False">
+                                                <TextBlock DockPanel.Dock="Left"
+                                                           Text="{Binding OperationText}"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           Margin="8,0,0,0"
+                                                           Text="{Binding CompletedAtLocal, StringFormat={}{0:HH:mm:ss}}"
+                                                           Foreground="#7A7A7A" />
+                                            </DockPanel>
+                                            <TextBlock Margin="0,2,0,0"
+                                                       Text="{Binding SummaryText}"
+                                                       TextWrapping="Wrap">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#2F4F2F" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="{x:Static models:FileOperationQueueHistoryStatus.Failed}">
+                                                                <Setter Property="Foreground" Value="#9A2D2D" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="{x:Static models:FileOperationQueueHistoryStatus.Canceled}">
+                                                                <Setter Property="Foreground" Value="#8A5A00" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Margin="0,2,0,0"
+                                                       Text="{Binding DetailText}"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="#5A6F89">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DetailText}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Main Content: Folder Tree + File List -->
         <Grid>

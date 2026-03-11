@@ -1,12 +1,16 @@
 using System.Windows;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CubicAIExplorer.Models;
 
 namespace CubicAIExplorer.Services;
 
 public sealed partial class FileOperationQueueService : ObservableObject, IFileOperationQueueService
 {
+    private const int MaxRecentOperations = 8;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly object _stateLock = new();
+    private readonly ObservableCollection<FileOperationQueueHistoryEntry> _recentOperations = [];
     private int _pendingCount;
     private CancellationTokenSource? _currentCancellationTokenSource;
 
@@ -36,6 +40,13 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
 
     [ObservableProperty]
     private string _lastCompletedStatusText = string.Empty;
+
+    public ReadOnlyObservableCollection<FileOperationQueueHistoryEntry> RecentOperations { get; }
+
+    public FileOperationQueueService()
+    {
+        RecentOperations = new ReadOnlyObservableCollection<FileOperationQueueHistoryEntry>(_recentOperations);
+    }
 
     public int PendingCount
     {
@@ -113,17 +124,29 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
             SetBusyState(description, cancellationTokenSource, isBusy: true);
             var context = new FileOperationContext(this, cancellationTokenSource.Token);
             var result = await Task.Run(() => operation(context), cancellationTokenSource.Token).ConfigureAwait(false);
-            SetCompletionState(description, $"{description} completed.");
+            SetCompletionState(
+                description,
+                $"{description} completed.",
+                detailText: CurrentOperationDetailText,
+                status: FileOperationQueueHistoryStatus.Succeeded);
             return result;
         }
         catch (OperationCanceledException)
         {
-            SetCompletionState(description, $"{description} canceled.");
+            SetCompletionState(
+                description,
+                $"{description} canceled.",
+                detailText: CurrentOperationDetailText,
+                status: FileOperationQueueHistoryStatus.Canceled);
             throw;
         }
         catch (Exception ex)
         {
-            SetCompletionState(description, $"{description} failed: {ex.Message}");
+            SetCompletionState(
+                description,
+                $"{description} failed: {ex.Message}",
+                detailText: BuildFailureDetail(ex),
+                status: FileOperationQueueHistoryStatus.Failed);
             throw;
         }
         finally
@@ -183,14 +206,55 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
         RunOnUiThread(() => OnPropertyChanged(propertyName));
     }
 
-    private void SetCompletionState(string description, string statusText)
+    private void SetCompletionState(
+        string description,
+        string statusText,
+        string? detailText,
+        FileOperationQueueHistoryStatus status)
     {
         RunOnUiThread(() =>
         {
             LastCompletedOperationText = description;
             LastCompletedStatusText = statusText;
             HasRecentActivity = true;
+            AddRecentOperation(description, statusText, detailText, status);
         });
+    }
+
+    private void AddRecentOperation(
+        string description,
+        string statusText,
+        string? detailText,
+        FileOperationQueueHistoryStatus status)
+    {
+        _recentOperations.Insert(0, new FileOperationQueueHistoryEntry
+        {
+            OperationText = description,
+            SummaryText = statusText,
+            DetailText = detailText?.Trim() ?? string.Empty,
+            Status = status,
+            CompletedAtLocal = DateTime.Now
+        });
+
+        while (_recentOperations.Count > MaxRecentOperations)
+            _recentOperations.RemoveAt(_recentOperations.Count - 1);
+
+        OnPropertyChanged(nameof(RecentOperations));
+    }
+
+    private static string BuildFailureDetail(Exception ex)
+    {
+        var parts = new List<string>();
+        Exception? current = ex;
+
+        while (current != null)
+        {
+            if (!string.IsNullOrWhiteSpace(current.Message))
+                parts.Add(current.Message.Trim());
+            current = current.InnerException;
+        }
+
+        return string.Join(Environment.NewLine, parts.Distinct(StringComparer.Ordinal));
     }
 
     private void ReportProgress(int completedSteps, int totalSteps, string? detailText)
