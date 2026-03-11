@@ -56,6 +56,12 @@ The app currently includes:
 - added `Run as Administrator` for a single selected item via the Windows `runas` shell verb
 - added smoke coverage that records the requested verb and path without invoking real shell UI
 
+### File watcher hardening for synced settings and bookmarks
+
+- replaced the narrow last-write watcher callbacks with debounced multi-event watchers for settings and bookmarks
+- added recovery for delete/recreate, rename/replace, and watcher-error scenarios so cross-instance sync survives common external save patterns
+- added smoke coverage for external settings recreation and bookmark replacement flows
+
 ### App icon refresh (v2)
 
 - updated the project output icon metadata to use `Resources\appicon-v2.ico`
@@ -184,7 +190,6 @@ Scope:
 ### 3. Infrastructure and reliability
 Status: PLANNED
 Scope:
-- further harden `FileSystemWatcher` callbacks across all services
 - improve error reporting in the file operation queue history
 
 ## Constraints And Decisions

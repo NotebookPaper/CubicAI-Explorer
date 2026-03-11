@@ -7,8 +7,7 @@ namespace CubicAIExplorer.Services;
 public sealed class BookmarkService : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private readonly FileSystemWatcher? _watcher;
-    private DateTime _lastWriteTime;
+    private readonly DebouncedJsonFileWatcher<List<BookmarkItem>>? _watcher;
 
     public event EventHandler<List<BookmarkItem>>? BookmarksChanged;
 
@@ -21,23 +20,10 @@ public sealed class BookmarkService : IDisposable
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            _watcher = new FileSystemWatcher(dir, Path.GetFileName(path))
-            {
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                EnableRaisingEvents = true
-            };
-            _watcher.Changed += OnFileChanged;
-        }
-    }
-
-    private void OnFileChanged(object sender, FileSystemEventArgs e)
-    {
-        var currentWrite = File.GetLastWriteTime(e.FullPath);
-        if (currentWrite > _lastWriteTime.AddMilliseconds(500))
-        {
-            _lastWriteTime = currentWrite;
-            var bookmarks = Load();
-            BookmarksChanged?.Invoke(this, bookmarks);
+            _watcher = new DebouncedJsonFileWatcher<List<BookmarkItem>>(
+                path,
+                Load,
+                bookmarks => BookmarksChanged?.Invoke(this, bookmarks));
         }
     }
 
@@ -87,7 +73,7 @@ public sealed class BookmarkService : IDisposable
             if (!string.IsNullOrWhiteSpace(dir))
                 Directory.CreateDirectory(dir);
 
-            if (_watcher != null) _watcher.EnableRaisingEvents = false;
+            using var suppression = _watcher?.SuppressNotifications();
 
             var records = bookmarks.Select(MapBookmarkToRecord).ToList();
             var json = JsonSerializer.Serialize(records, JsonOptions);
@@ -99,7 +85,6 @@ public sealed class BookmarkService : IDisposable
                     using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
                     using var writer = new StreamWriter(stream);
                     writer.Write(json);
-                    _lastWriteTime = File.GetLastWriteTime(path);
                     break;
                 }
                 catch (IOException)
@@ -109,10 +94,6 @@ public sealed class BookmarkService : IDisposable
             }
         }
         catch { /* Non-critical */ }
-        finally
-        {
-            if (_watcher != null) _watcher.EnableRaisingEvents = true;
-        }
     }
 
     private BookmarkItem MapRecordToBookmark(BookmarkRecord record)

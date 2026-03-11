@@ -20,3 +20,4 @@
 - 2026-03-11: Completed new-file templates support with configurable template-folder settings, dynamic New-menu population, template-backed file creation, and smoke coverage.
 - 2026-03-11: Completed spec 009 empty recycle bin with a Tools-menu action, shell-backed `SHEmptyRecycleBinW` integration, and smoke coverage.
 - 2026-03-11: Completed spec 010 shell verb execution with `opennewwindow` and `runas` commands routed through `ShellExecuteEx` plus smoke coverage.
+- 2026-03-11: Completed spec 011 file watcher hardening with debounced create/change/delete/rename handling for settings/bookmark sync, watcher-error recovery, and smoke coverage.

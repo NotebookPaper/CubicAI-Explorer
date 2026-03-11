@@ -59,6 +59,7 @@ internal static class Program
             Run("archive browser filter", failures, TestArchiveBrowserFilter);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
+            Run("bookmark watcher reloads after external replace", failures, () => TestBookmarkWatcherReloadsAfterExternalReplace(tempRoot));
             Run("bookmark drag feedback", failures, () => TestBookmarkDragFeedback(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
             Run("redo move", failures, () => TestRedoMove(tempRoot));
@@ -92,6 +93,7 @@ internal static class Program
             Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
             Run("user settings defaults", failures, TestUserSettingsDefaults);
             Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
+            Run("settings watcher reloads after external recreate", failures, () => TestSettingsWatcherReloadsAfterExternalRecreate(tempRoot));
             Run("details column defaults", failures, TestDetailsColumnDefaults);
             Run("details column settings save", failures, TestDetailsColumnSettingsSave);
             Run("named session save", failures, () => TestNamedSessionSave(tempRoot));
@@ -2089,6 +2091,47 @@ internal static class Program
         }
     }
 
+    private static void TestSettingsWatcherReloadsAfterExternalRecreate(string root)
+    {
+        var settingsPath = Path.Combine(root, "settings_watcher.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+        TryDelete(settingsPath);
+
+        try
+        {
+            using var service = new SettingsService();
+            UserSettings? observed = null;
+            var notifications = 0;
+            service.SettingsChanged += (_, settings) =>
+            {
+                observed = settings;
+                Interlocked.Increment(ref notifications);
+            };
+
+            File.WriteAllText(settingsPath, "{\"DefaultViewMode\":\"List\"}");
+            WaitFor(() => Volatile.Read(ref notifications) >= 1
+                && string.Equals(observed?.DefaultViewMode, "List", StringComparison.Ordinal), 5000);
+            Assert(observed?.DefaultViewMode == "List", "Settings watcher should reload externally created settings.");
+
+            File.Delete(settingsPath);
+            WaitFor(() => Volatile.Read(ref notifications) >= 2
+                && string.Equals(observed?.DefaultViewMode, "Details", StringComparison.Ordinal), 5000);
+            Assert(observed?.DefaultViewMode == "Details", "Settings watcher should fall back to defaults after external deletion.");
+
+            File.WriteAllText(settingsPath, "{\"DefaultViewMode\":\"Tiles\",\"ShowHiddenFiles\":true}");
+            WaitFor(() => Volatile.Read(ref notifications) >= 3
+                && string.Equals(observed?.DefaultViewMode, "Tiles", StringComparison.Ordinal), 5000);
+            Assert(observed?.DefaultViewMode == "Tiles", "Settings watcher should stay active after delete/recreate.");
+            Assert(observed?.ShowHiddenFiles == true, "Settings watcher should reload the recreated file contents.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
     private static void TestDetailsColumnDefaults()
     {
         var vm = new MainViewModel(new FileSystemService(), new FakeClipboardService());
@@ -2770,6 +2813,47 @@ internal static class Program
         finally
         {
             Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestBookmarkWatcherReloadsAfterExternalReplace(string root)
+    {
+        var bookmarkPath = Path.Combine(root, "bookmarks_watcher.json");
+        var replacementPath = Path.Combine(root, "bookmarks_watcher_replacement.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkPath);
+        TryDelete(bookmarkPath);
+        TryDelete(replacementPath);
+
+        try
+        {
+            using var service = new BookmarkService();
+            List<BookmarkItem>? observed = null;
+            var notifications = 0;
+            service.BookmarksChanged += (_, bookmarks) =>
+            {
+                observed = bookmarks;
+                Interlocked.Increment(ref notifications);
+            };
+
+            File.WriteAllText(bookmarkPath, "[{\"Name\":\"One\",\"Path\":\"C:\\\\Temp\\\\One\"}]");
+            WaitFor(() => Volatile.Read(ref notifications) >= 1
+                && observed?.Any(bookmark => string.Equals(bookmark.Path, @"C:\Temp\One", StringComparison.OrdinalIgnoreCase)) == true, 5000);
+            Assert(observed?.Count == 1, "Bookmark watcher should reload externally created bookmarks.");
+
+            File.WriteAllText(replacementPath, "[{\"Name\":\"Two\",\"Path\":\"C:\\\\Temp\\\\Two\"}]");
+            File.Move(replacementPath, bookmarkPath, overwrite: true);
+
+            WaitFor(() => Volatile.Read(ref notifications) >= 2
+                && observed?.Any(bookmark => string.Equals(bookmark.Path, @"C:\Temp\Two", StringComparison.OrdinalIgnoreCase)) == true, 5000);
+            Assert(observed?.Count == 1, "Bookmark watcher should replace the old bookmark payload.");
+            Assert(string.Equals(observed?[0].Name, "Two", StringComparison.Ordinal), "Bookmark watcher should reload replacement writes.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", originalOverridePath);
+            TryDelete(bookmarkPath);
+            TryDelete(replacementPath);
         }
     }
 

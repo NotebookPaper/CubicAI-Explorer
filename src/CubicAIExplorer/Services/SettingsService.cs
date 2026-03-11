@@ -7,8 +7,7 @@ namespace CubicAIExplorer.Services;
 public sealed class SettingsService : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private readonly FileSystemWatcher? _watcher;
-    private DateTime _lastWriteTime;
+    private readonly DebouncedJsonFileWatcher<UserSettings>? _watcher;
 
     public event EventHandler<UserSettings>? SettingsChanged;
 
@@ -21,24 +20,10 @@ public sealed class SettingsService : IDisposable
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            _watcher = new FileSystemWatcher(dir, Path.GetFileName(path))
-            {
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                EnableRaisingEvents = true
-            };
-            _watcher.Changed += OnFileChanged;
-        }
-    }
-
-    private void OnFileChanged(object sender, FileSystemEventArgs e)
-    {
-        // Debounce and check if we actually have a new write
-        var currentWrite = File.GetLastWriteTime(e.FullPath);
-        if (currentWrite > _lastWriteTime.AddMilliseconds(500))
-        {
-            _lastWriteTime = currentWrite;
-            var settings = Load();
-            SettingsChanged?.Invoke(this, settings);
+            _watcher = new DebouncedJsonFileWatcher<UserSettings>(
+                path,
+                Load,
+                settings => SettingsChanged?.Invoke(this, settings));
         }
     }
 
@@ -87,8 +72,7 @@ public sealed class SettingsService : IDisposable
             if (!string.IsNullOrWhiteSpace(dir))
                 Directory.CreateDirectory(dir);
 
-            // Disable watcher while writing to avoid self-trigger
-            if (_watcher != null) _watcher.EnableRaisingEvents = false;
+            using var suppression = _watcher?.SuppressNotifications();
 
             var json = JsonSerializer.Serialize(settings, JsonOptions);
             for (int i = 0; i < 3; i++)
@@ -98,7 +82,6 @@ public sealed class SettingsService : IDisposable
                     using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
                     using var writer = new StreamWriter(stream);
                     writer.Write(json);
-                    _lastWriteTime = File.GetLastWriteTime(path);
                     break;
                 }
                 catch (IOException)
@@ -108,10 +91,6 @@ public sealed class SettingsService : IDisposable
             }
         }
         catch { /* Non-critical */ }
-        finally
-        {
-            if (_watcher != null) _watcher.EnableRaisingEvents = true;
-        }
     }
 
     public void Dispose()

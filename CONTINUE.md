@@ -2,16 +2,16 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after shell verb execution support
-> Status: App icon refresh, recycle-bin management, and shell-verb execution support are implemented and verified.
+> HEAD: current local `master` after file watcher hardening
+> Status: File watcher hardening for settings/bookmark sync is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
-- The branch builds and the smoke harness passes (with Spec 008 and Spec 009 coverage).
-- Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009`, and `010` are complete in this checkout.
+- The branch builds and the smoke harness passes, including watcher hardening coverage.
+- Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, `009`, `010`, and `011` are complete in this checkout.
 - The top roadmap item after the numbered specs, new-file templates support, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -40,6 +40,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added `IFileSystemService.ExecuteShellVerb()` backed by `ShellExecuteEx` so alternate launches stay inside the shell-aware service boundary.
   - Added `Open in New Window` and `Run as Administrator` commands in `MainViewModel` with menu and pane-context-menu wiring in `MainWindow`.
   - Added smoke coverage that verifies the requested shell verb and target path without triggering real elevated prompts.
+- **Spec 011: File Watcher Hardening** (New in this session)
+  - Replaced the narrow last-write watcher callbacks in `SettingsService` and `BookmarkService` with a shared debounced watcher that listens for create/change/delete/rename events.
+  - Added watcher recreation on `FileSystemWatcher.Error` and suppression around service-owned writes to avoid self-trigger loops.
+  - Added smoke coverage for external settings delete/recreate and bookmark temp-file replacement flows.
 - **Spec 006: Broader Preview Support**
   - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
   - Implemented a dependency-free Markdown renderer for bold, headers, and lists.
@@ -67,11 +71,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 3. Infrastructure and reliability:
-   - further harden `FileSystemWatcher` callbacks across all services
    - improve error reporting in the file operation queue history
 
 ## Key Files
 
+- `src/CubicAIExplorer/Services/DebouncedJsonFileWatcher.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
 - `src/CubicAIExplorer/PreferencesWindow.xaml`
@@ -85,8 +89,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Spec 008 app icon refresh, spec 009 empty recycle bin, and spec 010 shell verb execution are the latest completed roadmap slices in this checkout.
-- New-file templates support remains complete in this checkout.
+- Spec 011 file watcher hardening is the latest completed roadmap slice in this checkout.
+- New-file templates support, app icon refresh, recycle-bin management, and shell-verb execution remain complete in this checkout.
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -98,7 +102,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all 90+ tests pass, including app-icon, recycle-bin, and shell-verb coverage)
+  - passed (all smoke tests pass, including settings/bookmark watcher coverage)
 
 ## Gotchas
 
@@ -106,3 +110,4 @@ Verification run on the updated checkout on 2026-03-11:
 - **PROPVARIANT Size**: On 64-bit, the `PROPVARIANT` structure must be at least 24 bytes. My implementation uses `IntPtr` and `Marshal.AllocCoTaskMem(24)` for safety.
 - **IShellItem2 Vtable**: When defining `IShellItem2`, ensure all methods are in the correct order (including the 3 methods between `GetPropertyStore` and `GetProperty`).
 - **Smoke Test App State**: Creating a WPF `App` instance in a smoke test can have side effects on subsequent tests. Move app-dependent tests to the end if possible.
+- **Watcher Semantics**: Cross-instance settings/bookmark sync now depends on the shared debounced watcher helper handling create/delete/rename/error events. Keep service-owned saves wrapped in watcher suppression to avoid self-triggered reloads.
