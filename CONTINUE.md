@@ -3,7 +3,7 @@
 > Last updated: 2026-03-11
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: Windows Shell context menu integration, multi-select Explorer reveal, and native properties dialog support are now implemented and verified.
+> Status: Windows Shell context menu integration (including background menu), multi-select Explorer reveal, and native properties dialog support are now implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -11,7 +11,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
 - The branch builds and the smoke harness passes again.
-- Specs `001-named-session-manager.md`, `002-richer-filter-search-model.md`, and `003-safer-file-operations.md` are complete in this checkout.
+- Specs `001`, `002`, `003`, and `004` are complete in this checkout.
 - The latest roadmap slice after those specs is REAL Windows Shell context menu integration for file lists.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -21,6 +21,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added `UseShellContextMenu` property to `UserSettings` with a preference toggle in the UI.
   - Implemented `ShellContextMenuHelper` with support for `IContextMenu`, `IContextMenu2`, and `IContextMenu3` to handle submenus (e.g., "Send To", "Open With") correctly via window subclassing.
   - Added shell context menu support to `FileListView`, `FolderTree`, and `BookmarkTree` (for filesystem bookmarks).
+  - Implemented "background" shell context menu when right-clicking empty space in the file list.
   - Updated `MainWindow` to intercept context menu events and show the native menu when enabled.
 - Unified Reveal and Native Properties:
   - Unified `RevealInExplorer` to use the native `SHOpenFolderAndSelectItems` API for both single and multiple selections, providing a more consistent and robust experience than calling `explorer.exe /select`.
@@ -88,10 +89,9 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue deeper shell integration.
-   - implement "background" shell context menu when right-clicking empty space in the file list
    - review remaining Explorer interop edge cases beyond reveal/select behavior
+   - explore shell metadata exposure in details/properties views
 2. UX polish and advanced operations:
-
    - add broader preview type support (e.g., more image formats, syntax highlighting for text)
    - improve bookmark drag/drop feedback and visual cues
    - add new-file templates support (parity with original CubicExplorer)
@@ -103,6 +103,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 - `src/CubicAIExplorer/Services/BookmarkService.cs`
 - `src/CubicAIExplorer/Services/SettingsService.cs`
+- `src/CubicAIExplorer/Services/ShellContextMenuHelper.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
@@ -111,7 +112,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Explorer reveal-with-selection behavior and its smoke coverage are local and uncommitted in this checkout
+- Shell background context menu, Explorer reveal-with-selection behavior, and their smoke coverage are local and uncommitted in this checkout
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:

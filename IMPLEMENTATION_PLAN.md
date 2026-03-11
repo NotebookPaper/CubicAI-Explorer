@@ -23,21 +23,33 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Windows Shell context menu integration (including background menu)
+
+- Added `UseShellContextMenu` property to `UserSettings` with a preference toggle in the UI.
+- Implemented `ShellContextMenuHelper` with support for `IContextMenu`, `IContextMenu2`, and `IContextMenu3` to handle submenus (e.g., "Send To", "Open With") correctly via window subclassing.
+- Added shell context menu support to `FileListView`, `FolderTree`, and `BookmarkTree` (for filesystem bookmarks).
+- Implemented "background" shell context menu when right-clicking empty space in the file list, providing "New", "Paste", and "Refresh" parity with Explorer.
+- Updated `MainWindow` to intercept context menu events and show the native menu when enabled.
+
+Primary files:
+
+- `src/CubicAIExplorer/Services/ShellContextMenuHelper.cs`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Models/UserSettings.cs`
+
+### Unified Reveal and Native Properties
+
+- Unified `RevealInExplorer` to use the native `SHOpenFolderAndSelectItems` API for both single and multiple selections, providing a more consistent and robust experience than calling `explorer.exe /select`.
+- Added `ShowNativeProperties` integration using `ShellExecuteEx` with `SEE_MASK_INVOKEIDLIST` to host the official Windows properties dialog.
+- Updated `MainWindow` and `MainViewModel` to prefer the native properties dialog when shell integration is enabled, covering file list items and bookmarks.
+- Modernized `OpenInDefaultApp` to use `ShellExecute` directly on paths for standard folder and file launches.
+
 ### Shell-aware display names and known-folder aliases
 
 - added shell-backed display-name handling for tab titles, breadcrumbs, recent folders, and new bookmark labels so Windows-known folders no longer fall back to raw path segments
 - the address bar now resolves well-known folder aliases such as `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Videos`, and `Home`
 - address autocomplete now suggests matching known folders alongside filesystem path completion
 - smoke coverage now verifies alias navigation, shell display-name routing, and known-folder autocomplete suggestions
-
-Primary files:
-
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/TabViewModel.cs`
-- `src/CubicAIExplorer/App.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ### Shell-backed type metadata across details, preview, and properties
 
@@ -46,31 +58,6 @@ Primary files:
 - bookmark properties now populate real timestamps, attributes, size, and shell type labels instead of placeholder defaults
 - smoke coverage now verifies shell-backed type descriptions in directory listings, recursive search results, and the properties dialog
 
-Primary files:
-
-- `src/CubicAIExplorer/Services/ShellFileInfoHelper.cs`
-- `src/CubicAIExplorer/Models/FileSystemItem.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
-### Explorer reveal behavior for selected items
-
-- `Open in Explorer` now reveals a single selected file or folder with Explorer's selection affordance instead of always opening the current folder generically
-- when there is no selection, the command still falls back to opening the current folder so the workflow stays predictable
-- shell-launch behavior is now routed through `FileSystemService`, keeping sanitization and interop logic out of the window code-behind
-- multi-select reveal now uses the Windows shell selection API so Explorer can highlight multiple selected items from the current folder
-- smoke coverage now verifies both single-selection and multi-selection reveal behavior
-
-Primary files:
-
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
 ### Named sessions and session manager
 
 - added persisted named sessions inside the existing settings file
@@ -78,31 +65,12 @@ Primary files:
 - startup now supports either generic last-state restore or a chosen named session
 - smoke coverage now verifies save/load/delete/startup session behavior
 
-Primary files:
-
-- `src/CubicAIExplorer/Models/NamedSession.cs`
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
 ### Richer filter and search model
 
 - added explicit `Contains`, `Wildcard`, and `Exact` match modes for inline filter and recursive search workflows
 - saved searches now persist their selected match mode and replay with the same semantics
 - filter history is reusable from the main window and persisted in existing settings
 - users can opt into clearing inline filters automatically when navigating to a different folder
-
-Primary files:
-
-- `src/CubicAIExplorer/Models/NameMatchMode.cs`
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ### View-style and column customization
 
@@ -117,26 +85,11 @@ Primary files:
 - tab cleanup now preserves event-detach behavior through a shared close helper and promotes the clicked tab when the active tab was closed
 - smoke coverage now verifies close-left and close-right behavior alongside duplicate and close-others
 
-Primary files:
-
-- `src/CubicAIExplorer/Models/DetailsColumnId.cs`
-- `src/CubicAIExplorer/Models/DetailsColumnSetting.cs`
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-
 ### Tab reuse for bookmark-driven navigation
 
 - bookmark `Open in New Tab` now reuses an already-open tab for the same folder instead of silently creating duplicates
 - bookmark categories opened through `Open All in Tabs` inherit the same reuse behavior, so only unopened folders create new tabs
 - smoke coverage now verifies single-bookmark and category-based reuse paths
-
-Primary files:
-
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ### Crowded-tab overflow affordances
 
@@ -144,12 +97,6 @@ Primary files:
 - added explicit left/right tab-strip scroll buttons plus a `More Tabs` dropdown listing every open tab with the active tab marked
 - when tab count or window width changes, the active tab is automatically scrolled back into view
 - smoke coverage now verifies the overflow wiring is present in the main window
-
-Primary files:
-
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ### Edit menu and advanced operations
 
@@ -159,27 +106,12 @@ Primary files:
 - improved toolbar with inline Address/Breadcrumb bar and "New Tab" button
 - hierarchical bookmark organization with folders and drag-and-drop
 
-Primary files:
-
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-
 ### Session persistence and machine sync
 
 - added persistent session state: open tabs, active tab, pane paths, and window layout (sidebar/preview widths)
 - implemented non-locking settings/bookmark access for OneDrive compatibility
 - added `FileSystemWatcher` support for live auto-refresh of bookmarks and settings when updated externally
 - environment variable overrides (`CUBICAI_SETTINGS_PATH`, `CUBICAI_BOOKMARKS_PATH`) for flexible sync location
-
-Primary files:
-
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/Services/SettingsService.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/App.xaml.cs`
 
 ### Transfer reliability and safety
 
@@ -188,23 +120,11 @@ Primary files:
 - transfer history keeps partial results instead of collapsing mixed outcomes
 - clipboard handling is more robust against transient failures and Explorer drop-effect variants
 
-Primary files:
-
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
-
 ### Bookmark management and sync hardening
 
 - refactored bookmark management into a dedicated `BookmarkService` to share robust persistence logic with `SettingsService`
 - implemented reliable sync with automatic retries and hardened `FileSystemWatcher` callbacks to handle transient file locks
 - organized bookmark data access into an atomic load/save pattern with watcher suspension during local writes
-
-Primary files:
-
-- `src/CubicAIExplorer/Services/BookmarkService.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `src/CubicAIExplorer/App.xaml.cs`
 
 ### Expanded smoke-test coverage
 
@@ -212,11 +132,6 @@ Primary files:
 - added coverage for risky file-operation paths, specifically verifying backup restoration after failed `Replace` transfers
 - verified undo/redo for `New File` and `Create Symbolic Link` operations
 - hardened the smoke harness to support multi-window tests without process shutdown races
-
-Primary files:
-
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
-- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 
 ## Verification
 
@@ -244,23 +159,11 @@ Smoke coverage explicitly includes:
 The rewrite is already past "basic file manager" parity. The remaining gap with original CubicExplorer is mostly in the power-user shell/workspace layer rather than core file operations.
 
 ### 1. Deeper shell integration
-
-Why this matters:
-
-- CubicExplorer's identity was tightly tied to Windows shell behavior, metadata, and special-folder handling
-- the rewrite already has shell icons and basic properties, but shell-native detail still has room to grow
-
+Status: IN_PROGRESS
 Scope:
-
-- expose more shell metadata in details/properties views where practical
-- review shell context behavior and remaining Explorer interop edge cases
-
-Likely files:
-
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/ShellIconService.cs`
-- `src/CubicAIExplorer/Models/FileSystemItem.cs`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- implement "background" shell context menu when right-clicking empty space in the file list (COMPLETE)
+- review remaining Explorer interop edge cases beyond reveal/select behavior
+- explore shell metadata exposure in details/properties views
 
 ### Lower-priority follow-up after parity-critical work
 
