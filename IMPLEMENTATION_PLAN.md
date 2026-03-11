@@ -194,6 +194,30 @@ Primary files:
 - `src/CubicAIExplorer/Services/IFileSystemService.cs`
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 
+### Bookmark management and sync hardening
+
+- refactored bookmark management into a dedicated `BookmarkService` to share robust persistence logic with `SettingsService`
+- implemented reliable sync with automatic retries and hardened `FileSystemWatcher` callbacks to handle transient file locks
+- organized bookmark data access into an atomic load/save pattern with watcher suspension during local writes
+
+Primary files:
+
+- `src/CubicAIExplorer/Services/BookmarkService.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/App.xaml.cs`
+
+### Expanded smoke-test coverage
+
+- added verification for same-folder `Duplicate` behavior and its undo/redo path
+- added coverage for risky file-operation paths, specifically verifying backup restoration after failed `Replace` transfers
+- verified undo/redo for `New File` and `Create Symbolic Link` operations
+- hardened the smoke harness to support multi-window tests without process shutdown races
+
+Primary files:
+
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+- `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
+
 ## Verification
 
 Verified on the current branch:

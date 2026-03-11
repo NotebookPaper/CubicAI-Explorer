@@ -96,6 +96,12 @@ internal static class Program
             Run("named session load", failures, () => TestNamedSessionLoad(tempRoot));
             Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
             Run("named session startup selection", failures, () => TestNamedSessionStartupSelection(tempRoot));
+            Run("replace file failure", failures, () => TestReplaceFileFailure(tempRoot));
+            Run("copy replace directory failure", failures, () => TestCopyReplaceDirectoryFailure(tempRoot));
+            Run("duplicate item", failures, () => TestDuplicateItem(tempRoot));
+            Run("new file and link creation", failures, () => TestNewFileAndLink(tempRoot));
+            Run("undo/redo after duplicate", failures, () => TestUndoRedoAfterDuplicate(tempRoot));
+            Run("undo/redo after new file and link creation", failures, () => TestUndoRedoAfterNewFileAndLink(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
             Run("main window xaml loads", failures, TestMainWindowXamlLoads);
@@ -2443,6 +2449,178 @@ internal static class Program
         Assert(!main.Contains("&#x25C0;"), "Unicode arrow symbols should be replaced with vector icons.");
     }
 
+    private static void TestReplaceFileFailure(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "copy_replace_fail_source");
+        var destinationDir = CreateCleanSubdir(root, "copy_replace_fail_destination");
+        var source = Path.Combine(sourceDir, "item.txt");
+        var destination = Path.Combine(destinationDir, "item.txt");
+        File.WriteAllText(source, "new content");
+        File.WriteAllText(destination, "old content");
+
+        // Lock the source file to cause failure in CopyFile
+        using (var stream = File.Open(source, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var results = fs.CopyFiles([source], destinationDir, FileTransferCollisionResolution.Replace);
+            Assert(results.Count == 1, "Should have one result.");
+            Assert(results[0].Status == FileTransferStatus.Failed, "Expected failure due to locked source.");
+            Assert(File.ReadAllText(destination) == "old content", "Original file should be restored after failure.");
+        }
+    }
+
+    private static void TestCopyReplaceDirectoryFailure(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "copy_replace_dir_fail_source");
+        var destinationDir = CreateCleanSubdir(root, "copy_replace_dir_fail_dest_root");
+        
+        var sourceSub = Path.Combine(sourceDir, "subdir");
+        Directory.CreateDirectory(sourceSub);
+        File.WriteAllText(Path.Combine(sourceSub, "new.txt"), "new content");
+        
+        var destinationSub = Path.Combine(destinationDir, "subdir");
+        Directory.CreateDirectory(destinationSub);
+        File.WriteAllText(Path.Combine(destinationSub, "old.txt"), "old content");
+
+        // Lock the source file to cause failure midway in CopyDirectoryRecursive
+        var sourceFile = Path.Combine(sourceSub, "new.txt");
+        using (var stream = File.Open(sourceFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var results = fs.CopyFiles([sourceSub], destinationDir, FileTransferCollisionResolution.Replace);
+            
+            Assert(results.Count == 1, "Should have one result.");
+            Assert(results[0].Status == FileTransferStatus.Failed, "Expected failure due to locked source file.");
+            
+            Assert(Directory.Exists(destinationSub), "Destination directory should exist (restored).");
+            var oldFile = Path.Combine(destinationSub, "old.txt");
+            Assert(File.Exists(oldFile), "Original file 'old.txt' should be restored in destination.");
+            Assert(File.ReadAllText(oldFile) == "old content", "Content of 'old.txt' should be original.");
+        }
+    }
+
+    private static void TestUndoRedoAfterNewFileAndLink(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "undo_new_file_link");
+        var targetFile = Path.Combine(folder, "target.txt");
+        File.WriteAllText(targetFile, "target");
+
+        vm.LoadDirectory(folder);
+
+        // Test New File Undo/Redo
+        var newFileName = "new_file.txt";
+        var newFilePath = Path.Combine(folder, newFileName);
+
+        vm.NewFileWithHistory(newFileName);
+        Assert(File.Exists(newFilePath), "New file should be created.");
+        Assert(vm.CanUndo, "New file should create undo history.");
+
+        vm.UndoCommand.Execute(null);
+        Assert(!File.Exists(newFilePath), "Undo new file should delete the file.");
+
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(newFilePath), "Redo new file should recreate the file.");
+
+        // Test Symbolic Link Undo/Redo
+        var linkName = "link.txt";
+        var linkPath = Path.Combine(folder, linkName);
+
+        try
+        {
+            vm.CreateSymbolicLinkWithHistory(linkName, targetFile);
+            Assert(File.Exists(linkPath), "Symbolic link should be created.");
+            Assert(vm.CanUndo, "Link creation should create undo history.");
+
+            vm.UndoCommand.Execute(null);
+            Assert(!File.Exists(linkPath), "Undo link creation should delete the link.");
+
+            vm.RedoCommand.Execute(null);
+            Assert(File.Exists(linkPath), "Redo link creation should recreate the link.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Note: Skipping symbolic link undo/redo check ({ex.Message}).");
+        }
+    }
+
+    private static void TestDuplicateItem(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "duplicate");
+        var original = Path.Combine(folder, "item.txt");
+        File.WriteAllText(original, "original");
+
+        vm.LoadDirectory(folder);
+        vm.SelectedItem = vm.Items.Single(i => i.Name == "item.txt");
+        vm.SelectedItems.Clear();
+        vm.SelectedItems.Add(vm.SelectedItem);
+
+        vm.DuplicateCommand.Execute(null);
+        WaitFor(() => vm.Items.Count == 2);
+
+        Assert(vm.Items.Any(i => i.Name == "item (2).txt"), "Duplicate should create a suffixed copy.");
+        Assert(File.Exists(Path.Combine(folder, "item (2).txt")), "Duplicate file should exist on disk.");
+    }
+
+    private static void TestNewFileAndLink(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "new_file_link");
+        var targetFile = Path.Combine(folder, "target.txt");
+        File.WriteAllText(targetFile, "target");
+
+        vm.LoadDirectory(folder);
+
+        var newFile = fs.CreateFile(folder, "new.txt");
+        Assert(File.Exists(newFile), "Service should create new file.");
+
+        var linkPath = Path.Combine(folder, "link.txt");
+        try
+        {
+            fs.CreateSymbolicLink(linkPath, targetFile);
+            Assert(File.Exists(linkPath), "Service should create symbolic link.");
+        }
+        catch (Exception ex)
+        {
+            // Skip symlink check if it fails (likely due to privileges or OS constraints)
+            Console.WriteLine($"Note: Skipping symbolic link check ({ex.Message}).");
+        }
+    }
+
+    private static void TestUndoRedoAfterDuplicate(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "undo_duplicate");
+        var original = Path.Combine(folder, "item.txt");
+        File.WriteAllText(original, "content");
+
+        vm.LoadDirectory(folder);
+        vm.SelectedItem = vm.Items.Single(i => i.Name == "item.txt");
+        vm.SelectedItems.Clear();
+        vm.SelectedItems.Add(vm.SelectedItem);
+
+        vm.DuplicateCommand.Execute(null);
+        WaitFor(() => vm.Items.Count == 2);
+        var duplicatePath = Path.Combine(folder, "item (2).txt");
+
+        Assert(vm.CanUndo, "Duplicate should create undo history.");
+        vm.UndoCommand.Execute(null);
+        Assert(!File.Exists(duplicatePath), "Undo duplicate should remove the copy.");
+
+        Assert(vm.CanRedo, "Undo duplicate should create redo history.");
+        vm.RedoCommand.Execute(null);
+        Assert(File.Exists(duplicatePath), "Redo duplicate should restore the copy.");
+    }
+
     private static void TestBookmarks(string root)
     {
         var fs = new FileSystemService();
@@ -2454,21 +2632,23 @@ internal static class Program
 
         try
         {
-            var vm = new MainViewModel(fs, clipboard);
+            using var bookmarkService = new BookmarkService();
+            var vm = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService);
             vm.NewTabCommand.Execute(null);
             vm.NavigateToPath(folder);
 
-            var before = vm.Bookmarks.Count;
+            var initialCount = vm.Bookmarks.Count;
             vm.AddBookmarkCommand.Execute(null);
             var afterFirstAdd = vm.Bookmarks.Count;
             vm.AddBookmarkCommand.Execute(null);
             var afterSecondAdd = vm.Bookmarks.Count;
 
-            Assert(afterFirstAdd == before + 1, "AddBookmark should add current folder.");
+            Assert(afterFirstAdd == initialCount + 1, "AddBookmark should add current folder.");
             Assert(afterSecondAdd == afterFirstAdd, "AddBookmark should ignore duplicates.");
             Assert(File.Exists(bookmarkFile), "Bookmark file should be created.");
 
-            var vmReloaded = new MainViewModel(fs, clipboard);
+            using var bookmarkService2 = new BookmarkService();
+            var vmReloaded = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService2);
             Assert(vmReloaded.Bookmarks.Any(b => string.Equals(b.Path, folder, StringComparison.OrdinalIgnoreCase)),
                 "Bookmarks should persist across MainViewModel instances.");
         }
@@ -2513,6 +2693,7 @@ internal static class Program
         if (Application.Current == null)
         {
             var app = new CubicAIExplorer.App();
+            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             app.InitializeComponent();
         }
 

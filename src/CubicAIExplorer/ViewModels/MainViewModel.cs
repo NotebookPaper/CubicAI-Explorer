@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IClipboardService _clipboardService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
     private readonly Services.SettingsService? _settingsService;
+    private readonly Services.BookmarkService? _bookmarkService;
     private readonly Models.UserSettings _userSettings;
 
     [ObservableProperty]
@@ -36,9 +37,6 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private double _previewWidth = 300;
-
-    private readonly FileSystemWatcher? _bookmarkWatcher;
-    private DateTime _lastBookmarkWrite;
 
     [ObservableProperty]
     private FolderTreeNodeViewModel? _selectedTreeNode;
@@ -183,12 +181,14 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService,
         Services.SettingsService? settingsService = null,
         Models.UserSettings? userSettings = null,
-        IFileOperationQueueService? fileOperationQueueService = null)
+        IFileOperationQueueService? fileOperationQueueService = null,
+        Services.BookmarkService? bookmarkService = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
         _settingsService = settingsService;
+        _bookmarkService = bookmarkService;
         _userSettings = userSettings ?? new Models.UserSettings();
 
         // Initialize UI visibility from settings
@@ -211,21 +211,8 @@ public partial class MainViewModel : ObservableObject
         if (_settingsService != null)
             _settingsService.SettingsChanged += OnExternalSettingsChanged;
 
-        // Setup bookmark watcher
-        var bookmarkPath = GetBookmarksPath();
-        var bookmarkDir = Path.GetDirectoryName(bookmarkPath);
-        if (!string.IsNullOrWhiteSpace(bookmarkDir))
-        {
-            if (!Directory.Exists(bookmarkDir))
-                Directory.CreateDirectory(bookmarkDir);
-
-            _bookmarkWatcher = new FileSystemWatcher(bookmarkDir, Path.GetFileName(bookmarkPath))
-            {
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                EnableRaisingEvents = true
-            };
-            _bookmarkWatcher.Changed += OnBookmarkFileChanged;
-        }
+        if (_bookmarkService != null)
+            _bookmarkService.BookmarksChanged += OnExternalBookmarksChanged;
 
         LoadBookmarks();
         LoadRecentFolders();
@@ -508,20 +495,6 @@ public partial class MainViewModel : ObservableObject
         NamedSessions.Clear();
         foreach (var session in ordered)
             NamedSessions.Add(session);
-    }
-
-    private void OnBookmarkFileChanged(object sender, FileSystemEventArgs e)
-    {
-        var currentWrite = File.GetLastWriteTime(e.FullPath);
-        if (currentWrite > _lastBookmarkWrite.AddMilliseconds(500))
-        {
-            _lastBookmarkWrite = currentWrite;
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher != null)
-                dispatcher.Invoke(LoadBookmarks);
-            else
-                LoadBookmarks();
-        }
     }
 
     public void ActivateLeftPane() => IsRightPaneActive = false;
@@ -928,37 +901,45 @@ public partial class MainViewModel : ObservableObject
         return GetAppDataPath("bookmarks.json");
     }
 
+    private void OnExternalBookmarksChanged(object? sender, List<BookmarkItem> bookmarks)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Bookmarks.Clear();
+            foreach (var bookmark in bookmarks)
+                Bookmarks.Add(bookmark);
+        });
+    }
+
     private void LoadBookmarks()
     {
-        var bookmarksPath = GetBookmarksPath();
-        try
+        if (_bookmarkService == null)
         {
-            if (File.Exists(bookmarksPath))
-            {
-                var json = File.ReadAllText(bookmarksPath);
-                var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
-                if (records is { Count: > 0 })
-                {
-                    Bookmarks.Clear();
-                    foreach (var record in records)
-                    {
-                        Bookmarks.Add(MapRecordToBookmark(record));
-                    }
-                    return;
-                }
-            }
-        }
-        catch
-        {
-            // Fall back to defaults if persisted bookmarks are unavailable or invalid.
+            // Fallback for tests or if service is unavailable
+            TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), save: false);
+            TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), save: false);
+            TryAddBookmark(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads"), save: false);
+            return;
         }
 
-        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), save: false);
-        TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), save: false);
-        TryAddBookmark(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Downloads"), save: false);
-        SaveBookmarks();
+        var bookmarks = _bookmarkService.Load();
+        if (bookmarks.Count > 0)
+        {
+            Bookmarks.Clear();
+            foreach (var bookmark in bookmarks)
+                Bookmarks.Add(bookmark);
+        }
+        else
+        {
+            TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), save: false);
+            TryAddBookmark(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), save: false);
+            TryAddBookmark(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads"), save: false);
+            SaveBookmarks();
+        }
     }
 
     private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
@@ -1936,23 +1917,7 @@ public partial class MainViewModel : ObservableObject
 
     private void SaveBookmarks()
     {
-        try
-        {
-            var bookmarksPath = GetBookmarksPath();
-            var directory = Path.GetDirectoryName(bookmarksPath);
-            if (!string.IsNullOrWhiteSpace(directory))
-                Directory.CreateDirectory(directory);
-
-            var payload = Bookmarks
-                .Select(MapBookmarkToRecord)
-                .ToList();
-
-            File.WriteAllText(bookmarksPath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
-        }
-        catch
-        {
-            // Persistence failures should not interrupt core app behavior.
-        }
+        _bookmarkService?.Save(Bookmarks);
     }
 
     private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);

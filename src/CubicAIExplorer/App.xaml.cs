@@ -30,6 +30,7 @@ public partial class App : Application
         var fileSystemService = new FileSystemService();
         var clipboardService = new ClipboardService();
         var fileOperationQueueService = new FileOperationQueueService();
+        var bookmarkService = new BookmarkService();
         var shellIconService = new ShellIconService();
         ShellIconConverter.IconService = shellIconService;
         var mainViewModel = new MainViewModel(
@@ -37,7 +38,8 @@ public partial class App : Application
             clipboardService,
             settingsService,
             settings,
-            fileOperationQueueService);
+            fileOperationQueueService,
+            bookmarkService);
 
         var mainWindow = new MainWindow
         {

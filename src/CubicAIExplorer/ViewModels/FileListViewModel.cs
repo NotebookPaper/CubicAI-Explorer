@@ -148,6 +148,57 @@ public partial class FileListViewModel : ObservableObject
         Clipboard.SetText(item.Name);
     }
 
+    public void NewFileWithHistory(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath)) return;
+
+        try
+        {
+            var createdPath = _fileSystemService.CreateFile(CurrentPath, fileName);
+            var parentPath = Path.GetDirectoryName(createdPath) ?? CurrentPath;
+            var createdFileName = Path.GetFileName(createdPath);
+            PushHistory(
+                "Undo New File",
+                () => _fileSystemService.DeleteFiles([createdPath], permanentDelete: true),
+                "Redo New File",
+                () => _fileSystemService.CreateFile(parentPath, createdFileName));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Could not create file: {ex.Message}",
+                "New File Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    public void CreateSymbolicLinkWithHistory(string linkName, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath)) return;
+
+        try
+        {
+            var linkPath = Path.Combine(CurrentPath, linkName);
+            _fileSystemService.CreateSymbolicLink(linkPath, targetPath);
+            PushHistory(
+                "Undo Create Link",
+                () => _fileSystemService.DeleteFiles([linkPath], permanentDelete: true),
+                "Redo Create Link",
+                () => _fileSystemService.CreateSymbolicLink(linkPath, targetPath));
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Could not create symbolic link: {ex.Message}",
+                "Symbolic Link Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     [RelayCommand]
     private void NewFile()
     {

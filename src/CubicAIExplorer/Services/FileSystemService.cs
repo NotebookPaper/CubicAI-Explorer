@@ -819,9 +819,20 @@ public sealed class FileSystemService : IFileSystemService
         try
         {
             if (File.Exists(backupPath))
+            {
                 File.Move(backupPath, originalPath, overwrite: true);
+            }
             else if (Directory.Exists(backupPath))
+            {
+                // For directories, if we had a failure midway, a partial directory 
+                // might have been created at originalPath. Directory.Move will fail 
+                // if it exists.
+                if (Directory.Exists(originalPath))
+                {
+                    Directory.Delete(originalPath, recursive: true);
+                }
                 Directory.Move(backupPath, originalPath);
+            }
         }
         catch { /* Best effort */ }
     }

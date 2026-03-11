@@ -61,36 +61,35 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - no-selection flows still open the current folder to avoid ambiguous behavior
   - shell launch logic now routes through `IFileSystemService` so the behavior is testable and stays out of window code-behind
   - smoke coverage now verifies both single-selection and multi-selection reveal behavior
-- Smoke harness cleanup:
-  - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
-  - refreshed brittle smoke assertions around tab counts and current XAML wiring
+- Bookmark management refactoring:
+  - refactored bookmark management into a dedicated `BookmarkService` to share robust persistence logic with `SettingsService`.
+  - implemented reliable sync with automatic retries and hardened `FileSystemWatcher` callbacks to handle transient file locks.
+  - organized bookmark data access into an atomic load/save pattern with watcher suspension during local writes.
+  - updated `MainViewModel` and `App.xaml.cs` to use the new service.
+- Expanded smoke-test coverage:
+  - added verification for same-folder `Duplicate` behavior and its undo/redo path.
+  - added coverage for risky file-operation paths, specifically verifying backup restoration after failed `Replace` transfers for both files and directories.
+  - verified undo/redo for `New File` and `Create Symbolic Link` operations.
+  - hardened the smoke harness to support multi-window tests without process shutdown races by setting `ShutdownMode.OnExplicitShutdown`.
 
 ## Next Steps
 
 1. Continue deeper shell integration.
    - review shell-context and remaining Explorer interop edge cases beyond reveal/select behavior
    - decide whether any remaining Explorer actions should move off `explorer.exe` and onto shell-native APIs
-2. Add smoke-test coverage for the remaining risky file-operation paths:
-   - replace failure behavior
-   - same-folder duplicate behavior
-   - undo/redo after duplicate, new file, and link creation
-3. Make settings/bookmark sync more reliable on first run:
-   - ensure watcher directories exist before `FileSystemWatcher` setup, or create watchers lazily after the first save
-   - harden watcher callbacks against transient `IOException` / partial-write races for both settings and bookmarks
+   - explore showing the REAL Windows shell context menu in `FileListView`
+2. UX polish and advanced operations:
+   - add broader preview type support (e.g., more image formats, syntax highlighting for text)
+   - improve bookmark drag/drop feedback and visual cues
+   - add new-file templates support (parity with original CubicExplorer)
+3. Infrastructure and reliability:
+   - further harden `FileSystemWatcher` callbacks across all services
+   - improve error reporting in the file operation queue history
 
 ## Key Files
 
-- `src/CubicAIExplorer/Models/DetailsColumnId.cs`
-- `src/CubicAIExplorer/Models/DetailsColumnSetting.cs`
-- `src/CubicAIExplorer/Models/NamedSession.cs`
-- `src/CubicAIExplorer/Models/NameMatchMode.cs`
-- `src/CubicAIExplorer/MainWindow.xaml`
-- `src/CubicAIExplorer/MainWindow.xaml.cs`
-- `src/CubicAIExplorer/Services/IFileSystemService.cs`
-- `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Services/ShellFileInfoHelper.cs`
-- `src/CubicAIExplorer/Models/UserSettings.cs`
-- `src/CubicAIExplorer/Models/SavedSearchItem.cs`
+- `src/CubicAIExplorer/Services/BookmarkService.cs`
+- `src/CubicAIExplorer/Services/SettingsService.cs`
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `src/CubicAIExplorer/ViewModels/FileListViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
