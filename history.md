@@ -8,3 +8,4 @@
 - 2026-03-10: Completed crowded-tab overflow affordances with horizontal tab-strip scrolling, a more-tabs dropdown, active-tab auto-scroll, and smoke coverage.
 - 2026-03-10: Completed shell-aware display names and known-folder alias navigation for tabs, breadcrumbs, bookmarks, recent folders, and address-bar suggestions/navigation.
 - 2026-03-10: Completed shell-backed type metadata so details, preview, search results, bookmark properties, and the properties dialog use Windows shell type names.
+- 2026-03-10: Completed Explorer reveal-with-selection behavior so Open in Explorer highlights a selected item when possible and falls back to opening the folder otherwise.

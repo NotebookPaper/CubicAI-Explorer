@@ -1146,6 +1146,26 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenInExplorer()
+    {
+        var fileList = CurrentPaneFileList;
+        if (fileList?.SelectedItems.Count == 1)
+        {
+            _fileSystemService.RevealInExplorer(fileList.SelectedItems[0].FullPath);
+            return;
+        }
+
+        if (fileList?.SelectedItems.Count == 0 && fileList?.SelectedItem is { } selectedItem)
+        {
+            _fileSystemService.RevealInExplorer(selectedItem.FullPath);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(CurrentPanePath))
+            _fileSystemService.OpenInDefaultApp(CurrentPanePath);
+    }
+
+    [RelayCommand]
     private void SearchInFolder()
     {
         ExecuteCurrentPaneFileListCommand(static fileList => fileList.SearchInFolderCommand);

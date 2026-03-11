@@ -64,6 +64,7 @@ internal static class Program
             Run("known folder alias navigation", failures, () => TestKnownFolderAliasNavigation(tempRoot));
             Run("known folder display names", failures, TestKnownFolderDisplayNames);
             Run("shell type descriptions", failures, () => TestShellTypeDescriptions(tempRoot));
+            Run("open in explorer reveals selection", failures, () => TestOpenInExplorerRevealsSelection(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
@@ -1319,6 +1320,30 @@ internal static class Program
         dialog.Close();
     }
 
+    private static void TestOpenInExplorerRevealsSelection(string root)
+    {
+        var innerFs = new FileSystemService();
+        var fs = new RecordingFileSystemService(innerFs);
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "open_in_explorer");
+        var selectedFile = Path.Combine(folder, "selected.txt");
+        File.WriteAllText(selectedFile, "x");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(folder);
+
+        var item = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "selected.txt");
+        vm.ActiveTab.FileList.SelectedItems.Clear();
+        vm.ActiveTab.FileList.SelectedItem = item;
+
+        vm.OpenInExplorerCommand.Execute(null);
+
+        Assert(string.Equals(fs.LastRevealPath, selectedFile, StringComparison.OrdinalIgnoreCase),
+            "Open in Explorer should reveal the selected item.");
+        Assert(fs.LastOpenedFolderPath == null,
+            "Open in Explorer should not open the folder generically when a single item is selected.");
+    }
+
     private static void TestSavedSearchMatchMode(string root)
     {
         var fs = new FileSystemService();
@@ -2397,5 +2422,67 @@ internal static class Program
             Paths = [];
             IsCut = false;
         }
+    }
+
+    private sealed class RecordingFileSystemService : IFileSystemService
+    {
+        private readonly IFileSystemService _inner;
+
+        public RecordingFileSystemService(IFileSystemService inner)
+        {
+            _inner = inner;
+        }
+
+        public string? LastRevealPath { get; private set; }
+        public string? LastOpenedFolderPath { get; private set; }
+
+        public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
+        public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
+        public IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false) => _inner.GetSubDirectories(path, showHidden);
+        public string GetDisplayName(string path) => _inner.GetDisplayName(path);
+        public string? ResolveDirectoryPath(string path) => _inner.ResolveDirectoryPath(path);
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+        public bool FileExists(string path) => _inner.FileExists(path);
+        public string GetParentPath(string path) => _inner.GetParentPath(path);
+        public void OpenFile(string path) => _inner.OpenFile(path);
+
+        public void RevealInExplorer(string path)
+        {
+            LastRevealPath = path;
+        }
+
+        public void OpenInDefaultApp(string path)
+        {
+            LastOpenedFolderPath = path;
+        }
+
+        public IReadOnlyList<FileTransferResult> CopyFiles(
+            IEnumerable<string> sourcePaths,
+            string destinationDirectory,
+            FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+            IFileOperationContext? operationContext = null) => _inner.CopyFiles(sourcePaths, destinationDirectory, collisionResolution, operationContext);
+
+        public IReadOnlyList<FileTransferResult> MoveFiles(
+            IEnumerable<string> sourcePaths,
+            string destinationDirectory,
+            FileTransferCollisionResolution collisionResolution = FileTransferCollisionResolution.KeepBoth,
+            IFileOperationContext? operationContext = null) => _inner.MoveFiles(sourcePaths, destinationDirectory, collisionResolution, operationContext);
+
+        public void DeleteFiles(IEnumerable<string> paths, bool permanentDelete = false, IFileOperationContext? operationContext = null)
+            => _inner.DeleteFiles(paths, permanentDelete, operationContext);
+
+        public string RenameFile(string path, string newName) => _inner.RenameFile(path, newName);
+        public string CreateFolder(string parentPath, string folderName) => _inner.CreateFolder(parentPath, folderName);
+        public string CreateFile(string parentPath, string fileName) => _inner.CreateFile(parentPath, fileName);
+        public void CreateSymbolicLink(string linkPath, string targetPath) => _inner.CreateSymbolicLink(linkPath, targetPath);
+        public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
+        public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);
+        public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
+            => _inner.ExtractArchive(archivePath, destinationDirectory, operationContext);
+        public void ExtractArchiveEntries(
+            string archivePath,
+            string destinationDirectory,
+            IEnumerable<string> entryPaths,
+            IFileOperationContext? operationContext = null) => _inner.ExtractArchiveEntries(archivePath, destinationDirectory, entryPaths, operationContext);
     }
 }

@@ -3,7 +3,7 @@
 > Last updated: 2026-03-10
 > Branch: `master`
 > HEAD: current local `master` after the latest verified roadmap slice
-> Status: shell-aware display names, known-folder alias navigation, and shell-backed type metadata are now implemented and verified; next roadmap work remains shell context/Explorer interop integration.
+> Status: shell-aware display names, known-folder alias navigation, shell-backed type metadata, and Explorer reveal-with-selection behavior are now implemented and verified; next roadmap work remains deeper shell context/interoperability follow-up.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -55,6 +55,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - centralized shell file-info lookup so Windows-reported type names now feed the Details `Type` column, preview header, recursive search results, and properties dialog
   - bookmark properties now populate real timestamps, attributes, size, and shell type labels instead of placeholder defaults
   - smoke coverage now verifies shell-backed type descriptions in directory listings, recursive search results, and the properties dialog
+- Explorer reveal behavior:
+  - `Open in Explorer` now reveals a single selected file or folder instead of always opening the containing folder generically
+  - no-selection and multi-selection flows still open the current folder to avoid ambiguous partial selection behavior
+  - shell launch logic now routes through `IFileSystemService` so the behavior is testable and stays out of window code-behind
+  - smoke coverage now verifies that the selected item path is the one sent to Explorer
 - Smoke harness cleanup:
   - hardened bookmark watcher callbacks for headless execution without a WPF `Application`
   - refreshed brittle smoke assertions around tab counts and current XAML wiring
@@ -62,8 +67,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. Continue deeper shell integration.
-   - review shell-context and Explorer interop edge cases
-   - improve `Open in Explorer` / shell-reveal behavior so file selections can be highlighted instead of always opening the containing folder generically
+   - review shell-context and remaining Explorer interop edge cases
+   - decide whether multi-select reveal should stay folder-fallback or move to a deeper shell API later
 2. Add smoke-test coverage for the remaining risky file-operation paths:
    - replace failure behavior
    - same-folder duplicate behavior
@@ -80,6 +85,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/Models/NameMatchMode.cs`
 - `src/CubicAIExplorer/MainWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `src/CubicAIExplorer/Services/IFileSystemService.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
 - `src/CubicAIExplorer/Services/ShellFileInfoHelper.cs`
 - `src/CubicAIExplorer/Models/UserSettings.cs`
 - `src/CubicAIExplorer/Models/SavedSearchItem.cs`
@@ -91,7 +98,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- shell-aware display names, known-folder alias navigation, shell-backed type metadata, and verification updates are local and uncommitted in this checkout
+- Explorer reveal-with-selection behavior and its smoke coverage are local and uncommitted in this checkout
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation
 
 Untracked local-only paths:

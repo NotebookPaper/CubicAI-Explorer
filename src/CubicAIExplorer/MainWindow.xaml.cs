@@ -978,17 +978,7 @@ public partial class MainWindow : Window
 
     private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        var path = ViewModel.CurrentPanePath;
-        if (!string.IsNullOrWhiteSpace(path))
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"\"{path}\"",
-                UseShellExecute = true
-            };
-            System.Diagnostics.Process.Start(psi);
-        }
+        ViewModel.OpenInExplorerCommand.Execute(null);
     }
 
     private void OnExitClick(object sender, RoutedEventArgs e) => Close();

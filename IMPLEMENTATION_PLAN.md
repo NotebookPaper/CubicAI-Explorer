@@ -55,6 +55,21 @@ Primary files:
 - `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
 - `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
+### Explorer reveal behavior for selected items
+
+- `Open in Explorer` now reveals a single selected file or folder with Explorer's selection affordance instead of always opening the current folder generically
+- when there is no selection or multiple selected items, the command falls back to opening the current folder so the workflow stays predictable
+- shell-launch behavior is now routed through `FileSystemService`, keeping sanitization and interop logic out of the window code-behind
+- smoke coverage now verifies the command targets the selected item path
+
+Primary files:
+
+- `src/CubicAIExplorer/Services/IFileSystemService.cs`
+- `src/CubicAIExplorer/Services/FileSystemService.cs`
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml.cs`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
+
 ### Named sessions and session manager
 
 - added persisted named sessions inside the existing settings file
@@ -213,7 +228,7 @@ Why this matters:
 Scope:
 
 - expose more shell metadata in details/properties views where practical
-- review shell context behavior and Explorer interop edge cases
+- review shell context behavior and remaining Explorer interop edge cases
 
 Likely files:
 

@@ -141,6 +141,21 @@ public sealed class FileSystemService : IFileSystemService
         Process.Start(psi);
     }
 
+    public void RevealInExplorer(string path)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null) return;
+        if (!File.Exists(sanitized) && !Directory.Exists(sanitized)) return;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"/select,\"{sanitized}\"",
+            UseShellExecute = true
+        };
+        Process.Start(psi);
+    }
+
     public void OpenInDefaultApp(string path)
     {
         var sanitized = SanitizePath(path);
