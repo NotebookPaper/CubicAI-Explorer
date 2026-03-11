@@ -98,6 +98,33 @@ public partial class FileListViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSearching;
 
+    [ObservableProperty]
+    private bool _isAdvancedSearchVisible;
+
+    [ObservableProperty]
+    private bool _searchIncludeHidden;
+
+    [ObservableProperty]
+    private bool _searchIncludeSystem;
+
+    [ObservableProperty]
+    private bool _searchReadOnlyOnly;
+
+    [ObservableProperty]
+    private bool _searchArchiveOnly;
+
+    [ObservableProperty]
+    private string _searchMinSizeText = string.Empty;
+
+    [ObservableProperty]
+    private string _searchMaxSizeText = string.Empty;
+
+    [ObservableProperty]
+    private DateTime? _searchMinDate;
+
+    [ObservableProperty]
+    private DateTime? _searchMaxDate;
+
     public bool IsFileOperationQueueBusy => _fileOperationQueueService.IsBusy;
     public string FileOperationQueueStatus => _fileOperationQueueService.StatusText;
     public ObservableCollection<FileSystemItem> Items { get; } = [];
@@ -115,6 +142,38 @@ public partial class FileListViewModel : ObservableObject
     public event EventHandler? SearchPanelOpened;
     public event EventHandler<ArchiveBrowseRequest>? ArchiveBrowseRequested;
     public event EventHandler<string>? FilterHistoryEntryAdded;
+
+    public FileListViewModel(
+        IFileSystemService fileSystemService,
+        IClipboardService clipboardService,
+        IFileOperationQueueService? fileOperationQueueService = null)
+    {
+        _fileSystemService = fileSystemService;
+        _clipboardService = clipboardService;
+        _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
+        _undoStagingPath = Path.Combine(
+            Path.GetTempPath(),
+            "CubicAIExplorer",
+            "UndoStaging",
+            Environment.ProcessId.ToString());
+        Directory.CreateDirectory(_undoStagingPath);
+        _fileOperationQueueService.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(IFileOperationQueueService.IsBusy))
+                OnPropertyChanged(nameof(IsFileOperationQueueBusy));
+            if (e.PropertyName == nameof(IFileOperationQueueService.StatusText)
+                || e.PropertyName == nameof(IFileOperationQueueService.IsBusy)
+                || e.PropertyName == nameof(IFileOperationQueueService.PendingCount)
+                || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
+                OnPropertyChanged(nameof(FileOperationQueueStatus));
+        };
+    }
+
+    [RelayCommand]
+    private void ToggleAdvancedSearch()
+    {
+        IsAdvancedSearchVisible = !IsAdvancedSearchVisible;
+    }
 
     [RelayCommand]
     private void InvertSelection()
@@ -304,32 +363,6 @@ public partial class FileListViewModel : ObservableObject
         {
             MessageBox.Show($"Create link failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    public FileListViewModel(
-        IFileSystemService fileSystemService,
-        IClipboardService clipboardService,
-        IFileOperationQueueService? fileOperationQueueService = null)
-    {
-        _fileSystemService = fileSystemService;
-        _clipboardService = clipboardService;
-        _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
-        _undoStagingPath = Path.Combine(
-            Path.GetTempPath(),
-            "CubicAIExplorer",
-            "UndoStaging",
-            Environment.ProcessId.ToString());
-        Directory.CreateDirectory(_undoStagingPath);
-        _fileOperationQueueService.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(IFileOperationQueueService.IsBusy))
-                OnPropertyChanged(nameof(IsFileOperationQueueBusy));
-            if (e.PropertyName == nameof(IFileOperationQueueService.StatusText)
-                || e.PropertyName == nameof(IFileOperationQueueService.IsBusy)
-                || e.PropertyName == nameof(IFileOperationQueueService.PendingCount)
-                || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
-                OnPropertyChanged(nameof(FileOperationQueueStatus));
-        };
     }
 
     public void LoadDirectory(string path)
@@ -546,6 +579,84 @@ public partial class FileListViewModel : ObservableObject
         }
     }
 
+    public static bool IsArchiveItem(FileSystemItem? item)
+    {
+        if (item == null || item.ItemType != FileSystemItemType.File)
+            return false;
+
+        var ext = item.Extension?.ToLowerInvariant();
+        return ext is ".zip" or ".7z" or ".rar" or ".tar" or ".gz" or ".iso";
+    }
+
+    public async Task ExtractArchiveToAsync(FileSystemItem archiveItem, string destinationPath, bool openFolderWhenDone = false)
+    {
+        if (string.IsNullOrWhiteSpace(destinationPath)) return;
+
+        try
+        {
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Extracting {archiveItem.Name}",
+                context =>
+                {
+                    _fileSystemService.ExtractArchive(archiveItem.FullPath, destinationPath, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Extracted archive to {destinationPath}");
+
+            if (openFolderWhenDone)
+            {
+                NavigateRequested?.Invoke(this, destinationPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Extract failed: {ex.Message}",
+                "Extract Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    public async Task ExtractArchiveEntriesToAsync(string archivePath, IEnumerable<string> entryPaths, string destinationPath, bool openFolderWhenDone = false)
+    {
+        if (string.IsNullOrWhiteSpace(destinationPath)) return;
+
+        try
+        {
+            await _fileOperationQueueService.EnqueueAsync(
+                $"Extracting entries from {Path.GetFileName(archivePath)}",
+                context =>
+                {
+                    _fileSystemService.ExtractArchiveEntries(archivePath, destinationPath, entryPaths, context);
+                    return true;
+                });
+
+            SetTransferSummary($"Extracted items from {Path.GetFileName(archivePath)}");
+
+            if (openFolderWhenDone)
+            {
+                NavigateRequested?.Invoke(this, destinationPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Extract entries failed: {ex.Message}",
+                "Extract Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    public static string GetDefaultExtractDestination(FileSystemItem archiveItem)
+    {
+        var parent = Path.GetDirectoryName(archiveItem.FullPath) ?? string.Empty;
+        var folderName = Path.GetFileNameWithoutExtension(archiveItem.Name);
+        return Path.Combine(parent, folderName);
+    }
+
     [RelayCommand]
     private void Refresh()
     {
@@ -636,32 +747,77 @@ public partial class FileListViewModel : ObservableObject
     private void CloseSearch()
     {
         IsSearchVisible = false;
+        IsAdvancedSearchVisible = false;
         SearchText = string.Empty;
         ContentSearchText = string.Empty;
         IncludeContentSearch = false;
+
+        SearchIncludeHidden = false;
+        SearchIncludeSystem = false;
+        SearchReadOnlyOnly = false;
+        SearchArchiveOnly = false;
+        SearchMinSizeText = string.Empty;
+        SearchMaxSizeText = string.Empty;
+        SearchMinDate = null;
+        SearchMaxDate = null;
+
         if (IsShowingSearchResults)
             ClearSearchResults();
+    }
+
+    public static long? ParseSize(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        var trimmed = text.Trim().ToUpper();
+        var multiplier = 1L;
+
+        if (trimmed.EndsWith("KB"))
+        {
+            multiplier = 1024L;
+            trimmed = trimmed[..^2].Trim();
+        }
+        else if (trimmed.EndsWith("MB"))
+        {
+            multiplier = 1024L * 1024;
+            trimmed = trimmed[..^2].Trim();
+        }
+        else if (trimmed.EndsWith("GB"))
+        {
+            multiplier = 1024L * 1024 * 1024;
+            trimmed = trimmed[..^2].Trim();
+        }
+        else if (trimmed.EndsWith("B"))
+        {
+            trimmed = trimmed[..^1].Trim();
+        }
+
+        if (double.TryParse(trimmed, out var val))
+            return (long)(val * multiplier);
+
+        return null;
     }
 
     [RelayCommand]
     private async Task ExecuteSearch()
     {
-        var nameSearchTerm = SearchText.Trim();
-        var contentSearchTerm = ContentSearchText.Trim();
-        var requireContentMatch = IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
-        if ((string.IsNullOrWhiteSpace(nameSearchTerm) && !requireContentMatch) || string.IsNullOrWhiteSpace(CurrentPath))
+        if (!TryBuildSearchCriteria(out var criteria, out var errorMessage))
+        {
+            ShowSearchCriteriaError(errorMessage);
+            return;
+        }
+
+        if (IsCriteriaEmpty(criteria) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
         IsSearching = true;
         var searchPath = CurrentPath;
-        var searchMode = SearchMatchMode;
 
         try
         {
-            var results = await Task.Run(() =>
-                SearchFilesRecursive(searchPath, nameSearchTerm, searchMode, ShowHiddenFiles, requireContentMatch, contentSearchTerm));
+            var results = await Task.Run(() => SearchFilesRecursive(searchPath, criteria));
 
-            ApplySearchResults(results, nameSearchTerm, requireContentMatch, contentSearchTerm);
+            ApplySearchResults(results, criteria);
         }
         catch (Exception ex)
         {
@@ -679,14 +835,56 @@ public partial class FileListViewModel : ObservableObject
 
     public void ExecuteSearchSync()
     {
-        var nameSearchTerm = SearchText.Trim();
-        var contentSearchTerm = ContentSearchText.Trim();
-        var requireContentMatch = IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
-        if ((string.IsNullOrWhiteSpace(nameSearchTerm) && !requireContentMatch) || string.IsNullOrWhiteSpace(CurrentPath))
+        if (!TryBuildSearchCriteria(out var criteria, out _))
             return;
 
-        var results = SearchFilesRecursive(CurrentPath, nameSearchTerm, SearchMatchMode, ShowHiddenFiles, requireContentMatch, contentSearchTerm);
-        ApplySearchResults(results, nameSearchTerm, requireContentMatch, contentSearchTerm);
+        if (IsCriteriaEmpty(criteria) || string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        var results = SearchFilesRecursive(CurrentPath, criteria);
+        ApplySearchResults(results, criteria);
+    }
+
+    private bool TryBuildSearchCriteria(out SearchCriteria criteria, out string errorMessage)
+    {
+        criteria = null!;
+        errorMessage = string.Empty;
+
+        if (!TryParseSizeRange(SearchMinSizeText, SearchMaxSizeText, out var minSize, out var maxSize, out errorMessage))
+            return false;
+
+        if (!TryNormalizeDateRange(SearchMinDate, SearchMaxDate, out var minDate, out var maxDate, out errorMessage))
+            return false;
+
+        criteria = new SearchCriteria(
+            SearchText.Trim(),
+            SearchMatchMode,
+            IncludeContentSearch && !string.IsNullOrWhiteSpace(ContentSearchText),
+            ContentSearchText.Trim(),
+            SearchIncludeHidden,
+            SearchIncludeSystem,
+            SearchReadOnlyOnly,
+            SearchArchiveOnly,
+            minSize,
+            maxSize,
+            minDate,
+            maxDate,
+            ShowHiddenFiles);
+        return true;
+    }
+
+    private static bool IsCriteriaEmpty(SearchCriteria criteria)
+    {
+        return string.IsNullOrWhiteSpace(criteria.SearchTerm)
+               && (!criteria.IncludeContent || string.IsNullOrWhiteSpace(criteria.ContentSearchTerm))
+               && !criteria.SearchIncludeHidden
+               && !criteria.SearchIncludeSystem
+               && !criteria.ReadOnlyOnly
+               && !criteria.ArchiveOnly
+               && !criteria.MinSize.HasValue
+               && !criteria.MaxSize.HasValue
+               && !criteria.MinDate.HasValue
+               && !criteria.MaxDate.HasValue;
     }
 
     public void ApplySavedSearch(
@@ -694,7 +892,15 @@ public partial class FileListViewModel : ObservableObject
         string searchTerm,
         NameMatchMode matchMode = NameMatchMode.Contains,
         bool includeContent = false,
-        string contentSearchTerm = "")
+        string contentSearchTerm = "",
+        bool includeHidden = false,
+        bool includeSystem = false,
+        bool readOnlyOnly = false,
+        bool archiveOnly = false,
+        long? minSize = null,
+        long? maxSize = null,
+        DateTime? minDate = null,
+        DateTime? maxDate = null)
     {
         if (string.IsNullOrWhiteSpace(searchPath))
             return;
@@ -702,7 +908,15 @@ public partial class FileListViewModel : ObservableObject
         var trimmedSearchTerm = searchTerm.Trim();
         var trimmedContentSearchTerm = contentSearchTerm.Trim();
         if (string.IsNullOrWhiteSpace(trimmedSearchTerm)
-            && (!includeContent || string.IsNullOrWhiteSpace(trimmedContentSearchTerm)))
+            && (!includeContent || string.IsNullOrWhiteSpace(trimmedContentSearchTerm))
+            && !includeHidden
+            && !includeSystem
+            && !readOnlyOnly
+            && !archiveOnly
+            && !minSize.HasValue
+            && !maxSize.HasValue
+            && !minDate.HasValue
+            && !maxDate.HasValue)
         {
             return;
         }
@@ -714,125 +928,28 @@ public partial class FileListViewModel : ObservableObject
         SearchText = trimmedSearchTerm;
         IncludeContentSearch = includeContent && !string.IsNullOrWhiteSpace(trimmedContentSearchTerm);
         ContentSearchText = trimmedContentSearchTerm;
+        SearchIncludeHidden = includeHidden;
+        SearchIncludeSystem = includeSystem;
+        SearchReadOnlyOnly = readOnlyOnly;
+        SearchArchiveOnly = archiveOnly;
+        SearchMinSizeText = minSize.HasValue ? minSize.Value.ToString() : string.Empty;
+        SearchMaxSizeText = maxSize.HasValue ? maxSize.Value.ToString() : string.Empty;
+        SearchMinDate = minDate;
+        SearchMaxDate = maxDate;
+
         IsSearchVisible = true;
+        IsAdvancedSearchVisible = includeHidden
+            || includeSystem
+            || readOnlyOnly
+            || archiveOnly
+            || minSize.HasValue
+            || maxSize.HasValue
+            || minDate.HasValue
+            || maxDate.HasValue;
         ExecuteSearchSync();
     }
 
-    public void SetFilterHistory(IEnumerable<string> entries)
-    {
-        FilterHistory.Clear();
-        foreach (var entry in entries
-                     .Where(static entry => !string.IsNullOrWhiteSpace(entry))
-                     .Select(static entry => entry.Trim())
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            FilterHistory.Add(entry);
-        }
-    }
-
-    public static bool IsArchiveItem(FileSystemItem? item)
-        => item != null
-           && item.ItemType == FileSystemItemType.File
-           && string.Equals(item.Extension, ".zip", StringComparison.OrdinalIgnoreCase);
-
-    public static string GetDefaultExtractDestination(FileSystemItem item)
-    {
-        var parentPath = Path.GetDirectoryName(item.FullPath) ?? item.FullPath;
-        return Path.Combine(parentPath, Path.GetFileNameWithoutExtension(item.Name));
-    }
-
-    public async Task ExtractArchiveToAsync(FileSystemItem item, string destinationPath, bool openFolderWhenDone = false)
-    {
-        if (!IsArchiveItem(item) || string.IsNullOrWhiteSpace(destinationPath))
-            return;
-
-        try
-        {
-            var sanitizedDestination = _fileSystemService.EnsureDirectoryExists(destinationPath);
-            if (string.IsNullOrWhiteSpace(sanitizedDestination))
-                throw new InvalidOperationException("The extraction destination is invalid.");
-
-            await _fileOperationQueueService.EnqueueAsync(
-                $"Extracting {item.Name}",
-                context =>
-                {
-                    _fileSystemService.ExtractArchive(item.FullPath, sanitizedDestination, context);
-                    return true;
-                });
-
-            SetTransferSummary($"Extracted archive to {Path.GetFileName(sanitizedDestination)}");
-            Refresh();
-
-            if (openFolderWhenDone)
-                _fileSystemService.OpenInDefaultApp(sanitizedDestination);
-        }
-        catch (OperationCanceledException)
-        {
-            SetTransferSummary($"Canceled archive extraction for {item.Name}");
-            Refresh();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Extract archive failed: {ex.Message}",
-                "Archive Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-    }
-
-    public async Task ExtractArchiveEntriesToAsync(
-        string archivePath,
-        IEnumerable<string> entryPaths,
-        string destinationPath,
-        bool openFolderWhenDone = false)
-    {
-        if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(destinationPath))
-            return;
-
-        var entryPathList = entryPaths
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (entryPathList.Length == 0)
-            return;
-
-        try
-        {
-            var sanitizedDestination = _fileSystemService.EnsureDirectoryExists(destinationPath);
-            if (string.IsNullOrWhiteSpace(sanitizedDestination))
-                throw new InvalidOperationException("The extraction destination is invalid.");
-
-            await _fileOperationQueueService.EnqueueAsync(
-                $"Extracting {entryPathList.Length} archive item(s)",
-                context =>
-                {
-                    _fileSystemService.ExtractArchiveEntries(archivePath, sanitizedDestination, entryPathList, context);
-                    return true;
-                });
-
-            SetTransferSummary($"Extracted {entryPathList.Length} archive item(s)");
-            Refresh();
-
-            if (openFolderWhenDone)
-                _fileSystemService.OpenInDefaultApp(sanitizedDestination);
-        }
-        catch (OperationCanceledException)
-        {
-            SetTransferSummary("Archive extraction canceled");
-            Refresh();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Extract archive failed: {ex.Message}",
-                "Archive Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-    }
-
-    private void ApplySearchResults(List<FileSystemItem> results, string searchTerm, bool includeContentSearch, string contentSearchTerm)
+    private void ApplySearchResults(List<FileSystemItem> results, SearchCriteria criteria)
     {
         Items.Clear();
         _allItems = results;
@@ -841,7 +958,7 @@ public partial class FileListViewModel : ObservableObject
 
         ItemCount = Items.Count;
         IsShowingSearchResults = true;
-        SearchResultsText = BuildSearchResultsText(searchTerm, includeContentSearch, contentSearchTerm, results.Count);
+        SearchResultsText = BuildSearchResultsText(criteria, results.Count);
         UpdateSelectionStatus();
     }
 
@@ -853,17 +970,13 @@ public partial class FileListViewModel : ObservableObject
         LoadDirectory(CurrentPath);
     }
 
-    private List<FileSystemItem> SearchFilesRecursive(
-        string rootPath,
-        string searchTerm,
-        NameMatchMode matchMode,
-        bool showHidden,
-        bool includeContentSearch,
-        string contentSearchTerm)
+    private List<FileSystemItem> SearchFilesRecursive(string rootPath, SearchCriteria criteria)
     {
         var results = new List<FileSystemItem>();
         var stack = new Stack<string>();
         stack.Push(rootPath);
+
+        var effectiveIncludeHidden = criteria.SearchIncludeHidden || criteria.GlobalShowHidden;
 
         while (stack.Count > 0)
         {
@@ -875,11 +988,21 @@ public partial class FileListViewModel : ObservableObject
 
                 foreach (var file in dirInfo.EnumerateFiles())
                 {
-                    if (!showHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
-                    if (file.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (!effectiveIncludeHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (criteria.SearchIncludeHidden && !file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (!criteria.SearchIncludeSystem && file.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (criteria.SearchIncludeSystem && !file.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (criteria.ReadOnlyOnly && !file.Attributes.HasFlag(FileAttributes.ReadOnly)) continue;
+                    if (criteria.ArchiveOnly && !file.Attributes.HasFlag(FileAttributes.Archive)) continue;
 
-                    if (IsNameMatch(file.Name, searchTerm, matchMode)
-                        && (!includeContentSearch || FileContainsSearchText(file, contentSearchTerm)))
+                    if (criteria.MinSize.HasValue && file.Length < criteria.MinSize.Value) continue;
+                    if (criteria.MaxSize.HasValue && file.Length > criteria.MaxSize.Value) continue;
+
+                    if (criteria.MinDate.HasValue && file.LastWriteTime < criteria.MinDate.Value) continue;
+                    if (criteria.MaxDate.HasValue && file.LastWriteTime > criteria.MaxDate.Value) continue;
+
+                    if (IsNameMatch(file.Name, criteria.SearchTerm, criteria.MatchMode)
+                        && (!criteria.IncludeContent || FileContainsSearchText(file, criteria.ContentSearchTerm)))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -898,10 +1021,17 @@ public partial class FileListViewModel : ObservableObject
 
                 foreach (var dir in dirInfo.EnumerateDirectories())
                 {
-                    if (!showHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
-                    if (dir.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (!effectiveIncludeHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (criteria.SearchIncludeHidden && !dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
+                    if (!criteria.SearchIncludeSystem && dir.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (criteria.SearchIncludeSystem && !dir.Attributes.HasFlag(FileAttributes.System)) continue;
+                    if (criteria.ReadOnlyOnly && !dir.Attributes.HasFlag(FileAttributes.ReadOnly)) continue;
+                    if (criteria.ArchiveOnly && !dir.Attributes.HasFlag(FileAttributes.Archive)) continue;
 
-                    if (!includeContentSearch && IsNameMatch(dir.Name, searchTerm, matchMode))
+                    if (criteria.MinDate.HasValue && dir.LastWriteTime < criteria.MinDate.Value) continue;
+                    if (criteria.MaxDate.HasValue && dir.LastWriteTime > criteria.MaxDate.Value) continue;
+
+                    if (!criteria.IncludeContent && IsNameMatch(dir.Name, criteria.SearchTerm, criteria.MatchMode))
                     {
                         results.Add(new FileSystemItem
                         {
@@ -1014,6 +1144,13 @@ public partial class FileListViewModel : ObservableObject
         FilterHistoryEntryAdded?.Invoke(this, normalized);
     }
 
+    public void SetFilterHistory(IEnumerable<string> history)
+    {
+        FilterHistory.Clear();
+        foreach (var entry in history)
+            FilterHistory.Add(entry);
+    }
+
     private static bool IsNameMatch(string candidate, string pattern, NameMatchMode mode)
     {
         if (string.IsNullOrWhiteSpace(pattern))
@@ -1035,16 +1172,97 @@ public partial class FileListViewModel : ObservableObject
         return Regex.IsMatch(candidate, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    private static string BuildSearchResultsText(string searchTerm, bool includeContentSearch, string contentSearchTerm, int resultCount)
+    private static string BuildSearchResultsText(SearchCriteria criteria, int resultCount)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-            parts.Add($"name \"{searchTerm}\"");
-        if (includeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm))
-            parts.Add($"text \"{contentSearchTerm}\"");
+        if (!string.IsNullOrWhiteSpace(criteria.SearchTerm))
+            parts.Add($"name \"{criteria.SearchTerm}\"");
+        if (criteria.IncludeContent && !string.IsNullOrWhiteSpace(criteria.ContentSearchTerm))
+            parts.Add($"text \"{criteria.ContentSearchTerm}\"");
 
-        var criteria = parts.Count == 0 ? "current criteria" : string.Join(" + ", parts);
-        return $"Search results for {criteria} — {resultCount} item(s) found";
+        if (criteria.SearchIncludeHidden) parts.Add("hidden");
+        if (criteria.SearchIncludeSystem) parts.Add("system");
+        if (criteria.ReadOnlyOnly) parts.Add("read-only");
+        if (criteria.ArchiveOnly) parts.Add("archive");
+        if (criteria.MinSize.HasValue) parts.Add($">= {FormatSize(criteria.MinSize.Value)}");
+        if (criteria.MaxSize.HasValue) parts.Add($"<= {FormatSize(criteria.MaxSize.Value)}");
+        if (criteria.MinDate.HasValue) parts.Add($"modified >= {criteria.MinDate.Value:yyyy-MM-dd}");
+        if (criteria.MaxDate.HasValue) parts.Add($"modified <= {criteria.MaxDate.Value:yyyy-MM-dd}");
+
+        var criteriaText = parts.Count == 0 ? "current criteria" : string.Join(" + ", parts);
+        return $"Search results for {criteriaText} — {resultCount} item(s) found";
+    }
+
+    public static bool TryParseSizeRange(
+        string minText,
+        string maxText,
+        out long? minSize,
+        out long? maxSize,
+        out string errorMessage)
+    {
+        minSize = null;
+        maxSize = null;
+        errorMessage = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(minText))
+        {
+            minSize = ParseSize(minText);
+            if (!minSize.HasValue)
+            {
+                errorMessage = $"Minimum size \"{minText}\" is not valid. Use values like 512KB, 10MB, or 1.5GB.";
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(maxText))
+        {
+            maxSize = ParseSize(maxText);
+            if (!maxSize.HasValue)
+            {
+                errorMessage = $"Maximum size \"{maxText}\" is not valid. Use values like 512KB, 10MB, or 1.5GB.";
+                return false;
+            }
+        }
+
+        if (minSize.HasValue && maxSize.HasValue && minSize.Value > maxSize.Value)
+        {
+            errorMessage = "Minimum size cannot be greater than maximum size.";
+            return false;
+        }
+
+        return true;
+    }
+
+    public static bool TryNormalizeDateRange(
+        DateTime? minDateInput,
+        DateTime? maxDateInput,
+        out DateTime? minDate,
+        out DateTime? maxDate,
+        out string errorMessage)
+    {
+        minDate = minDateInput?.Date;
+        maxDate = maxDateInput?.Date.AddDays(1).AddTicks(-1);
+        errorMessage = string.Empty;
+
+        if (minDate.HasValue && maxDate.HasValue && minDate.Value > maxDate.Value)
+        {
+            errorMessage = "Start date cannot be later than end date.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void ShowSearchCriteriaError(string errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage) || Application.Current?.MainWindow == null)
+            return;
+
+        MessageBox.Show(
+            errorMessage,
+            "Search Filter Error",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private static bool FileContainsSearchText(FileInfo file, string searchText)
@@ -1563,4 +1781,19 @@ public partial class FileListViewModel : ObservableObject
         Action UndoAction,
         string RedoDescription,
         Action RedoAction);
+
+    private sealed record SearchCriteria(
+        string SearchTerm,
+        NameMatchMode MatchMode,
+        bool IncludeContent,
+        string ContentSearchTerm,
+        bool SearchIncludeHidden,
+        bool SearchIncludeSystem,
+        bool ReadOnlyOnly,
+        bool ArchiveOnly,
+        long? MinSize,
+        long? MaxSize,
+        DateTime? MinDate,
+        DateTime? MaxDate,
+        bool GlobalShowHidden);
 }

@@ -1508,11 +1508,43 @@ public partial class MainViewModel : ObservableObject
         if (fileList == null || string.IsNullOrWhiteSpace(CurrentPanePath))
             return;
 
+        if (!FileListViewModel.TryParseSizeRange(
+                fileList.SearchMinSizeText,
+                fileList.SearchMaxSizeText,
+                out var minSize,
+                out var maxSize,
+                out _))
+        {
+            return;
+        }
+
+        if (!FileListViewModel.TryNormalizeDateRange(
+                fileList.SearchMinDate,
+                fileList.SearchMaxDate,
+                out var minDate,
+                out var maxDate,
+                out _))
+        {
+            return;
+        }
+
         var searchTerm = fileList.SearchText.Trim();
         var contentSearchTerm = fileList.ContentSearchText.Trim();
         var includeContent = fileList.IncludeContentSearch && !string.IsNullOrWhiteSpace(contentSearchTerm);
-        if (string.IsNullOrWhiteSpace(searchTerm) && !includeContent)
+        
+        if (string.IsNullOrWhiteSpace(searchTerm)
+            && !includeContent
+            && !fileList.SearchIncludeHidden
+            && !fileList.SearchIncludeSystem
+            && !fileList.SearchReadOnlyOnly
+            && !fileList.SearchArchiveOnly
+            && string.IsNullOrWhiteSpace(fileList.SearchMinSizeText)
+            && string.IsNullOrWhiteSpace(fileList.SearchMaxSizeText)
+            && !fileList.SearchMinDate.HasValue
+            && !fileList.SearchMaxDate.HasValue)
+        {
             return;
+        }
 
         var criteria = new List<string>();
         if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -1520,13 +1552,32 @@ public partial class MainViewModel : ObservableObject
         if (includeContent)
             criteria.Add($"text:{contentSearchTerm}");
 
-        var name = $"{GetDisplayName(CurrentPanePath)}: {string.Join(" | ", criteria)}";
+        if (fileList.SearchIncludeHidden) criteria.Add("hidden");
+        if (fileList.SearchIncludeSystem) criteria.Add("system");
+        if (fileList.SearchReadOnlyOnly) criteria.Add("read-only");
+        if (fileList.SearchArchiveOnly) criteria.Add("archive");
+        if (!string.IsNullOrWhiteSpace(fileList.SearchMinSizeText)) criteria.Add($">={fileList.SearchMinSizeText}");
+        if (!string.IsNullOrWhiteSpace(fileList.SearchMaxSizeText)) criteria.Add($"<={fileList.SearchMaxSizeText}");
+        if (fileList.SearchMinDate.HasValue) criteria.Add($"from:{fileList.SearchMinDate.Value:yyyy-MM-dd}");
+        if (fileList.SearchMaxDate.HasValue) criteria.Add($"to:{fileList.SearchMaxDate.Value:yyyy-MM-dd}");
+
+        var criteriaText = criteria.Count > 0 ? string.Join(" | ", criteria) : "Advanced Filter";
+        var name = $"{GetDisplayName(CurrentPanePath)}: {criteriaText}";
+
         var existing = SavedSearches.FirstOrDefault(saved =>
             string.Equals(saved.SearchPath, CurrentPanePath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(saved.SearchTerm, searchTerm, StringComparison.OrdinalIgnoreCase)
             && saved.MatchMode == fileList.SearchMatchMode
             && saved.IncludeContent == includeContent
-            && string.Equals(saved.ContentSearchTerm, contentSearchTerm, StringComparison.OrdinalIgnoreCase));
+            && string.Equals(saved.ContentSearchTerm, contentSearchTerm, StringComparison.OrdinalIgnoreCase)
+            && saved.IncludeHidden == fileList.SearchIncludeHidden
+            && saved.IncludeSystem == fileList.SearchIncludeSystem
+            && saved.ReadOnlyOnly == fileList.SearchReadOnlyOnly
+            && saved.ArchiveOnly == fileList.SearchArchiveOnly
+            && saved.MinSize == minSize
+            && saved.MaxSize == maxSize
+            && saved.MinDate == minDate
+            && saved.MaxDate == maxDate);
         if (existing != null)
         {
             SelectedSavedSearch = existing;
@@ -1540,7 +1591,15 @@ public partial class MainViewModel : ObservableObject
             SearchTerm = searchTerm,
             MatchMode = fileList.SearchMatchMode,
             IncludeContent = includeContent,
-            ContentSearchTerm = contentSearchTerm
+            ContentSearchTerm = contentSearchTerm,
+            IncludeHidden = fileList.SearchIncludeHidden,
+            IncludeSystem = fileList.SearchIncludeSystem,
+            ReadOnlyOnly = fileList.SearchReadOnlyOnly,
+            ArchiveOnly = fileList.SearchArchiveOnly,
+            MinSize = minSize,
+            MaxSize = maxSize,
+            MinDate = minDate,
+            MaxDate = maxDate
         };
         SavedSearches.Insert(0, item);
         SelectedSavedSearch = item;
@@ -1578,7 +1637,15 @@ public partial class MainViewModel : ObservableObject
         if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath))
             return;
         if (string.IsNullOrWhiteSpace(savedSearch.SearchTerm)
-            && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentSearchTerm)))
+            && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentSearchTerm))
+            && !savedSearch.IncludeHidden
+            && !savedSearch.IncludeSystem
+            && !savedSearch.ReadOnlyOnly
+            && !savedSearch.ArchiveOnly
+            && !savedSearch.MinSize.HasValue
+            && !savedSearch.MaxSize.HasValue
+            && !savedSearch.MinDate.HasValue
+            && !savedSearch.MaxDate.HasValue)
         {
             return;
         }
@@ -1591,7 +1658,15 @@ public partial class MainViewModel : ObservableObject
             savedSearch.SearchTerm,
             savedSearch.MatchMode,
             savedSearch.IncludeContent,
-            savedSearch.ContentSearchTerm);
+            savedSearch.ContentSearchTerm,
+            savedSearch.IncludeHidden,
+            savedSearch.IncludeSystem,
+            savedSearch.ReadOnlyOnly,
+            savedSearch.ArchiveOnly,
+            savedSearch.MinSize,
+            savedSearch.MaxSize,
+            savedSearch.MinDate,
+            savedSearch.MaxDate);
     }
 
     [RelayCommand]
@@ -2500,6 +2575,14 @@ public partial class MainViewModel : ObservableObject
         public NameMatchMode MatchMode { get; set; } = NameMatchMode.Contains;
         public bool IncludeContent { get; set; }
         public string ContentTerm { get; set; } = string.Empty;
+        public bool IncludeHidden { get; set; }
+        public bool IncludeSystem { get; set; }
+        public bool ReadOnlyOnly { get; set; }
+        public bool ArchiveOnly { get; set; }
+        public long? MinSize { get; set; }
+        public long? MaxSize { get; set; }
+        public DateTime? MinDate { get; set; }
+        public DateTime? MaxDate { get; set; }
     }
 
     // --- Dual Pane ---
@@ -3705,19 +3788,37 @@ public partial class MainViewModel : ObservableObject
                     continue;
 
                 if (string.IsNullOrWhiteSpace(savedSearch.Term)
-                    && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentTerm)))
+                    && (!savedSearch.IncludeContent || string.IsNullOrWhiteSpace(savedSearch.ContentTerm))
+                    && !savedSearch.IncludeHidden
+                    && !savedSearch.IncludeSystem
+                    && !savedSearch.ReadOnlyOnly
+                    && !savedSearch.ArchiveOnly
+                    && !savedSearch.MinSize.HasValue
+                    && !savedSearch.MaxSize.HasValue
+                    && !savedSearch.MinDate.HasValue
+                    && !savedSearch.MaxDate.HasValue)
                 {
                     continue;
                 }
 
                 SavedSearches.Add(new SavedSearchItem
                 {
-                    Name = string.IsNullOrWhiteSpace(savedSearch.Name) ? savedSearch.Term : savedSearch.Name,
+                    Name = string.IsNullOrWhiteSpace(savedSearch.Name)
+                        ? BuildSavedSearchDisplayName(savedSearch)
+                        : savedSearch.Name,
                     SearchPath = savedSearch.Path,
                     SearchTerm = savedSearch.Term,
                     MatchMode = savedSearch.MatchMode,
                     IncludeContent = savedSearch.IncludeContent,
-                    ContentSearchTerm = savedSearch.ContentTerm
+                    ContentSearchTerm = savedSearch.ContentTerm,
+                    IncludeHidden = savedSearch.IncludeHidden,
+                    IncludeSystem = savedSearch.IncludeSystem,
+                    ReadOnlyOnly = savedSearch.ReadOnlyOnly,
+                    ArchiveOnly = savedSearch.ArchiveOnly,
+                    MinSize = savedSearch.MinSize,
+                    MaxSize = savedSearch.MaxSize,
+                    MinDate = savedSearch.MinDate,
+                    MaxDate = savedSearch.MaxDate
                 });
             }
         }
@@ -3725,6 +3826,36 @@ public partial class MainViewModel : ObservableObject
         {
             // Ignore corrupted saved search persistence.
         }
+    }
+
+    private string BuildSavedSearchDisplayName(SavedSearchRecord savedSearch)
+    {
+        var pathDisplayName = GetDisplayName(savedSearch.Path);
+        var criteria = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(savedSearch.Term))
+            criteria.Add(savedSearch.Term);
+        if (savedSearch.IncludeContent && !string.IsNullOrWhiteSpace(savedSearch.ContentTerm))
+            criteria.Add($"text:{savedSearch.ContentTerm}");
+        if (savedSearch.IncludeHidden)
+            criteria.Add("hidden");
+        if (savedSearch.IncludeSystem)
+            criteria.Add("system");
+        if (savedSearch.ReadOnlyOnly)
+            criteria.Add("read-only");
+        if (savedSearch.ArchiveOnly)
+            criteria.Add("archive");
+        if (savedSearch.MinSize.HasValue)
+            criteria.Add($">={savedSearch.MinSize.Value}");
+        if (savedSearch.MaxSize.HasValue)
+            criteria.Add($"<={savedSearch.MaxSize.Value}");
+        if (savedSearch.MinDate.HasValue)
+            criteria.Add($"from:{savedSearch.MinDate.Value:yyyy-MM-dd}");
+        if (savedSearch.MaxDate.HasValue)
+            criteria.Add($"to:{savedSearch.MaxDate.Value:yyyy-MM-dd}");
+
+        var suffix = criteria.Count == 0 ? "Advanced Filter" : string.Join(" | ", criteria);
+        return $"{pathDisplayName}: {suffix}";
     }
 
     private void SaveSavedSearches()
@@ -3744,7 +3875,15 @@ public partial class MainViewModel : ObservableObject
                     Term = s.SearchTerm,
                     MatchMode = s.MatchMode,
                     IncludeContent = s.IncludeContent,
-                    ContentTerm = s.ContentSearchTerm
+                    ContentTerm = s.ContentSearchTerm,
+                    IncludeHidden = s.IncludeHidden,
+                    IncludeSystem = s.IncludeSystem,
+                    ReadOnlyOnly = s.ReadOnlyOnly,
+                    ArchiveOnly = s.ArchiveOnly,
+                    MinSize = s.MinSize,
+                    MaxSize = s.MaxSize,
+                    MinDate = s.MinDate,
+                    MaxDate = s.MaxDate
                 })
                 .ToList();
             File.WriteAllText(path, JsonSerializer.Serialize(payload, BookmarkJsonOptions));

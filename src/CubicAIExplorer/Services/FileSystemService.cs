@@ -791,8 +791,10 @@ public sealed class FileSystemService : IFileSystemService
         var sanitizedDestination = SanitizePath(destinationDirectory);
         if (sanitizedArchive == null || sanitizedDestination == null)
             return;
-        if (!File.Exists(sanitizedArchive) || !Directory.Exists(sanitizedDestination))
+        if (!File.Exists(sanitizedArchive))
             return;
+
+        Directory.CreateDirectory(sanitizedDestination);
 
         using var stream = new FileStream(sanitizedArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
@@ -830,8 +832,10 @@ public sealed class FileSystemService : IFileSystemService
         var sanitizedDestination = SanitizePath(destinationDirectory);
         if (sanitizedArchive == null || sanitizedDestination == null)
             return;
-        if (!File.Exists(sanitizedArchive) || !Directory.Exists(sanitizedDestination))
+        if (!File.Exists(sanitizedArchive))
             return;
+
+        Directory.CreateDirectory(sanitizedDestination);
 
         var requestedEntries = entryPaths
             .Where(static path => !string.IsNullOrWhiteSpace(path))

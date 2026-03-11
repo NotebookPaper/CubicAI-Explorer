@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after layout manager
-> Status: Layout manager is implemented and verified.
+> HEAD: current local `master` after advanced search filters
+> Status: Advanced search filters are implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -19,6 +19,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `013-tab-locking-coloring` is now complete in this checkout.
 - Spec `014-file-utilities` is now complete in this checkout.
 - Spec `015-layout-manager` is now complete in this checkout.
+- Spec `016-advanced-search-filters` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
@@ -66,6 +67,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added `View > Layouts` menu wiring for save/apply plus a lightweight manage-layouts dialog for apply/delete workflows.
   - Added layout application for sidebar sections/width, bookmarks bar visibility, preview visibility/width, dual-pane mode, and file-list view mode.
   - Added smoke coverage for layout save/apply/delete, settings round-trip persistence, dialog loading, and XAML wiring.
+- **Spec 016: Advanced Attribute/Date Search Filter** (New in this session)
+  - Added an expandable advanced-search row with hidden/system/read-only/archive filters plus size and modified-date range inputs.
+  - Updated recursive search to validate size/date ranges and combine advanced criteria with existing name and content search behavior.
+  - Persisted advanced criteria through saved searches and added smoke coverage for live filtering, replay, and XAML wiring.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -119,7 +124,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- No incomplete numbered specs remain in this checkout.
+- Next highest-priority incomplete spec is `017-grouping-manual-sort.md`.
 - Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting another roadmap slice.
 
 ## Key Files
@@ -156,7 +161,7 @@ Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
-- `specs/015-layout-manager.md` is now complete, and no incomplete numbered spec files remain.
+- `specs/015-layout-manager.md` and `specs/016-advanced-search-filters.md` are now complete.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -168,7 +173,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

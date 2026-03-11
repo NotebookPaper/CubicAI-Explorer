@@ -23,4 +23,28 @@ public partial class SavedSearchItem : ObservableObject
 
     [ObservableProperty]
     private string _contentSearchTerm = string.Empty;
+
+    [ObservableProperty]
+    private bool _includeHidden;
+
+    [ObservableProperty]
+    private bool _includeSystem;
+
+    [ObservableProperty]
+    private bool _readOnlyOnly;
+
+    [ObservableProperty]
+    private bool _archiveOnly;
+
+    [ObservableProperty]
+    private long? _minSize;
+
+    [ObservableProperty]
+    private long? _maxSize;
+
+    [ObservableProperty]
+    private DateTime? _minDate;
+
+    [ObservableProperty]
+    private DateTime? _maxDate;
 }

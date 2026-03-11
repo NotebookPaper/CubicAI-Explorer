@@ -41,6 +41,12 @@ The app currently includes:
 - added a View-menu `Layouts` section with save, manage, and one-click apply actions
 - applying a layout now restores sidebar visibility/width, preview visibility/width, dual-pane mode, bookmarks bar visibility, and file-list view mode
 
+### Advanced attribute/date search filters
+
+- added an expandable advanced-search row with attribute, size-range, and modified-date filters alongside the existing name/content search controls
+- recursive search now supports combined hidden/system/read-only/archive, size, and inclusive date-range criteria with validation for invalid ranges
+- saved searches now persist and replay the advanced criteria, and smoke coverage verifies live filtering plus saved-search round-trips
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -198,6 +204,14 @@ Smoke coverage explicitly includes:
 - cross-session tab restoration
 
 ## Next Planned Work
+
+### 6. Final Polished Parity (Cubic Conclusion)
+Status: IN PROGRESS
+Scope:
+- completed: 016 advanced attribute/date search filter
+- **017: Group By and Manual Sorting:** Implement visual grouping in the file list (by type, date, or name) and support for persistent manual item reordering.
+- **018: External Tools Configuration:** Add a dedicated settings section for users to define external programs and launch them with selected file arguments.
+- **019: Drop-Stack (Virtual Collection):** Implement a temporary "shelf" area where users can collect items from multiple folders before performing a batch operation.
 
 ### 4. Power User Parity (Cubic Original)
 Status: COMPLETE

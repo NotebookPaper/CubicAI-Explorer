@@ -83,6 +83,8 @@ internal static class Program
             Run("search content limits", failures, () => TestSearchContentLimits(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("saved searches", failures, () => TestSavedSearches(tempRoot));
+            Run("advanced search filters", failures, () => TestAdvancedSearchFilters(tempRoot));
+            Run("advanced saved search criteria", failures, () => TestAdvancedSavedSearchCriteria(tempRoot));
             Run("saved search match mode", failures, () => TestSavedSearchMatchMode(tempRoot));
             Run("saved search content criteria", failures, () => TestSavedSearchContentCriteria(tempRoot));
             Run("rename saved search", failures, () => TestRenameSavedSearch(tempRoot));
@@ -2995,6 +2997,152 @@ internal static class Program
         dialog.Close();
     }
 
+    private static void TestAdvancedSearchFilters(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "adv_search");
+
+        var normal = Path.Combine(folder, "normal.txt");
+        File.WriteAllText(normal, "normal content");
+
+        var hidden = Path.Combine(folder, "hidden.txt");
+        File.WriteAllText(hidden, "hidden content");
+        File.SetAttributes(hidden, FileAttributes.Hidden);
+
+        var readonlyFile = Path.Combine(folder, "readonly-report.txt");
+        File.WriteAllText(readonlyFile, "contains target needle");
+        File.SetAttributes(readonlyFile, FileAttributes.ReadOnly);
+
+        var large = Path.Combine(folder, "large.dat");
+        using (var stream = File.Create(large))
+        {
+            stream.SetLength(1024 * 1024);
+        }
+
+        var old = Path.Combine(folder, "old.txt");
+        File.WriteAllText(old, "old content");
+        File.SetLastWriteTime(old, new DateTime(2020, 1, 1));
+
+        var recent = Path.Combine(folder, "recent.txt");
+        File.WriteAllText(recent, "recent content");
+        File.SetLastWriteTime(recent, new DateTime(2024, 5, 12, 14, 30, 0));
+
+        vm.LoadDirectory(folder);
+
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchIncludeHidden = true;
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "hidden.txt", "Hidden filter should only return hidden items.");
+        Assert(vm.SearchResultsText.Contains("hidden", StringComparison.OrdinalIgnoreCase), "Search results should mention the hidden filter.");
+
+        vm.SearchIncludeHidden = false;
+        vm.SearchText = "hidden";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 0, "Hidden items should stay excluded when the hidden filter is off.");
+
+        vm.CloseSearchCommand.Execute(null);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchReadOnlyOnly = true;
+        vm.SearchText = "readonly";
+        vm.IncludeContentSearch = true;
+        vm.ContentSearchText = "needle";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "readonly-report.txt",
+            "Read-only filter should combine with filename and content search.");
+
+        vm.CloseSearchCommand.Execute(null);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchMinSizeText = "500KB";
+        vm.SearchMaxSizeText = "2MB";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "large.dat", "Size filter should respect min and max values.");
+
+        vm.SearchMaxSizeText = "750KB";
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 0, "Size filter should exclude items outside the requested range.");
+
+        vm.CloseSearchCommand.Execute(null);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchMinDate = new DateTime(2024, 5, 12);
+        vm.SearchMaxDate = new DateTime(2024, 5, 12);
+        vm.ExecuteSearchSync();
+        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "recent.txt",
+            "Date filter should treat the selected day as an inclusive range.");
+
+        vm.CloseSearchCommand.Execute(null);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.SearchMinSizeText = "invalid";
+        vm.ExecuteSearchSync();
+        Assert(!vm.IsShowingSearchResults || vm.Items.All(i => i.Name != "normal.txt"),
+            "Invalid size text should not execute a new search.");
+    }
+
+    private static void TestAdvancedSavedSearchCriteria(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "advanced_saved_search_root");
+        var readonlyMatch = Path.Combine(folder, "readonly-report.txt");
+        File.WriteAllText(readonlyMatch, "contains target needle");
+        File.SetAttributes(readonlyMatch, FileAttributes.ReadOnly);
+        File.WriteAllText(Path.Combine(folder, "readonly-other.txt"), "no match");
+        File.WriteAllText(Path.Combine(folder, "plain-report.txt"), "contains target needle");
+
+        var savedSearchesPath = Path.Combine(root, "saved-searches-advanced.json");
+        Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", savedSearchesPath);
+        TryDelete(savedSearchesPath);
+
+        try
+        {
+            var vm = new MainViewModel(fs, clipboard);
+            vm.NewTabCommand.Execute(null);
+            vm.NavigateToPath(folder);
+            vm.SearchInFolderCommand.Execute(null);
+            vm.CurrentPaneFileList!.SearchText = "report";
+            vm.CurrentPaneFileList.IncludeContentSearch = true;
+            vm.CurrentPaneFileList.ContentSearchText = "needle";
+            vm.CurrentPaneFileList.SearchReadOnlyOnly = true;
+            vm.CurrentPaneFileList.SearchMinDate = DateTime.Today.AddDays(-1);
+            vm.CurrentPaneFileList.SearchMaxDate = DateTime.Today.AddDays(1);
+            vm.CurrentPaneFileList.ExecuteSearchSync();
+
+            Assert(vm.CurrentPaneFileList.Items.Count == 1 && vm.CurrentPaneFileList.Items[0].Name == "readonly-report.txt",
+                "Advanced criteria should narrow the live search result before saving.");
+
+            vm.AddCurrentSearchCommand.Execute(null);
+
+            Assert(vm.SavedSearches.Count == 1, "Advanced searches should be saved.");
+            Assert(vm.SavedSearches[0].ReadOnlyOnly, "Saved searches should persist attribute filters.");
+            Assert(vm.SavedSearches[0].IncludeContent, "Saved searches should persist content-search state.");
+            Assert(vm.SavedSearches[0].MinDate.HasValue && vm.SavedSearches[0].MaxDate.HasValue,
+                "Saved searches should persist date range filters.");
+
+            var reloaded = new MainViewModel(fs, clipboard);
+            reloaded.NewTabCommand.Execute(null);
+            var saved = reloaded.SavedSearches.Single();
+
+            Assert(saved.ReadOnlyOnly, "Reloaded saved searches should retain read-only filters.");
+            Assert(saved.IncludeContent, "Reloaded saved searches should retain content-search state.");
+            Assert(saved.MinDate.HasValue && saved.MaxDate.HasValue, "Reloaded saved searches should retain date ranges.");
+
+            reloaded.NavigateToPath(folder);
+            reloaded.RunSavedSearchCommand.Execute(saved);
+
+            Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running an advanced saved search should show search results.");
+            Assert(reloaded.CurrentPaneFileList.Items.Count == 1 && reloaded.CurrentPaneFileList.Items[0].Name == "readonly-report.txt",
+                "Running an advanced saved search should replay the saved attribute, content, and date filters.");
+            Assert(reloaded.CurrentPaneFileList.SearchReadOnlyOnly, "Running an advanced saved search should restore the read-only filter state.");
+            Assert(reloaded.CurrentPaneFileList.IsAdvancedSearchVisible, "Running an advanced saved search should reopen the advanced filter row.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", null);
+            TryDelete(savedSearchesPath);
+        }
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -3031,6 +3179,11 @@ internal static class Program
         Assert(main.Contains("CurrentPaneFileList.FilterHistory"), "Filter history dropdown should bind to the active pane.");
         Assert(main.Contains("CurrentPaneFileList.FilterMatchMode"), "Filter mode selector should bind to the active pane.");
         Assert(main.Contains("CurrentPaneFileList.ClearFilterOnFolderChange"), "Clear-on-navigation toggle should bind to the active pane.");
+        Assert(main.Contains("ToggleAdvancedSearchCommand"), "Advanced search toggle should be wired.");
+        Assert(main.Contains("SearchIncludeHidden"), "Advanced search hidden filter should be wired.");
+        Assert(main.Contains("SearchReadOnlyOnly"), "Advanced search read-only filter should be wired.");
+        Assert(main.Contains("SearchMinSizeText"), "Advanced search size range should be wired.");
+        Assert(main.Contains("SearchMinDate"), "Advanced search date range should be wired.");
         Assert(main.Contains("PropertiesMenuItem"), "Properties menu item should be in context menu.");
         Assert(main.Contains("OpenInExplorerMenuItem"), "Open in Explorer menu item should exist.");
         Assert(main.Contains("ExtractArchiveMenuItem"), "Extract Archive menu item should exist.");
