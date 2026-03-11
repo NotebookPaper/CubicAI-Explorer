@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after advanced search filters
-> Status: Advanced search filters are implemented and verified.
+> HEAD: current local `master` after grouping/manual sort
+> Status: Grouping/manual sort is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -20,6 +20,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `014-file-utilities` is now complete in this checkout.
 - Spec `015-layout-manager` is now complete in this checkout.
 - Spec `016-advanced-search-filters` is now complete in this checkout.
+- Spec `017-grouping-manual-sort` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
@@ -71,6 +72,10 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added an expandable advanced-search row with hidden/system/read-only/archive filters plus size and modified-date range inputs.
   - Updated recursive search to validate size/date ranges and combine advanced criteria with existing name and content search behavior.
   - Persisted advanced criteria through saved searches and added smoke coverage for live filtering, replay, and XAML wiring.
+- **Spec 017: Group By and Manual Sorting** (New in this session)
+  - Added `View > Group By` controls plus WPF group headers so Details and Tiles panes can group by name, type, size, or modified date.
+  - Moved file-list sorting into `FileListViewModel`, including a manual-sort mode that supports drag reordering within the active folder.
+  - Persisted per-folder manual order in the settings file and added smoke coverage for date-group labels plus manual-order reloads.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -124,7 +129,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next highest-priority incomplete spec is `017-grouping-manual-sort.md`.
+- Next highest-priority incomplete spec is `018-external-tools.md`.
 - Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting another roadmap slice.
 
 ## Key Files

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
     private bool _isApplyingDetailsLayout;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
+    private const string InternalManualReorderFormat = "CubicAIExplorer_ManualReorder";
     private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
     private static readonly Brush InactivePaneBrush = new SolidColorBrush(Color.FromRgb(0x9F, 0xB7, 0xD6));
     private static readonly Brush ActiveHeaderGradient = CreateFrozenBrush(
@@ -809,56 +811,38 @@ public partial class MainWindow : Window
         ref GridViewColumnHeader? lastHeaderClicked,
         ref ListSortDirection lastDirection)
     {
-        if (e.OriginalSource is not GridViewColumnHeader header) return;
-        if (header.Role == GridViewColumnHeaderRole.Padding) return;
+        if (e.OriginalSource is not GridViewColumnHeader header)
+            return;
+        if (header.Role == GridViewColumnHeaderRole.Padding)
+            return;
 
-        var direction = header != lastHeaderClicked
-            ? ListSortDirection.Ascending
-            : lastDirection == ListSortDirection.Ascending
-                ? ListSortDirection.Descending
-                : ListSortDirection.Ascending;
+        var fileList = GetPaneFileListViewModel(listView);
+        if (fileList == null)
+            return;
 
-        // Strip any existing sort arrow from header text
-        var headerText = header.Content?.ToString()?.TrimEnd(" \u25B2\u25BC".ToCharArray()) ?? "";
-
-        var sortBy = headerText switch
+        var headerText = header.Content?.ToString()?.TrimEnd(" \u25B2\u25BC".ToCharArray()) ?? string.Empty;
+        var sortMode = headerText switch
         {
-            "Name" => nameof(FileSystemItem.Name),
-            "Size" => nameof(FileSystemItem.Size),
-            "Type" => nameof(FileSystemItem.TypeDescription),
-            "Date Modified" => nameof(FileSystemItem.DateModified),
-            "Company" => "ShellProperties.Company",
-            "Version" => "ShellProperties.FileVersion",
-            "Dimensions" => "ShellProperties.Dimensions",
-            "Duration" => "ShellProperties.Duration",
-            _ => null
+            "Name" => FileListSortMode.Name,
+            "Size" => FileListSortMode.Size,
+            "Type" => FileListSortMode.Type,
+            "Date Modified" => FileListSortMode.DateModified,
+            "Company" => FileListSortMode.Company,
+            "Version" => FileListSortMode.Version,
+            "Dimensions" => FileListSortMode.Dimensions,
+            "Duration" => FileListSortMode.Duration,
+            _ => (FileListSortMode?)null
         };
 
-        if (sortBy != null)
-        {
-            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(listView.ItemsSource);
-            if (view != null)
-            {
-                view.SortDescriptions.Clear();
-                view.SortDescriptions.Add(new SortDescription(sortBy, direction));
-            }
+        if (sortMode == null)
+            return;
 
-            // Update sort arrows on all headers
-            if (listView.View is GridView gridView)
-            {
-                foreach (var col in gridView.Columns)
-                {
-                    if (col.Header is string colHeader)
-                        col.Header = colHeader.TrimEnd(" \u25B2\u25BC".ToCharArray());
-                }
-            }
-
-            var arrow = direction == ListSortDirection.Ascending ? " \u25B2" : " \u25BC";
-            header.Content = headerText + arrow;
-        }
+        fileList.ToggleSort(sortMode.Value);
+        ApplyGrouping(listView, fileList);
+        UpdateSortIndicators(listView, fileList);
 
         lastHeaderClicked = header;
-        lastDirection = direction;
+        lastDirection = fileList.IsSortDescending ? ListSortDirection.Descending : ListSortDirection.Ascending;
     }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1146,6 +1130,48 @@ public partial class MainWindow : Window
         PersistDetailsColumnLayout(saveImmediately: false);
         if (ViewModel.CurrentPaneFileList != null)
             ViewModel.CurrentPaneFileList.ViewMode = mode;
+    }
+
+    private void ViewMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        var fileList = ViewModel.CurrentPaneFileList;
+        if (fileList == null)
+            return;
+
+        GroupByNoneMenuItem.IsChecked = fileList.GroupByMode == FileListGroupMode.None;
+        GroupByNameMenuItem.IsChecked = fileList.GroupByMode == FileListGroupMode.Name;
+        GroupByTypeMenuItem.IsChecked = fileList.GroupByMode == FileListGroupMode.Type;
+        GroupBySizeMenuItem.IsChecked = fileList.GroupByMode == FileListGroupMode.Size;
+        GroupByDateMenuItem.IsChecked = fileList.GroupByMode == FileListGroupMode.DateModified;
+        ManualSortingMenuItem.IsChecked = fileList.SortMode == FileListSortMode.Manual;
+    }
+
+    private void GroupByNone_Click(object sender, RoutedEventArgs e) => SetGroupByMode(FileListGroupMode.None);
+    private void GroupByName_Click(object sender, RoutedEventArgs e) => SetGroupByMode(FileListGroupMode.Name);
+    private void GroupByType_Click(object sender, RoutedEventArgs e) => SetGroupByMode(FileListGroupMode.Type);
+    private void GroupBySize_Click(object sender, RoutedEventArgs e) => SetGroupByMode(FileListGroupMode.Size);
+    private void GroupByDate_Click(object sender, RoutedEventArgs e) => SetGroupByMode(FileListGroupMode.DateModified);
+
+    private void ManualSorting_Click(object sender, RoutedEventArgs e)
+    {
+        var fileList = ViewModel.CurrentPaneFileList;
+        if (fileList == null)
+            return;
+
+        fileList.ToggleManualSort();
+        ApplyGroupingToCurrentPane();
+        UpdateSortIndicatorsForCurrentPane();
+        ViewMenu_SubmenuOpened(sender, e);
+    }
+
+    private void SetGroupByMode(FileListGroupMode mode)
+    {
+        var fileList = ViewModel.CurrentPaneFileList;
+        if (fileList == null)
+            return;
+
+        fileList.SetGroupByMode(mode);
+        ApplyGroupingToCurrentPane();
     }
 
     private void DetailsColumnsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
@@ -2058,6 +2084,8 @@ public partial class MainWindow : Window
             boundField.SearchPanelOpened += FileListViewModel_SearchPanelOpened;
             boundField.ArchiveBrowseRequested += FileListViewModel_ArchiveBrowseRequested;
             ApplyViewMode(targetListView, boundField.ViewMode);
+            ApplyGrouping(targetListView, boundField);
+            UpdateSortIndicators(targetListView, boundField);
         }
     }
 
@@ -2171,6 +2199,112 @@ public partial class MainWindow : Window
                 listView.ItemTemplate = FindApplicationResource<DataTemplate>("TileViewItemTemplate");
                 listView.ItemsPanel = FindApplicationResource<ItemsPanelTemplate>("TileItemsPanelTemplate");
                 break;
+        }
+
+        var fileList = GetPaneFileListViewModel(listView);
+        if (fileList != null)
+        {
+            ApplyGrouping(listView, fileList);
+            UpdateSortIndicators(listView, fileList);
+        }
+    }
+
+    private FileListViewModel? GetPaneFileListViewModel(ListView listView)
+        => ReferenceEquals(listView, RightPaneListView) ? _boundRightFileListViewModel : _boundFileListViewModel;
+
+    private void ApplyGroupingToCurrentPane()
+    {
+        var listView = ViewModel.IsRightPaneActive && ViewModel.IsDualPaneMode ? RightPaneListView : FileListView;
+        var fileList = ViewModel.CurrentPaneFileList;
+        if (fileList == null)
+            return;
+
+        ApplyGrouping(listView, fileList);
+    }
+
+    private void ApplyGrouping(ListView listView, FileListViewModel fileList)
+    {
+        var view = CollectionViewSource.GetDefaultView(listView.ItemsSource);
+        if (view is not ListCollectionView collectionView)
+            return;
+
+        collectionView.GroupDescriptions.Clear();
+
+        var propertyName = fileList.GroupByMode switch
+        {
+            FileListGroupMode.Name => nameof(FileSystemItem.GroupNameLabel),
+            FileListGroupMode.Type => nameof(FileSystemItem.GroupTypeLabel),
+            FileListGroupMode.Size => nameof(FileSystemItem.GroupSizeLabel),
+            FileListGroupMode.DateModified => nameof(FileSystemItem.GroupDateModifiedLabel),
+            _ => null
+        };
+
+        if (!string.IsNullOrWhiteSpace(propertyName))
+            collectionView.GroupDescriptions.Add(new PropertyGroupDescription(propertyName));
+    }
+
+    private void UpdateSortIndicatorsForCurrentPane()
+    {
+        UpdateSortIndicators(FileListView, _boundFileListViewModel);
+        UpdateSortIndicators(RightPaneListView, _boundRightFileListViewModel);
+    }
+
+    private void UpdateSortIndicators(ListView listView, FileListViewModel? fileList)
+    {
+        if (fileList == null || listView.View is not GridView gridView)
+            return;
+
+        foreach (var column in gridView.Columns)
+        {
+            if (column.Header is not string headerText)
+                continue;
+
+            var cleanHeader = headerText.TrimEnd(" \u25B2\u25BC".ToCharArray());
+            if (TryGetSortModeFromHeader(cleanHeader, out var sortMode)
+                && fileList.SortMode == sortMode
+                && fileList.SortMode != FileListSortMode.Manual)
+            {
+                var arrow = fileList.IsSortDescending ? " \u25BC" : " \u25B2";
+                column.Header = cleanHeader + arrow;
+            }
+            else
+            {
+                column.Header = cleanHeader;
+            }
+        }
+    }
+
+    private static bool TryGetSortModeFromHeader(string headerText, out FileListSortMode sortMode)
+    {
+        switch (headerText)
+        {
+            case "Name":
+                sortMode = FileListSortMode.Name;
+                return true;
+            case "Size":
+                sortMode = FileListSortMode.Size;
+                return true;
+            case "Type":
+                sortMode = FileListSortMode.Type;
+                return true;
+            case "Date Modified":
+                sortMode = FileListSortMode.DateModified;
+                return true;
+            case "Company":
+                sortMode = FileListSortMode.Company;
+                return true;
+            case "Version":
+                sortMode = FileListSortMode.Version;
+                return true;
+            case "Dimensions":
+                sortMode = FileListSortMode.Dimensions;
+                return true;
+            case "Duration":
+                sortMode = FileListSortMode.Duration;
+                return true;
+            default:
+                sortMode = default;
+                return false;
         }
     }
 
@@ -2492,6 +2626,12 @@ public partial class MainWindow : Window
 
     private void UpdateDragEffects(DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(InternalManualReorderFormat))
+        {
+            e.Effects = DragDropEffects.Move;
+            return;
+        }
+
         if (!e.Data.GetDataPresent(DataFormats.FileDrop))
         {
             e.Effects = DragDropEffects.None;
@@ -2692,6 +2832,14 @@ public partial class MainWindow : Window
         var paths = fileList.GetSelectedPathsForTransfer();
         if (paths.Count == 0) return;
 
+        if (fileList.SortMode == FileListSortMode.Manual)
+        {
+            var manualReorderData = new DataObject();
+            manualReorderData.SetData(InternalManualReorderFormat, paths.ToArray());
+            DragDrop.DoDragDrop(listView, manualReorderData, DragDropEffects.Move);
+            return;
+        }
+
         var dropList = new System.Collections.Specialized.StringCollection();
         dropList.AddRange(paths.ToArray());
 
@@ -2778,7 +2926,30 @@ public partial class MainWindow : Window
 
     private async Task HandleDropAsync(DragEventArgs e, FileListViewModel? fileList)
     {
-        if (fileList == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
+        if (fileList == null)
+            return;
+
+        if (e.Data.GetDataPresent(InternalManualReorderFormat))
+        {
+            var targetItem = (FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject)?.DataContext as FileSystemItem);
+            var targetContainer = FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject);
+            var insertAfterTarget = false;
+            if (targetContainer != null)
+            {
+                var relativePosition = e.GetPosition(targetContainer);
+                insertAfterTarget = relativePosition.Y >= targetContainer.ActualHeight / 2;
+            }
+
+            if (fileList.MoveSelectedItemsTo(targetItem?.FullPath, insertAfterTarget))
+            {
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
             return;
 
         var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];

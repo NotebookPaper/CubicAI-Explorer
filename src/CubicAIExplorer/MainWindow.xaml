@@ -88,10 +88,22 @@
                 <Separator />
                 <MenuItem Header="_Properties..." InputGestureText="Alt+Enter" Command="{Binding ShowPropertiesCommand}" />
             </MenuItem>
-            <MenuItem Header="_View">
+            <MenuItem x:Name="ViewMenuItem" Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
                 <MenuItem Header="_Details" Click="ViewMode_Details_Click" />
                 <MenuItem Header="_List" Click="ViewMode_List_Click" />
                 <MenuItem Header="_Tiles" Click="ViewMode_Tiles_Click" />
+                <Separator />
+                <MenuItem Header="Group _By">
+                    <MenuItem x:Name="GroupByNoneMenuItem" Header="_None" IsCheckable="True" Click="GroupByNone_Click" />
+                    <MenuItem x:Name="GroupByNameMenuItem" Header="_Name" IsCheckable="True" Click="GroupByName_Click" />
+                    <MenuItem x:Name="GroupByTypeMenuItem" Header="_Type" IsCheckable="True" Click="GroupByType_Click" />
+                    <MenuItem x:Name="GroupBySizeMenuItem" Header="_Size" IsCheckable="True" Click="GroupBySize_Click" />
+                    <MenuItem x:Name="GroupByDateMenuItem" Header="_Date Modified" IsCheckable="True" Click="GroupByDate_Click" />
+                </MenuItem>
+                <MenuItem x:Name="ManualSortingMenuItem"
+                          Header="_Manual Sorting"
+                          IsCheckable="True"
+                          Click="ManualSorting_Click" />
                 <MenuItem Header="_Columns" SubmenuOpened="DetailsColumnsMenu_SubmenuOpened">
                     <MenuItem x:Name="NameColumnMenuItem" Header="_Name" IsCheckable="True" Tag="Name"
                               Click="DetailsColumnVisibility_Click" />
@@ -1156,9 +1168,29 @@
                                 <MenuItem x:Name="OpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                 <MenuItem x:Name="PropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
                             </ContextMenu>
-                        </ListView.ContextMenu>
-                        <ListView.View>
-                            <GridView>
+                    </ListView.ContextMenu>
+                    <ListView.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <Border Background="#E8EEF8"
+                                            BorderBrush="#B7C7DD"
+                                            BorderThickness="0,1,0,1"
+                                            Padding="6,3"
+                                            Margin="0,4,0,0">
+                                        <DockPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" />
+                                            <TextBlock Text="{Binding ItemCount, StringFormat= ({0})}"
+                                                       Foreground="#5A6F89"
+                                                       Margin="6,0,0,0" />
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
+                    <ListView.View>
+                        <GridView>
                                 <GridViewColumn Header="Name" Width="350"
                                                 CellTemplate="{StaticResource DetailsNameCellTemplate}" />
                                 <GridViewColumn Header="Size" Width="100"
@@ -1298,10 +1330,30 @@
                                     <MenuItem x:Name="RightRunAsAdministratorMenuItem" Header="Run as Administrator" Click="RunAsAdministrator_Click" />
                                     <MenuItem x:Name="RightOpenInExplorerMenuItem" Header="Open in Explorer" Click="OpenInExplorer_Click" />
                                     <MenuItem x:Name="RightPropertiesMenuItem" Header="Properties" Command="{Binding ShowPropertiesCommand}" />
-                                </ContextMenu>
-                            </ListView.ContextMenu>
-                            <ListView.View>
-                                <GridView>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
+                        <ListView.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#E8EEF8"
+                                                BorderBrush="#B7C7DD"
+                                                BorderThickness="0,1,0,1"
+                                                Padding="6,3"
+                                                Margin="0,4,0,0">
+                                            <DockPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding ItemCount, StringFormat= ({0})}"
+                                                           Foreground="#5A6F89"
+                                                           Margin="6,0,0,0" />
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ListView.GroupStyle>
+                        <ListView.View>
+                            <GridView>
                                     <GridViewColumn Header="Name" Width="250"
                                                     CellTemplate="{StaticResource DetailsNameCellTemplate}" />
                                     <GridViewColumn Header="Size" Width="80"

@@ -77,6 +77,8 @@ internal static class Program
             Run("filter text", failures, () => TestFilterText(tempRoot));
             Run("filter match modes", failures, () => TestFilterMatchModes(tempRoot));
             Run("filter history + clear on nav", failures, () => TestFilterHistoryAndClearOnNavigation(tempRoot));
+            Run("grouping by date", failures, () => TestGroupingByDate(tempRoot));
+            Run("manual sort persistence", failures, () => TestManualSortPersistence(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search by file content", failures, () => TestSearchByFileContent(tempRoot));
@@ -1052,6 +1054,93 @@ internal static class Program
         vm.LoadDirectory(second);
 
         Assert(string.IsNullOrEmpty(vm.FilterText), "Folder navigation should clear the filter when the option is enabled.");
+    }
+
+    private static void TestGroupingByDate(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new FileListViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "group_by_date");
+
+        var today = Path.Combine(folder, "today.txt");
+        File.WriteAllText(today, "today");
+        File.SetLastWriteTime(today, DateTime.Today.AddHours(9));
+
+        var yesterday = Path.Combine(folder, "yesterday.txt");
+        File.WriteAllText(yesterday, "yesterday");
+        File.SetLastWriteTime(yesterday, DateTime.Today.AddDays(-1).AddHours(9));
+
+        var earlierThisWeek = Path.Combine(folder, "earlier-this-week.txt");
+        File.WriteAllText(earlierThisWeek, "week");
+        var earlierThisWeekDate = DateTime.Today.DayOfWeek >= DayOfWeek.Wednesday
+            ? DateTime.Today.AddDays(-2).AddHours(9)
+            : DateTime.Today.AddDays(-7).AddHours(9);
+        File.SetLastWriteTime(earlierThisWeek, earlierThisWeekDate);
+
+        vm.LoadDirectory(folder);
+        vm.SetGroupByMode(FileListGroupMode.DateModified);
+
+        var groups = vm.Items
+            .Select(item => item.GroupDateModifiedLabel)
+            .Distinct()
+            .ToArray();
+
+        Assert(groups.Contains("Today"), "Date grouping should expose a Today bucket.");
+        Assert(groups.Contains("Yesterday"), "Date grouping should expose a Yesterday bucket.");
+        if (DateTime.Today.DayOfWeek >= DayOfWeek.Wednesday)
+            Assert(groups.Contains("Earlier this week"), "Date grouping should expose an Earlier this week bucket when that bucket exists.");
+        Assert(vm.Items[0].GroupDateModifiedLabel == "Today", "Date grouping should order newer groups first.");
+    }
+
+    private static void TestManualSortPersistence(string root)
+    {
+        var settingsPath = Path.Combine(root, "manual_sort.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var fs = new FileSystemService();
+            var clipboard = new FakeClipboardService();
+            using var service = new SettingsService();
+            var folder = CreateCleanSubdir(root, "manual_sort_folder");
+
+            File.WriteAllText(Path.Combine(folder, "alpha.txt"), "a");
+            File.WriteAllText(Path.Combine(folder, "beta.txt"), "b");
+            File.WriteAllText(Path.Combine(folder, "gamma.txt"), "c");
+
+            var vm = new MainViewModel(fs, clipboard, service, service.Load());
+            vm.NavigateToPath(folder);
+            vm.CurrentPaneFileList!.ToggleManualSort();
+
+            var gamma = vm.CurrentPaneFileList.Items.Single(item => item.Name == "gamma.txt");
+            var alpha = vm.CurrentPaneFileList.Items.Single(item => item.Name == "alpha.txt");
+            vm.CurrentPaneFileList.SelectedItems.Add(gamma);
+
+            Assert(vm.CurrentPaneFileList.MoveSelectedItemsTo(alpha.FullPath, insertAfterTarget: false),
+                "Manual sorting should accept drag-style reordering within the folder.");
+            Assert(vm.CurrentPaneFileList.Items.Select(item => item.Name).SequenceEqual(["gamma.txt", "alpha.txt", "beta.txt"]),
+                "Manual sorting should update the current in-memory item order.");
+
+            var reloadedSettings = service.Load();
+            Assert(reloadedSettings.ManualSortFolders.Count == 1, "Manual sort order should persist to settings.");
+            Assert(reloadedSettings.ManualSortFolders[0].OrderedNames.SequenceEqual(["gamma.txt", "alpha.txt", "beta.txt"]),
+                "Manual sort order should persist the per-folder sequence.");
+
+            var reloadedVm = new MainViewModel(fs, clipboard, service, reloadedSettings);
+            reloadedVm.NavigateToPath(folder);
+            reloadedVm.CurrentPaneFileList!.ToggleManualSort();
+
+            Assert(reloadedVm.CurrentPaneFileList.Items.Select(item => item.Name).SequenceEqual(["gamma.txt", "alpha.txt", "beta.txt"]),
+                "Manual sorting should reload the persisted order for the folder.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
     }
 
     private static void TestPropertiesCommand(string root)
@@ -2277,6 +2366,7 @@ internal static class Program
         Assert(settings.ShowBookmarksBar, "Bookmarks bar should be visible by default.");
         Assert(settings.FilterHistory.Count == 0, "Filter history should default to empty.");
         Assert(settings.DetailsColumns.Count == 0, "Column settings should default to empty so the app can supply defaults.");
+        Assert(settings.ManualSortFolders.Count == 0, "Manual folder sort metadata should default to empty.");
         Assert(settings.WindowLayouts.Count == 0, "Window layouts should default to empty.");
     }
 
@@ -2336,6 +2426,14 @@ internal static class Program
                         ViewMode = "Tiles"
                     }
                 ],
+                ManualSortFolders =
+                [
+                    new ManualSortFolderOrder
+                    {
+                        FolderPath = root,
+                        OrderedNames = ["gamma.txt", "alpha.txt", "beta.txt"]
+                    }
+                ],
                 DetailsColumns =
                 [
                     new DetailsColumnSetting
@@ -2376,6 +2474,9 @@ internal static class Program
             Assert(reloaded.WindowLayouts.Count == 1, "Settings round-trip should persist window layouts.");
             Assert(reloaded.WindowLayouts[0].IsPreviewVisible, "Settings round-trip should persist layout preview visibility.");
             Assert(reloaded.WindowLayouts[0].ViewMode == "Tiles", "Settings round-trip should persist layout view mode.");
+            Assert(reloaded.ManualSortFolders.Count == 1, "Settings round-trip should persist manual folder sort metadata.");
+            Assert(reloaded.ManualSortFolders[0].OrderedNames.SequenceEqual(["gamma.txt", "alpha.txt", "beta.txt"]),
+                "Settings round-trip should preserve manual folder sort order.");
             Assert(reloaded.DetailsColumns.Count == 2, "Settings round-trip should persist details column settings.");
             Assert(reloaded.DetailsColumns.Any(c => c.ColumnId == DetailsColumnId.Name && c.Width == 420),
                 "Settings round-trip should preserve details column widths.");
@@ -3256,6 +3357,10 @@ internal static class Program
         Assert(main.Contains("CurrentPaneLabel, Mode=OneWay"), "CurrentPaneLabel should be OneWay-bound (read-only source).");
         Assert(main.Contains("CurrentPanePath, Mode=OneWay"), "CurrentPanePath should be OneWay-bound (read-only source).");
         Assert(main.Contains("Header=\"_Columns\""), "View menu should expose details column customization.");
+        Assert(main.Contains("Header=\"Group _By\""), "View menu should expose grouping controls.");
+        Assert(main.Contains("GroupByDateMenuItem"), "View menu should include the date grouping option.");
+        Assert(main.Contains("ManualSortingMenuItem"), "View menu should expose a manual sorting toggle.");
+        Assert(main.Contains("GroupStyle.HeaderTemplate"), "File lists should render visual group headers.");
         Assert(main.Contains("DetailsColumnVisibility_Click"), "Column visibility toggles should be wired.");
         Assert(main.Contains("AutoSizeVisibleColumns_Click"), "Auto-size columns action should be wired.");
         Assert(main.Contains("ResetDetailsColumns_Click"), "Reset columns action should be wired.");
@@ -3290,6 +3395,9 @@ internal static class Program
         Assert(mainCs.Contains("PopulateNewMenu"), "Dynamic new-file template menu should be built in code-behind.");
         Assert(mainCs.Contains("PopulateLayoutsMenu"), "Layout menu population should be implemented.");
         Assert(mainCs.Contains("PreviewGridSplitter_DragCompleted"), "Preview splitter resize persistence should be implemented.");
+        Assert(mainCs.Contains("ApplyGrouping"), "Grouping should be applied from code-behind for both panes.");
+        Assert(mainCs.Contains("InternalManualReorderFormat"), "Manual sort drag/drop should use a dedicated internal format.");
+        Assert(mainCs.Contains("ManualSorting_Click"), "Manual sorting handler should be implemented.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(mainCs.Contains("EmptyRecycleBin_Click"), "Empty Recycle Bin confirmation handler should be wired.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");

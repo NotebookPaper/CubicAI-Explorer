@@ -66,6 +66,15 @@ public partial class FileListViewModel : ObservableObject
     private string _viewMode = "Details";
 
     [ObservableProperty]
+    private FileListSortMode _sortMode = FileListSortMode.Name;
+
+    [ObservableProperty]
+    private bool _isSortDescending;
+
+    [ObservableProperty]
+    private FileListGroupMode _groupByMode;
+
+    [ObservableProperty]
     private string _filterText = string.Empty;
 
     [ObservableProperty]
@@ -131,7 +140,10 @@ public partial class FileListViewModel : ObservableObject
     public ObservableCollection<FileSystemItem> SelectedItems { get; } = [];
     public ObservableCollection<string> FilterHistory { get; } = [];
     public IReadOnlyList<NameMatchMode> AvailableMatchModes { get; } = Enum.GetValues<NameMatchMode>();
+    public IReadOnlyList<FileListGroupMode> AvailableGroupModes { get; } = Enum.GetValues<FileListGroupMode>();
     public Func<IReadOnlyList<FileSystemItem>, IReadOnlyList<string>, IReadOnlyList<BatchRenamePreviewItem>?>? BatchRenameDialogFactory { get; set; }
+    public Func<string, IReadOnlyList<string>>? LoadManualSortOrder { get; set; }
+    public Action<string, IReadOnlyList<string>>? SaveManualSortOrder { get; set; }
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
@@ -377,10 +389,7 @@ public partial class FileListViewModel : ObservableObject
         Items.Clear();
 
         var items = _fileSystemService.GetDirectoryContents(path, ShowHiddenFiles);
-        _allItems = items
-            .OrderByDescending(i => i.ItemType == FileSystemItemType.Directory)
-            .ThenBy(i => i.Name)
-            .ToList();
+        _allItems = items.ToList();
 
         ApplyFilter();
     }
@@ -1069,6 +1078,28 @@ public partial class FileListViewModel : ObservableObject
         ViewModeChanged?.Invoke(this, value);
     }
 
+    partial void OnSortModeChanged(FileListSortMode value)
+    {
+        if (value != FileListSortMode.Manual)
+            PersistManualSortOrder();
+
+        ApplyFilter();
+    }
+
+    partial void OnIsSortDescendingChanged(bool value)
+    {
+        if (SortMode != FileListSortMode.Manual)
+            ApplyFilter();
+    }
+
+    partial void OnGroupByModeChanged(FileListGroupMode value)
+    {
+        if (SortMode == FileListSortMode.Manual && value != FileListGroupMode.None)
+            SortMode = FileListSortMode.Name;
+
+        ApplyFilter();
+    }
+
     partial void OnFilterTextChanged(string value)
     {
         ApplyFilter();
@@ -1082,6 +1113,8 @@ public partial class FileListViewModel : ObservableObject
         var filtered = string.IsNullOrWhiteSpace(FilterText)
             ? _allItems
             : _allItems.Where(i => IsNameMatch(i.Name, FilterText, FilterMatchMode)).ToList();
+
+        filtered = GetPresentedItems(filtered);
 
         foreach (var item in filtered)
             Items.Add(item);
@@ -1124,6 +1157,84 @@ public partial class FileListViewModel : ObservableObject
         < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
         _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
     };
+
+    public void SetGroupByMode(FileListGroupMode mode)
+    {
+        GroupByMode = mode;
+    }
+
+    public void ToggleManualSort()
+    {
+        if (SortMode == FileListSortMode.Manual)
+        {
+            SortMode = FileListSortMode.Name;
+            IsSortDescending = false;
+            return;
+        }
+
+        GroupByMode = FileListGroupMode.None;
+        SortMode = FileListSortMode.Manual;
+        IsSortDescending = false;
+    }
+
+    public void ToggleSort(FileListSortMode mode)
+    {
+        if (mode == FileListSortMode.Manual)
+        {
+            ToggleManualSort();
+            return;
+        }
+
+        if (SortMode == mode)
+            IsSortDescending = !IsSortDescending;
+        else
+        {
+            SortMode = mode;
+            IsSortDescending = false;
+        }
+    }
+
+    public bool MoveSelectedItemsTo(string? targetPath, bool insertAfterTarget)
+    {
+        if (SortMode != FileListSortMode.Manual)
+            return false;
+
+        var selectedPaths = GetSelectedPaths();
+        if (selectedPaths.Count == 0)
+            return false;
+
+        var selectedLookup = new HashSet<string>(selectedPaths, StringComparer.OrdinalIgnoreCase);
+        var movingItems = _allItems
+            .Where(item => selectedLookup.Contains(item.FullPath))
+            .ToList();
+        if (movingItems.Count == 0)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(targetPath)
+            && selectedLookup.Contains(targetPath))
+        {
+            return false;
+        }
+
+        var remainingItems = _allItems
+            .Where(item => !selectedLookup.Contains(item.FullPath))
+            .ToList();
+
+        var insertIndex = remainingItems.Count;
+        if (!string.IsNullOrWhiteSpace(targetPath))
+        {
+            var targetIndex = remainingItems.FindIndex(item =>
+                string.Equals(item.FullPath, targetPath, StringComparison.OrdinalIgnoreCase));
+            if (targetIndex >= 0)
+                insertIndex = insertAfterTarget ? targetIndex + 1 : targetIndex;
+        }
+
+        remainingItems.InsertRange(insertIndex, movingItems);
+        _allItems = remainingItems;
+        PersistManualSortOrder();
+        ApplyFilter();
+        return true;
+    }
 
     private void AddFilterHistoryEntry(string? entry)
     {
@@ -1341,14 +1452,23 @@ public partial class FileListViewModel : ObservableObject
         try
         {
             var previousPath = item.FullPath;
-            var renamedPath = _fileSystemService.RenameFile(previousPath, newName);
             var previousName = item.Name;
+            var renamedPath = _fileSystemService.RenameFile(previousPath, newName);
             var nextName = Path.GetFileName(renamedPath);
+            UpdateManualSortName(previousName, nextName);
             PushHistory(
                 "Undo Rename",
-                () => _fileSystemService.RenameFile(renamedPath, previousName),
+                () =>
+                {
+                    _fileSystemService.RenameFile(renamedPath, previousName);
+                    UpdateManualSortName(nextName, previousName);
+                },
                 "Redo Rename",
-                () => _fileSystemService.RenameFile(previousPath, nextName));
+                () =>
+                {
+                    _fileSystemService.RenameFile(previousPath, nextName);
+                    UpdateManualSortName(previousName, nextName);
+                });
             Refresh();
         }
         catch (Exception ex)
@@ -1796,4 +1916,103 @@ public partial class FileListViewModel : ObservableObject
         DateTime? MinDate,
         DateTime? MaxDate,
         bool GlobalShowHidden);
+
+    private List<FileSystemItem> GetPresentedItems(IEnumerable<FileSystemItem> source)
+    {
+        var items = source.ToList();
+        if (items.Count <= 1)
+            return items;
+
+        IOrderedEnumerable<FileSystemItem>? groupedOrder = GroupByMode switch
+        {
+            FileListGroupMode.Name => items.OrderBy(static item => item.GroupNameRank),
+            FileListGroupMode.Type => items.OrderBy(static item => item.GroupTypeRank)
+                .ThenBy(static item => item.GroupTypeLabel, StringComparer.OrdinalIgnoreCase),
+            FileListGroupMode.Size => items.OrderBy(static item => item.GroupSizeRank),
+            FileListGroupMode.DateModified => items.OrderBy(static item => item.GroupDateModifiedRank),
+            _ => null
+        };
+
+        var baseOrder = groupedOrder ?? items.OrderByDescending(static item => item.ItemType == FileSystemItemType.Directory);
+        IEnumerable<FileSystemItem> orderedItems = SortMode switch
+        {
+            FileListSortMode.Name => ApplyDirection(baseOrder, static item => item.Name),
+            FileListSortMode.Size => ApplyDirection(baseOrder, static item => item.Size)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Type => ApplyDirection(baseOrder, static item => item.TypeDescription)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.DateModified => ApplyDirection(baseOrder, static item => item.DateModified)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Company => ApplyDirection(baseOrder, static item => item.ShellProperties.Company)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Version => ApplyDirection(baseOrder, static item => item.ShellProperties.FileVersion)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Dimensions => ApplyDirection(baseOrder, static item => item.ShellProperties.Dimensions)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Duration => ApplyDirection(baseOrder, static item => item.ShellProperties.Duration)
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
+            FileListSortMode.Manual => ApplyManualSort(items),
+            _ => baseOrder.ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return orderedItems.ToList();
+    }
+
+    private IOrderedEnumerable<FileSystemItem> ApplyDirection<TKey>(
+        IOrderedEnumerable<FileSystemItem> ordered,
+        Func<FileSystemItem, TKey> keySelector)
+    {
+        return IsSortDescending
+            ? ordered.ThenByDescending(keySelector)
+            : ordered.ThenBy(keySelector);
+    }
+
+    private List<FileSystemItem> ApplyManualSort(IEnumerable<FileSystemItem> items)
+    {
+        var materialized = items.ToList();
+        var manualOrder = GetManualSortNameIndex();
+        return materialized
+            .OrderBy(item => manualOrder.TryGetValue(item.Name, out var index) ? 0 : 1)
+            .ThenBy(item => manualOrder.TryGetValue(item.Name, out var index) ? index : int.MaxValue)
+            .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private Dictionary<string, int> GetManualSortNameIndex()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var orderedNames = LoadManualSortOrder?.Invoke(CurrentPath) ?? [];
+        return orderedNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select((name, index) => new { name, index })
+            .ToDictionary(static item => item.name, static item => item.index, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void PersistManualSortOrder()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        SaveManualSortOrder?.Invoke(CurrentPath, _allItems.Select(static item => item.Name).ToArray());
+    }
+
+    private void UpdateManualSortName(string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        var orderedNames = (LoadManualSortOrder?.Invoke(CurrentPath) ?? []).ToList();
+        if (orderedNames.Count == 0)
+            return;
+
+        var index = orderedNames.FindIndex(name => string.Equals(name, oldName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return;
+
+        orderedNames[index] = newName;
+        SaveManualSortOrder?.Invoke(CurrentPath, orderedNames);
+    }
 }

@@ -47,6 +47,12 @@ The app currently includes:
 - recursive search now supports combined hidden/system/read-only/archive, size, and inclusive date-range criteria with validation for invalid ranges
 - saved searches now persist and replay the advanced criteria, and smoke coverage verifies live filtering plus saved-search round-trips
 
+### Group By and manual sorting
+
+- added a `View > Group By` submenu with name, type, size, and date-modified grouping options for the active pane
+- added a `View > Manual Sorting` toggle that switches the pane into drag-reorder mode for folder contents
+- persisted per-folder manual sort sequences in the existing settings file and added smoke coverage for date grouping plus reload persistence
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -209,7 +215,7 @@ Smoke coverage explicitly includes:
 Status: IN PROGRESS
 Scope:
 - completed: 016 advanced attribute/date search filter
-- **017: Group By and Manual Sorting:** Implement visual grouping in the file list (by type, date, or name) and support for persistent manual item reordering.
+- completed: 017 group by and manual sorting
 - **018: External Tools Configuration:** Add a dedicated settings section for users to define external programs and launch them with selected file arguments.
 - **019: Drop-Stack (Virtual Collection):** Implement a temporary "shelf" area where users can collect items from multiple folders before performing a batch operation.
 

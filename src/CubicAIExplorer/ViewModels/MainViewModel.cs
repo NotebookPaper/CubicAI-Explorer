@@ -320,6 +320,7 @@ public partial class MainViewModel : ObservableObject
             _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
             _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
             _userSettings.DetailsColumns = CloneDetailsColumnSettings(newSettings.DetailsColumns);
+            _userSettings.ManualSortFolders = CloneManualSortFolders(newSettings.ManualSortFolders);
             RefreshNewFileTemplatesCatalog();
             RefreshNamedSessionsFromSettings();
             RefreshWindowLayoutsFromSettings();
@@ -513,6 +514,8 @@ public partial class MainViewModel : ObservableObject
             tab.FileList.ShowHiddenFiles = true;
         if (_userSettings.DefaultViewMode is "List" or "Tiles")
             tab.FileList.ViewMode = _userSettings.DefaultViewMode;
+        tab.FileList.LoadManualSortOrder = GetManualSortOrder;
+        tab.FileList.SaveManualSortOrder = SaveManualSortOrder;
     }
 
     private static List<TabItem> GetPersistedTabItems(IReadOnlyCollection<TabItem>? tabItems, IReadOnlyCollection<string>? fallbackPaths)
@@ -947,6 +950,62 @@ public partial class MainViewModel : ObservableObject
         SaveSettings();
     }
 
+    public IReadOnlyList<string> GetManualSortOrder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+            return [];
+
+        return _userSettings.ManualSortFolders
+            .FirstOrDefault(order => string.Equals(order.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            ?.OrderedNames
+            ?.Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+            ?? [];
+    }
+
+    public void SaveManualSortOrder(string folderPath, IReadOnlyList<string> orderedNames)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+            return;
+
+        var normalizedNames = orderedNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var existing = _userSettings.ManualSortFolders
+            .FirstOrDefault(order => string.Equals(order.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase));
+
+        if (normalizedNames.Count == 0)
+        {
+            if (existing != null)
+            {
+                _userSettings.ManualSortFolders.Remove(existing);
+                SaveSettings();
+            }
+
+            return;
+        }
+
+        if (existing == null)
+        {
+            _userSettings.ManualSortFolders.Add(new ManualSortFolderOrder
+            {
+                FolderPath = folderPath,
+                OrderedNames = normalizedNames
+            });
+        }
+        else
+        {
+            existing.FolderPath = folderPath;
+            existing.OrderedNames = normalizedNames;
+        }
+
+        _userSettings.ManualSortFolders = NormalizeManualSortFolders(_userSettings.ManualSortFolders);
+        SaveSettings();
+    }
+
     private static List<DetailsColumnSetting> CreateDefaultDetailsColumnSettings()
     {
         return
@@ -1008,6 +1067,30 @@ public partial class MainViewModel : ObservableObject
             ordered[i].DisplayOrder = i;
 
         return ordered;
+    }
+
+    private static List<ManualSortFolderOrder> CloneManualSortFolders(IEnumerable<ManualSortFolderOrder>? orders)
+    {
+        return (orders ?? [])
+            .Where(static order => !string.IsNullOrWhiteSpace(order.FolderPath))
+            .Select(static order => new ManualSortFolderOrder
+            {
+                FolderPath = order.FolderPath.Trim(),
+                OrderedNames = (order.OrderedNames ?? [])
+                    .Where(static name => !string.IsNullOrWhiteSpace(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private static List<ManualSortFolderOrder> NormalizeManualSortFolders(IEnumerable<ManualSortFolderOrder>? orders)
+    {
+        return CloneManualSortFolders(orders)
+            .GroupBy(static order => order.FolderPath, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static order => order.FolderPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void UpdateFilterPreferences(NameMatchMode filterMatchMode, NameMatchMode searchMatchMode, bool clearFilterOnFolderChange)
@@ -2772,6 +2855,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
         _userSettings.FilterHistory = newSettings.FilterHistory ?? [];
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(newSettings.DetailsColumns);
+        _userSettings.ManualSortFolders = NormalizeManualSortFolders(newSettings.ManualSortFolders);
         RefreshNewFileTemplatesCatalog();
         ApplyFilterPreferencesToAllTabs();
         OnPropertyChanged(nameof(DetailsColumnSettings));
@@ -3920,6 +4004,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.WindowLayouts = WindowLayouts.Select(CloneWindowLayout).ToList();
         _userSettings.FilterHistory = GetFilterHistorySnapshot();
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(_userSettings.DetailsColumns);
+        _userSettings.ManualSortFolders = NormalizeManualSortFolders(_userSettings.ManualSortFolders);
         _settingsService?.Save(_userSettings);
     }
 

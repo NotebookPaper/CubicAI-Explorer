@@ -37,6 +37,7 @@ public sealed class UserSettings
     public NameMatchMode SearchMatchMode { get; set; } = NameMatchMode.Contains;
     public bool ClearFilterOnFolderChange { get; set; }
     public List<string> FilterHistory { get; set; } = [];
+    public List<ManualSortFolderOrder> ManualSortFolders { get; set; } = [];
 
     // Window State
     public double SidebarWidth { get; set; } = 250;
