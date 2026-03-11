@@ -157,6 +157,10 @@
                 <MenuItem Header="_Export..." Click="ExportBookmarks_Click" />
             </MenuItem>
             <MenuItem Header="_Tools">
+                <MenuItem Header="_Split File..." Command="{Binding OpenSplitFileToolCommand}" />
+                <MenuItem Header="_Join File..." Command="{Binding OpenJoinFileToolCommand}" />
+                <MenuItem Header="_Checksum..." Command="{Binding OpenChecksumToolCommand}" />
+                <Separator />
                 <MenuItem Header="Empty _Recycle Bin..." Click="EmptyRecycleBin_Click" />
                 <Separator />
                 <MenuItem Header="_Preferences..." Command="{Binding OpenPreferencesCommand}" />

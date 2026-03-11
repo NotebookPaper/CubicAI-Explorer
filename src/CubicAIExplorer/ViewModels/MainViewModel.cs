@@ -196,6 +196,9 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
     public event EventHandler? OpenPreferencesRequested;
+    public event EventHandler<string?>? SplitFileRequested;
+    public event EventHandler<string?>? JoinFileRequested;
+    public event EventHandler<string?>? ChecksumRequested;
     public event EventHandler<FileSystemItem>? BookmarkPropertiesRequested;
 
     public Models.UserSettings CurrentSettings => _userSettings;
@@ -2372,6 +2375,24 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenSplitFileTool()
+    {
+        SplitFileRequested?.Invoke(this, GetSingleSelectedFilePath());
+    }
+
+    [RelayCommand]
+    private void OpenJoinFileTool()
+    {
+        JoinFileRequested?.Invoke(this, GetSingleSelectedFilePath(IsNumberedChunkPath));
+    }
+
+    [RelayCommand]
+    private void OpenChecksumTool()
+    {
+        ChecksumRequested?.Invoke(this, GetSingleSelectedFilePath());
+    }
+
+    [RelayCommand]
     private void EmptyRecycleBin()
     {
         try
@@ -2382,6 +2403,70 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusText = $"Failed to empty Recycle Bin: {ex.Message}";
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> SplitFileAsync(string sourcePath, long chunkSizeBytes, string outputDirectory)
+    {
+        var sanitizedOutputDirectory = _fileSystemService.EnsureDirectoryExists(outputDirectory);
+        if (string.IsNullOrWhiteSpace(sanitizedOutputDirectory))
+            throw new InvalidOperationException("The output directory is invalid.");
+
+        var sourceName = Path.GetFileName(sourcePath);
+        try
+        {
+            var chunks = await _fileOperationQueueService.EnqueueAsync(
+                $"Splitting {sourceName}",
+                context => _fileSystemService.SplitFile(sourcePath, chunkSizeBytes, sanitizedOutputDirectory, context));
+            StatusText = $"Split {sourceName} into {chunks.Count} chunk(s).";
+            RefreshOpenPanesForDirectories([sanitizedOutputDirectory]);
+            return chunks;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = $"Canceled split for {sourceName}.";
+            throw;
+        }
+    }
+
+    public async Task<string> JoinFileAsync(string firstChunkPath, string outputPath)
+    {
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+            throw new InvalidOperationException("The output path is invalid.");
+
+        var sourceName = Path.GetFileName(firstChunkPath);
+        try
+        {
+            var joinedFile = await _fileOperationQueueService.EnqueueAsync(
+                $"Joining {sourceName}",
+                context => _fileSystemService.JoinFile(firstChunkPath, outputPath, context));
+            StatusText = $"Joined chunks into {Path.GetFileName(joinedFile)}.";
+            RefreshOpenPanesForDirectories([outputDirectory]);
+            return joinedFile;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = $"Canceled join for {sourceName}.";
+            throw;
+        }
+    }
+
+    public async Task<FileChecksumSet> ComputeChecksumsAsync(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        try
+        {
+            var checksums = await _fileOperationQueueService.EnqueueAsync(
+                $"Checksumming {fileName}",
+                context => _fileSystemService.ComputeChecksums(path, context));
+            StatusText = $"Computed checksums for {fileName}.";
+            return checksums;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = $"Canceled checksum for {fileName}.";
+            throw;
         }
     }
 
@@ -3322,6 +3407,61 @@ public partial class MainViewModel : ObservableObject
     // --- Recent Folders Persistence ---
 
     private static string GetRecentFoldersPath() => GetAppDataPath("recent.json");
+
+    private string? GetSingleSelectedFilePath(Func<string, bool>? predicate = null)
+    {
+        var fileList = CurrentPaneFileList;
+        if (fileList == null)
+            return null;
+
+        FileSystemItem? candidate = null;
+        if (fileList.SelectedItems.Count == 1)
+            candidate = fileList.SelectedItems[0];
+        else if (fileList.SelectedItems.Count == 0)
+            candidate = fileList.SelectedItem;
+
+        if (candidate?.ItemType != FileSystemItemType.File || string.IsNullOrWhiteSpace(candidate.FullPath))
+            return null;
+
+        return predicate == null || predicate(candidate.FullPath)
+            ? candidate.FullPath
+            : null;
+    }
+
+    private static bool IsNumberedChunkPath(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return !string.IsNullOrWhiteSpace(extension)
+            && extension.Length > 1
+            && extension[1..].All(char.IsDigit);
+    }
+
+    private void RefreshOpenPanesForDirectories(IEnumerable<string> directories)
+    {
+        var normalizedDirectories = directories
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => path.TrimEnd('\\'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedDirectories.Length == 0)
+            return;
+
+        foreach (var tab in Tabs)
+        {
+            if (normalizedDirectories.Any(path =>
+                string.Equals(tab.CurrentPath.TrimEnd('\\'), path, StringComparison.OrdinalIgnoreCase)))
+            {
+                tab.FileList.RefreshCommand.Execute(null);
+            }
+        }
+
+        if (_rightPaneTab != null
+            && normalizedDirectories.Any(path =>
+                string.Equals(_rightPaneTab.CurrentPath.TrimEnd('\\'), path, StringComparison.OrdinalIgnoreCase)))
+        {
+            _rightPaneTab.FileList.RefreshCommand.Execute(null);
+        }
+    }
 
     private static string GetSavedSearchesPath()
     {

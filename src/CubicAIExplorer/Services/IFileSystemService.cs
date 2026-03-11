@@ -61,6 +61,9 @@ public interface IFileSystemService
     string CreateFile(string parentPath, string fileName);
     string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null);
     void CreateSymbolicLink(string linkPath, string targetPath);
+    IReadOnlyList<string> SplitFile(string sourcePath, long chunkSizeBytes, string? outputDirectory = null, IFileOperationContext? operationContext = null);
+    string JoinFile(string firstChunkPath, string outputPath, IFileOperationContext? operationContext = null);
+    FileChecksumSet ComputeChecksums(string path, IFileOperationContext? operationContext = null);
     string? EnsureDirectoryExists(string path);
     IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100);
     void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null);

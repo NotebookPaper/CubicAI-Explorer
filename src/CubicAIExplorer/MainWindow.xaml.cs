@@ -1554,6 +1554,9 @@ public partial class MainWindow : Window
             _boundViewModel.DualPaneModeChanged -= ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged -= ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested -= ViewModel_OpenPreferencesRequested;
+            _boundViewModel.SplitFileRequested -= ViewModel_SplitFileRequested;
+            _boundViewModel.JoinFileRequested -= ViewModel_JoinFileRequested;
+            _boundViewModel.ChecksumRequested -= ViewModel_ChecksumRequested;
             _boundViewModel.ScrollToSelectedRequested -= MainWindow_ScrollToSelectedRequested;
             _boundViewModel.ScrollToSelectedBookmarkRequested -= MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested -= ViewModel_BookmarkPropertiesRequested;
@@ -1567,6 +1570,9 @@ public partial class MainWindow : Window
             _boundViewModel.DualPaneModeChanged += ViewModel_DualPaneModeChanged;
             _boundViewModel.PreviewModeChanged += ViewModel_PreviewModeChanged;
             _boundViewModel.OpenPreferencesRequested += ViewModel_OpenPreferencesRequested;
+            _boundViewModel.SplitFileRequested += ViewModel_SplitFileRequested;
+            _boundViewModel.JoinFileRequested += ViewModel_JoinFileRequested;
+            _boundViewModel.ChecksumRequested += ViewModel_ChecksumRequested;
             _boundViewModel.ScrollToSelectedRequested += MainWindow_ScrollToSelectedRequested;
             _boundViewModel.ScrollToSelectedBookmarkRequested += MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested += ViewModel_BookmarkPropertiesRequested;
@@ -2401,6 +2407,52 @@ public partial class MainWindow : Window
         {
             ViewModel.ApplyAndSaveSettings(dialog.Settings);
         }
+    }
+
+    private async void ViewModel_SplitFileRequested(object? sender, string? initialPath)
+    {
+        var dialog = new SplitFileDialog(initialPath) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            await ViewModel.SplitFileAsync(dialog.SourcePath, dialog.ChunkSizeBytes, dialog.OutputDirectory);
+        }
+        catch (OperationCanceledException)
+        {
+            // Status text already reflects cancellation.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Split failed: {ex.Message}", "Split File", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void ViewModel_JoinFileRequested(object? sender, string? initialPath)
+    {
+        var dialog = new JoinFileDialog(initialPath) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            await ViewModel.JoinFileAsync(dialog.FirstChunkPath, dialog.OutputPath);
+        }
+        catch (OperationCanceledException)
+        {
+            // Status text already reflects cancellation.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Join failed: {ex.Message}", "Join File", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ViewModel_ChecksumRequested(object? sender, string? initialPath)
+    {
+        var dialog = new ChecksumDialog(initialPath, ViewModel.ComputeChecksumsAsync) { Owner = this };
+        dialog.ShowDialog();
     }
 
     private void ViewModel_BookmarkPropertiesRequested(object? sender, FileSystemItem item)

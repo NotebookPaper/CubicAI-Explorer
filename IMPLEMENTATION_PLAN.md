@@ -29,6 +29,12 @@ The app currently includes:
 - locked tabs now stay bound to their root folder subtree and fork outside navigation into a new tab, including back/forward history hops
 - added tab context-menu lock/color actions, colored tab-header accents, and smoke coverage for fork navigation plus reload persistence
 
+### File utilities (split/join/checksum)
+
+- added Tools-menu split, join, and checksum dialogs with active-file prefills for common workflows
+- added queue-backed file chunk splitting and contiguous reassembly with numbered suffixes such as `.001`
+- added one-pass MD5/SHA1/SHA256 generation plus compare-against-string support in the checksum tool and smoke coverage for the end-to-end behavior
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -197,7 +203,6 @@ Scope:
 ### 5. Advanced Parity (Cubic Final)
 Status: PLANNED
 Scope:
-- **014: File Utilities (Split/Join/Checksum):** Implement a tools menu for file splitting, joining, and MD5/SHA1 checksum generation.
 - **015: UI Layout Manager:** Allow users to save and restore named window layouts (e.g., "Preview Mode", "Dual Pane Mode").
 
 ### 1. UX polish and advanced operations

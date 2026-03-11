@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Microsoft.VisualBasic.FileIO;
 using CubicAIExplorer.Models;
 
@@ -537,6 +538,225 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public IReadOnlyList<string> SplitFile(
+        string sourcePath,
+        long chunkSizeBytes,
+        string? outputDirectory = null,
+        IFileOperationContext? operationContext = null)
+    {
+        var sanitizedSource = SanitizePath(sourcePath);
+        if (sanitizedSource == null || !File.Exists(sanitizedSource))
+            throw new FileNotFoundException("The source file does not exist.", sourcePath);
+
+        if (chunkSizeBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(chunkSizeBytes), "Chunk size must be greater than zero.");
+
+        var sanitizedOutputDirectory = string.IsNullOrWhiteSpace(outputDirectory)
+            ? Path.GetDirectoryName(sanitizedSource)
+            : SanitizePath(outputDirectory);
+        if (string.IsNullOrWhiteSpace(sanitizedOutputDirectory))
+            throw new InvalidOperationException("The output directory is invalid.");
+
+        Directory.CreateDirectory(sanitizedOutputDirectory);
+
+        var sourceInfo = new FileInfo(sanitizedSource);
+        var totalChunks = Math.Max(1, (int)((sourceInfo.Length + chunkSizeBytes - 1) / chunkSizeBytes));
+        var suffixWidth = Math.Max(3, totalChunks.ToString().Length);
+        var chunkPaths = Enumerable.Range(1, totalChunks)
+            .Select(index => Path.Combine(
+                sanitizedOutputDirectory,
+                $"{Path.GetFileName(sanitizedSource)}.{index.ToString($"D{suffixWidth}")}"))
+            .ToArray();
+
+        var conflictingChunk = chunkPaths.FirstOrDefault(File.Exists);
+        if (!string.IsNullOrWhiteSpace(conflictingChunk))
+            throw new IOException($"The chunk file already exists: {Path.GetFileName(conflictingChunk)}");
+
+        var createdChunks = new List<string>();
+        try
+        {
+            using var input = new FileStream(sanitizedSource, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var buffer = new byte[81920];
+
+            for (var chunkIndex = 0; chunkIndex < chunkPaths.Length; chunkIndex++)
+            {
+                operationContext?.CancellationToken.ThrowIfCancellationRequested();
+
+                var chunkPath = chunkPaths[chunkIndex];
+                using var output = new FileStream(chunkPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                long remaining = Math.Min(chunkSizeBytes, input.Length - input.Position);
+                while (remaining > 0)
+                {
+                    operationContext?.CancellationToken.ThrowIfCancellationRequested();
+                    var bytesToRead = (int)Math.Min(buffer.Length, remaining);
+                    var bytesRead = input.Read(buffer, 0, bytesToRead);
+                    if (bytesRead <= 0)
+                        break;
+
+                    output.Write(buffer, 0, bytesRead);
+                    remaining -= bytesRead;
+                }
+
+                createdChunks.Add(chunkPath);
+                operationContext?.ReportProgress(chunkIndex + 1, chunkPaths.Length, Path.GetFileName(chunkPath));
+            }
+
+            return createdChunks;
+        }
+        catch
+        {
+            foreach (var chunkPath in createdChunks)
+            {
+                try
+                {
+                    if (File.Exists(chunkPath))
+                        File.Delete(chunkPath);
+                }
+                catch
+                {
+                    // Best effort cleanup for partially-created chunk files.
+                }
+            }
+
+            throw;
+        }
+    }
+
+    public string JoinFile(string firstChunkPath, string outputPath, IFileOperationContext? operationContext = null)
+    {
+        var sanitizedFirstChunk = SanitizePath(firstChunkPath);
+        var sanitizedOutput = SanitizePath(outputPath);
+        if (sanitizedFirstChunk == null || !File.Exists(sanitizedFirstChunk))
+            throw new FileNotFoundException("The first chunk file does not exist.", firstChunkPath);
+        if (sanitizedOutput == null)
+            throw new InvalidOperationException("The output path is invalid.");
+        if (File.Exists(sanitizedOutput) || Directory.Exists(sanitizedOutput))
+            throw new IOException("The output path already exists.");
+
+        var chunkDirectory = Path.GetDirectoryName(sanitizedFirstChunk);
+        var chunkSuffix = Path.GetExtension(sanitizedFirstChunk);
+        if (string.IsNullOrWhiteSpace(chunkDirectory)
+            || string.IsNullOrWhiteSpace(chunkSuffix)
+            || !IsNumericChunkExtension(chunkSuffix))
+        {
+            throw new InvalidOperationException("The selected file is not a numbered chunk.");
+        }
+
+        var chunkBaseName = Path.GetFileNameWithoutExtension(sanitizedFirstChunk);
+        var startIndex = int.Parse(chunkSuffix[1..]);
+        if (startIndex != 1)
+            throw new InvalidOperationException("Select the first chunk file (for example, .001).");
+
+        var chunkWidth = chunkSuffix.Length - 1;
+        var chunkFiles = Directory.EnumerateFiles(chunkDirectory, $"{chunkBaseName}.*")
+            .Select(path => new
+            {
+                Path = path,
+                Extension = Path.GetExtension(path)
+            })
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Extension)
+                && IsNumericChunkExtension(item.Extension))
+            .Select(item => new
+            {
+                item.Path,
+                Index = int.Parse(item.Extension[1..])
+            })
+            .OrderBy(static item => item.Index)
+            .ToArray();
+
+        if (chunkFiles.Length == 0 || chunkFiles[0].Index != 1)
+            throw new InvalidOperationException("No valid chunk sequence was found.");
+
+        for (var i = 0; i < chunkFiles.Length; i++)
+        {
+            if (chunkFiles[i].Index != i + 1)
+                throw new InvalidOperationException("The chunk sequence is incomplete.");
+        }
+
+        var outputDirectory = Path.GetDirectoryName(sanitizedOutput);
+        if (!string.IsNullOrWhiteSpace(outputDirectory))
+            Directory.CreateDirectory(outputDirectory);
+
+        try
+        {
+            using var output = new FileStream(sanitizedOutput, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            var buffer = new byte[81920];
+
+            for (var i = 0; i < chunkFiles.Length; i++)
+            {
+                operationContext?.CancellationToken.ThrowIfCancellationRequested();
+
+                using var input = new FileStream(chunkFiles[i].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                int bytesRead;
+                while ((bytesRead = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    operationContext?.CancellationToken.ThrowIfCancellationRequested();
+                    output.Write(buffer, 0, bytesRead);
+                }
+
+                operationContext?.ReportProgress(
+                    i + 1,
+                    chunkFiles.Length,
+                    $"{chunkBaseName}.{chunkFiles[i].Index.ToString($"D{chunkWidth}")}");
+            }
+
+            return sanitizedOutput;
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(sanitizedOutput))
+                    File.Delete(sanitizedOutput);
+            }
+            catch
+            {
+                // Best effort cleanup for partially-written join output.
+            }
+
+            throw;
+        }
+    }
+
+    public FileChecksumSet ComputeChecksums(string path, IFileOperationContext? operationContext = null)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null || !File.Exists(sanitized))
+            throw new FileNotFoundException("The file does not exist.", path);
+
+        using var stream = new FileStream(sanitized, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        var totalBytes = stream.Length;
+        var buffer = new byte[81920];
+        long bytesProcessed = 0;
+
+        while (true)
+        {
+            operationContext?.CancellationToken.ThrowIfCancellationRequested();
+
+            var bytesRead = stream.Read(buffer, 0, buffer.Length);
+            if (bytesRead <= 0)
+                break;
+
+            var span = buffer.AsSpan(0, bytesRead);
+            md5.AppendData(span);
+            sha1.AppendData(span);
+            sha256.AppendData(span);
+
+            bytesProcessed += bytesRead;
+            var completedSteps = totalBytes <= 0 ? 1 : (int)Math.Min(1000, (bytesProcessed * 1000) / totalBytes);
+            operationContext?.ReportProgress(completedSteps, 1000, Path.GetFileName(sanitized));
+        }
+
+        return new FileChecksumSet(
+            ConvertToHex(md5.GetHashAndReset()),
+            ConvertToHex(sha1.GetHashAndReset()),
+            ConvertToHex(sha256.GetHashAndReset()));
+    }
+
     public string? EnsureDirectoryExists(string path)
     {
         var sanitized = SanitizePath(path);
@@ -1018,6 +1238,12 @@ public sealed class FileSystemService : IFileSystemService
     }
 
     private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static string ConvertToHex(byte[] bytes)
+        => Convert.ToHexString(bytes).ToLowerInvariant();
+
+    private static bool IsNumericChunkExtension(string extension)
+        => extension.Length > 1 && extension[1..].All(char.IsDigit);
 
     private static bool TryRevealMultipleInExplorer(IReadOnlyList<string> paths)
     {

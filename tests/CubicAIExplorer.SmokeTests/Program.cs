@@ -117,6 +117,9 @@ internal static class Program
             Run("new file and link creation", failures, () => TestNewFileAndLink(tempRoot));
             Run("new file templates catalog", failures, () => TestNewFileTemplatesCatalog(tempRoot));
             Run("new file template creation", failures, () => TestNewFileTemplateCreation(tempRoot));
+            Run("file split and join", failures, () => TestFileSplitAndJoin(tempRoot));
+            Run("checksum generation and compare", failures, () => TestChecksumGenerationAndCompare(tempRoot));
+            Run("file utility tool commands", failures, () => TestFileUtilityToolCommands(tempRoot));
             Run("empty recycle bin command", failures, TestEmptyRecycleBinCommand);
             Run("open in new window command", failures, () => TestOpenInNewWindowCommand(tempRoot));
             Run("run as administrator command", failures, () => TestRunAsAdministratorCommand(tempRoot));
@@ -2933,7 +2936,13 @@ internal static class Program
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding AddCurrentSearchCommand}\""), "Saved-search save bindings should route through the main view model.");
         Assert(main.Contains("Header=\"_Sessions\""), "Sessions menu should exist.");
+        Assert(main.Contains("Header=\"_Split File...\""), "Tools menu should expose Split File.");
+        Assert(main.Contains("Header=\"_Join File...\""), "Tools menu should expose Join File.");
+        Assert(main.Contains("Header=\"_Checksum...\""), "Tools menu should expose Checksum.");
         Assert(main.Contains("Header=\"Empty _Recycle Bin...\""), "Tools menu should expose Empty Recycle Bin.");
+        Assert(main.Contains("OpenSplitFileToolCommand"), "Split File should bind through the main view model.");
+        Assert(main.Contains("OpenJoinFileToolCommand"), "Join File should bind through the main view model.");
+        Assert(main.Contains("OpenChecksumToolCommand"), "Checksum should bind through the main view model.");
         Assert(main.Contains("SaveCurrentSessionAs_Click"), "Save Session As menu item should be wired.");
         Assert(main.Contains("UpdateCurrentNamedSessionCommand"), "Update Current Session should be wired.");
         Assert(main.Contains("SessionsMenu_SubmenuOpened"), "Sessions submenu population should be wired.");
@@ -3411,6 +3420,82 @@ internal static class Program
         }
     }
 
+    private static void TestFileSplitAndJoin(string root)
+    {
+        var fs = new FileSystemService();
+        var sourceDir = CreateCleanSubdir(root, "split_join_source");
+        var outputDir = CreateCleanSubdir(root, "split_join_output");
+        var sourcePath = Path.Combine(sourceDir, "archive.bin");
+        var joinedPath = Path.Combine(outputDir, "archive_joined.bin");
+        var bytes = Enumerable.Range(0, 97).Select(static i => (byte)(i * 3 % 251)).ToArray();
+        File.WriteAllBytes(sourcePath, bytes);
+
+        var chunks = fs.SplitFile(sourcePath, 15, outputDir);
+
+        Assert(chunks.Count == 7, "Split should create the expected number of chunks.");
+        Assert(chunks[0].EndsWith(".001", StringComparison.OrdinalIgnoreCase), "Split should use numbered chunk suffixes.");
+        Assert(new FileInfo(chunks[0]).Length == 15, "Split should size the first chunk correctly.");
+        Assert(new FileInfo(chunks[^1]).Length == 7, "Split should size the final partial chunk correctly.");
+
+        var restoredPath = fs.JoinFile(chunks[0], joinedPath);
+
+        Assert(string.Equals(restoredPath, joinedPath, StringComparison.OrdinalIgnoreCase), "Join should return the requested output path.");
+        Assert(File.Exists(joinedPath), "Join should create the output file.");
+        Assert(File.ReadAllBytes(joinedPath).SequenceEqual(bytes), "Join should rebuild a bit-perfect copy of the original file.");
+    }
+
+    private static void TestChecksumGenerationAndCompare(string root)
+    {
+        var fs = new FileSystemService();
+        var folder = CreateCleanSubdir(root, "checksums");
+        var filePath = Path.Combine(folder, "sample.txt");
+        File.WriteAllText(filePath, "abc");
+
+        var checksums = fs.ComputeChecksums(filePath);
+
+        Assert(checksums.Md5 == "900150983cd24fb0d6963f7d28e17f72", "Checksum generation should produce the expected MD5.");
+        Assert(checksums.Sha1 == "a9993e364706816aba3e25717850c26c9cd0d89d", "Checksum generation should produce the expected SHA1.");
+        Assert(ChecksumDialog.IsChecksumMatch(checksums.Md5, "90015098 3cd24fb0 d6963f7d 28e17f72"), "Checksum compare should ignore separators.");
+        Assert(!ChecksumDialog.IsChecksumMatch(checksums.Sha1, "deadbeef"), "Checksum compare should reject non-matching values.");
+    }
+
+    private static void TestFileUtilityToolCommands(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        var folder = CreateCleanSubdir(root, "file_utility_commands");
+        var filePath = Path.Combine(folder, "payload.txt");
+        var chunkPath = Path.Combine(folder, "payload.txt.001");
+        File.WriteAllText(filePath, "payload");
+        File.WriteAllText(chunkPath, "chunk");
+
+        vm.NavigateCurrentPaneToPath(folder);
+
+        var fileItem = vm.CurrentPaneFileList!.Items.Single(item => string.Equals(item.FullPath, filePath, StringComparison.OrdinalIgnoreCase));
+        vm.CurrentPaneFileList.SelectedItem = fileItem;
+
+        string? splitRequestedPath = null;
+        string? checksumRequestedPath = null;
+        vm.SplitFileRequested += (_, path) => splitRequestedPath = path;
+        vm.ChecksumRequested += (_, path) => checksumRequestedPath = path;
+
+        vm.OpenSplitFileToolCommand.Execute(null);
+        vm.OpenChecksumToolCommand.Execute(null);
+
+        Assert(string.Equals(splitRequestedPath, filePath, StringComparison.OrdinalIgnoreCase), "Split command should preselect the active file.");
+        Assert(string.Equals(checksumRequestedPath, filePath, StringComparison.OrdinalIgnoreCase), "Checksum command should preselect the active file.");
+
+        var chunkItem = vm.CurrentPaneFileList.Items.Single(item => string.Equals(item.FullPath, chunkPath, StringComparison.OrdinalIgnoreCase));
+        vm.CurrentPaneFileList.SelectedItem = chunkItem;
+
+        string? joinRequestedPath = null;
+        vm.JoinFileRequested += (_, path) => joinRequestedPath = path;
+        vm.OpenJoinFileToolCommand.Execute(null);
+
+        Assert(string.Equals(joinRequestedPath, chunkPath, StringComparison.OrdinalIgnoreCase), "Join command should preselect a numbered chunk file.");
+    }
+
     private static void TestEmptyRecycleBinCommand()
     {
         var fs = new RecordingFileSystemService(new FileSystemService());
@@ -3630,6 +3715,12 @@ internal static class Program
         public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
             => _inner.CreateFileFromTemplate(parentPath, templatePath, fileName);
         public void CreateSymbolicLink(string linkPath, string targetPath) => _inner.CreateSymbolicLink(linkPath, targetPath);
+        public IReadOnlyList<string> SplitFile(string sourcePath, long chunkSizeBytes, string? outputDirectory = null, IFileOperationContext? operationContext = null)
+            => _inner.SplitFile(sourcePath, chunkSizeBytes, outputDirectory, operationContext);
+        public string JoinFile(string firstChunkPath, string outputPath, IFileOperationContext? operationContext = null)
+            => _inner.JoinFile(firstChunkPath, outputPath, operationContext);
+        public FileChecksumSet ComputeChecksums(string path, IFileOperationContext? operationContext = null)
+            => _inner.ComputeChecksums(path, operationContext);
         public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
         public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);
         public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
@@ -3687,6 +3778,12 @@ internal static class Program
         public string CreateFileFromTemplate(string parentPath, string templatePath, string? fileName = null)
             => _inner.CreateFileFromTemplate(parentPath, templatePath, fileName);
         public void CreateSymbolicLink(string linkPath, string targetPath) => throw _exception;
+        public IReadOnlyList<string> SplitFile(string sourcePath, long chunkSizeBytes, string? outputDirectory = null, IFileOperationContext? operationContext = null)
+            => _inner.SplitFile(sourcePath, chunkSizeBytes, outputDirectory, operationContext);
+        public string JoinFile(string firstChunkPath, string outputPath, IFileOperationContext? operationContext = null)
+            => _inner.JoinFile(firstChunkPath, outputPath, operationContext);
+        public FileChecksumSet ComputeChecksums(string path, IFileOperationContext? operationContext = null)
+            => _inner.ComputeChecksums(path, operationContext);
         public string? EnsureDirectoryExists(string path) => _inner.EnsureDirectoryExists(path);
         public IReadOnlyList<ArchiveEntryInfo> GetArchiveEntries(string archivePath, int maxEntries = 100) => _inner.GetArchiveEntries(archivePath, maxEntries);
         public void ExtractArchive(string archivePath, string destinationDirectory, IFileOperationContext? operationContext = null)
