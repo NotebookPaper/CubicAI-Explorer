@@ -38,6 +38,7 @@ public interface IFileSystemService
     string GetParentPath(string path);
     void OpenFile(string path);
     void RevealInExplorer(string path);
+    void RevealInExplorer(IEnumerable<string> paths);
     void OpenInDefaultApp(string path);
     IReadOnlyList<FileTransferResult> CopyFiles(
         IEnumerable<string> sourcePaths,

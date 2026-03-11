@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using Microsoft.VisualBasic.FileIO;
 using CubicAIExplorer.Models;
 
@@ -154,6 +155,29 @@ public sealed class FileSystemService : IFileSystemService
             UseShellExecute = true
         };
         Process.Start(psi);
+    }
+
+    public void RevealInExplorer(IEnumerable<string> paths)
+    {
+        var sanitizedPaths = paths
+            .Select(SanitizePath)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .Where(path => File.Exists(path) || Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (sanitizedPaths.Length == 0)
+            return;
+
+        if (sanitizedPaths.Length == 1)
+        {
+            RevealInExplorer(sanitizedPaths[0]);
+            return;
+        }
+
+        if (!TryRevealMultipleInExplorer(sanitizedPaths))
+            RevealInExplorer(sanitizedPaths[0]);
     }
 
     public void OpenInDefaultApp(string path)
@@ -815,5 +839,84 @@ public sealed class FileSystemService : IFileSystemService
     }
 
     private static bool PathExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static bool TryRevealMultipleInExplorer(IReadOnlyList<string> paths)
+    {
+        var parentPath = GetCommonExplorerSelectionParent(paths);
+        if (string.IsNullOrWhiteSpace(parentPath))
+            return false;
+
+        if (SHParseDisplayName(parentPath, IntPtr.Zero, out var parentPidl, 0, out _) != 0 || parentPidl == IntPtr.Zero)
+            return false;
+
+        var childPidls = new List<IntPtr>();
+        try
+        {
+            foreach (var path in paths)
+            {
+                if (SHParseDisplayName(path, IntPtr.Zero, out var itemPidl, 0, out _) != 0 || itemPidl == IntPtr.Zero)
+                    return false;
+
+                childPidls.Add(itemPidl);
+            }
+
+            var relativePidls = childPidls
+                .Select(ILFindLastID)
+                .Where(static pidl => pidl != IntPtr.Zero)
+                .ToArray();
+
+            if (relativePidls.Length != childPidls.Count)
+                return false;
+
+            return SHOpenFolderAndSelectItems(parentPidl, (uint)relativePidls.Length, relativePidls, 0) == 0;
+        }
+        finally
+        {
+            foreach (var childPidl in childPidls)
+                Marshal.FreeCoTaskMem(childPidl);
+
+            Marshal.FreeCoTaskMem(parentPidl);
+        }
+    }
+
+    private static string? GetCommonExplorerSelectionParent(IReadOnlyList<string> paths)
+    {
+        string? parent = null;
+        foreach (var path in paths)
+        {
+            var currentParent = Path.GetDirectoryName(path.TrimEnd('\\'));
+            if (string.IsNullOrWhiteSpace(currentParent))
+                return null;
+
+            if (parent == null)
+            {
+                parent = currentParent;
+                continue;
+            }
+
+            if (!string.Equals(parent.TrimEnd('\\'), currentParent.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                return null;
+        }
+
+        return parent;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(
+        string name,
+        IntPtr bindingContext,
+        out IntPtr pidl,
+        uint sfgaoIn,
+        out uint psfgaoOut);
+
+    [DllImport("shell32.dll")]
+    private static extern IntPtr ILFindLastID(IntPtr pidl);
+
+    [DllImport("shell32.dll")]
+    private static extern int SHOpenFolderAndSelectItems(
+        IntPtr pidlFolder,
+        uint cidl,
+        [MarshalAs(UnmanagedType.LPArray)] IntPtr[] apidl,
+        uint dwFlags);
 
 }

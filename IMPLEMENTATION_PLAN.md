@@ -1,6 +1,6 @@
 # CubicAI Explorer — Implementation Plan
 
-> **Updated:** 2026-03-10
+> **Updated:** 2026-03-11
 > **Status:** Current with `master`
 
 ## Context
@@ -58,9 +58,10 @@ Primary files:
 ### Explorer reveal behavior for selected items
 
 - `Open in Explorer` now reveals a single selected file or folder with Explorer's selection affordance instead of always opening the current folder generically
-- when there is no selection or multiple selected items, the command falls back to opening the current folder so the workflow stays predictable
+- when there is no selection, the command still falls back to opening the current folder so the workflow stays predictable
 - shell-launch behavior is now routed through `FileSystemService`, keeping sanitization and interop logic out of the window code-behind
-- smoke coverage now verifies the command targets the selected item path
+- multi-select reveal now uses the Windows shell selection API so Explorer can highlight multiple selected items from the current folder
+- smoke coverage now verifies both single-selection and multi-selection reveal behavior
 
 Primary files:
 

@@ -65,6 +65,7 @@ internal static class Program
             Run("known folder display names", failures, TestKnownFolderDisplayNames);
             Run("shell type descriptions", failures, () => TestShellTypeDescriptions(tempRoot));
             Run("open in explorer reveals selection", failures, () => TestOpenInExplorerRevealsSelection(tempRoot));
+            Run("open in explorer reveals multiple selections", failures, () => TestOpenInExplorerRevealsMultipleSelections(tempRoot));
             Run("search in folder", failures, () => TestSearchInFolder(tempRoot));
             Run("search match modes", failures, () => TestSearchMatchModes(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
@@ -1344,6 +1345,35 @@ internal static class Program
             "Open in Explorer should not open the folder generically when a single item is selected.");
     }
 
+    private static void TestOpenInExplorerRevealsMultipleSelections(string root)
+    {
+        var innerFs = new FileSystemService();
+        var fs = new RecordingFileSystemService(innerFs);
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "open_in_explorer_multi");
+        var selectedFileA = Path.Combine(folder, "selected-a.txt");
+        var selectedFileB = Path.Combine(folder, "selected-b.txt");
+        File.WriteAllText(selectedFileA, "a");
+        File.WriteAllText(selectedFileB, "b");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(folder);
+
+        var itemA = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "selected-a.txt");
+        var itemB = vm.ActiveTab.FileList.Items.Single(i => i.Name == "selected-b.txt");
+        vm.ActiveTab.FileList.SelectedItems.Clear();
+        vm.ActiveTab.FileList.SelectedItems.Add(itemA);
+        vm.ActiveTab.FileList.SelectedItems.Add(itemB);
+        vm.ActiveTab.FileList.SelectedItem = itemA;
+
+        vm.OpenInExplorerCommand.Execute(null);
+
+        Assert(fs.LastRevealPaths.SequenceEqual(new[] { selectedFileA, selectedFileB }, StringComparer.OrdinalIgnoreCase),
+            "Open in Explorer should reveal every selected item when multiple items are selected.");
+        Assert(fs.LastOpenedFolderPath == null,
+            "Open in Explorer should not fall back to opening the folder when multiple items are selected.");
+    }
+
     private static void TestSavedSearchMatchMode(string root)
     {
         var fs = new FileSystemService();
@@ -2434,6 +2464,7 @@ internal static class Program
         }
 
         public string? LastRevealPath { get; private set; }
+        public List<string> LastRevealPaths { get; } = [];
         public string? LastOpenedFolderPath { get; private set; }
 
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
@@ -2449,6 +2480,15 @@ internal static class Program
         public void RevealInExplorer(string path)
         {
             LastRevealPath = path;
+            LastRevealPaths.Clear();
+            LastRevealPaths.Add(path);
+        }
+
+        public void RevealInExplorer(IEnumerable<string> paths)
+        {
+            LastRevealPaths.Clear();
+            LastRevealPaths.AddRange(paths);
+            LastRevealPath = LastRevealPaths.Count == 1 ? LastRevealPaths[0] : null;
         }
 
         public void OpenInDefaultApp(string path)

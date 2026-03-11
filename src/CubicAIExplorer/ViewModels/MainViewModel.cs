@@ -1149,9 +1149,9 @@ public partial class MainViewModel : ObservableObject
     private void OpenInExplorer()
     {
         var fileList = CurrentPaneFileList;
-        if (fileList?.SelectedItems.Count == 1)
+        if (fileList?.SelectedItems.Count > 0)
         {
-            _fileSystemService.RevealInExplorer(fileList.SelectedItems[0].FullPath);
+            _fileSystemService.RevealInExplorer(fileList.SelectedItems.Select(static item => item.FullPath));
             return;
         }
 
