@@ -1463,6 +1463,30 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ToggleTabLock_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: TabViewModel tab })
+        {
+            ViewModel.ToggleTabLock(tab);
+        }
+    }
+
+    private void SetTabColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem)
+            return;
+
+        var parent = ItemsControl.ItemsControlFromItemContainer(menuItem);
+        while (parent is MenuItem parentMenuItem)
+            parent = ItemsControl.ItemsControlFromItemContainer(parentMenuItem);
+
+        var tab = ((parent as ContextMenu)?.PlacementTarget as FrameworkElement)?.DataContext as TabViewModel;
+        if (tab == null)
+            return;
+
+        ViewModel.SetTabColor(tab, menuItem.Tag as string);
+    }
+
     private void CloseTab_Click(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: TabViewModel tab })

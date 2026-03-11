@@ -27,3 +27,4 @@
 - 2026-03-11: Completed spec 010 breadcrumb dropdown navigation with async subfolder menus in the breadcrumb bar and preserved back/forward history on branch navigation.
 - 2026-03-11: Completed spec 011 content search with grep-style recursive file scanning, safe text-file limits, saved-search persistence, and smoke coverage.
 - 2026-03-11: Completed spec 012 horizontal bookmarks bar with a toggleable top-level bookmark strip, drag-drop bookmark creation, direct context actions, and smoke coverage.
+- 2026-03-11: Completed spec 013 tab locking and coloring with locked-path fork navigation, persisted tab state, colored headers, and smoke coverage.

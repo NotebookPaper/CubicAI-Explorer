@@ -9,6 +9,8 @@ public sealed class NavigationService
     public string? CurrentPath => _currentPath;
     public bool CanGoBack => _backStack.Count > 0;
     public bool CanGoForward => _forwardStack.Count > 0;
+    public string? BackPath => _backStack.Count > 0 ? _backStack.Peek() : null;
+    public string? ForwardPath => _forwardStack.Count > 0 ? _forwardStack.Peek() : null;
 
     public event EventHandler<string>? Navigated;
 

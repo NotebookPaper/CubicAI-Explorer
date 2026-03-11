@@ -256,15 +256,15 @@ public partial class MainViewModel : ObservableObject
         if (startupSession != null && ApplyNamedSession(startupSession, setCurrentSession: true))
             return;
 
-        if (_userSettings.OpenTabs is { Count: > 0 })
+        var savedTabs = GetPersistedTabItems(_userSettings.OpenTabItems, _userSettings.OpenTabs);
+        if (savedTabs.Count > 0)
         {
-            foreach (var path in _userSettings.OpenTabs)
+            foreach (var tabState in savedTabs)
             {
-                if (string.IsNullOrWhiteSpace(path) || !_fileSystemService.DirectoryExists(path)) continue;
-                var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
-                AttachTab(tab);
-                Tabs.Add(tab);
-                tab.NavigateTo(path);
+                if (!_fileSystemService.DirectoryExists(tabState.Path))
+                    continue;
+
+                CreateTab(tabState.Path, tabState, activate: false);
             }
         }
 
@@ -301,6 +301,8 @@ public partial class MainViewModel : ObservableObject
             IsSavedSearchesVisible = newSettings.ShowSavedSearches;
             SidebarWidth = newSettings.SidebarWidth;
             PreviewWidth = newSettings.PreviewWidth;
+            _userSettings.OpenTabs = newSettings.OpenTabs ?? [];
+            _userSettings.OpenTabItems = GetPersistedTabItems(newSettings.OpenTabItems, newSettings.OpenTabs);
             _userSettings.NamedSessions = newSettings.NamedSessions ?? [];
             _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
             _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(newSettings.NewFileTemplatesPath);
@@ -370,6 +372,10 @@ public partial class MainViewModel : ObservableObject
             OpenTabs = session.OpenTabs
                 .Where(static path => !string.IsNullOrWhiteSpace(path))
                 .ToList(),
+            OpenTabItems = session.OpenTabItems
+                .Where(static item => !string.IsNullOrWhiteSpace(item.Path))
+                .Select(CloneTabItem)
+                .ToList(),
             ActiveTabIndex = session.ActiveTabIndex,
             RightPanePath = session.RightPanePath ?? string.Empty,
             IsDualPaneMode = session.IsDualPaneMode
@@ -378,15 +384,16 @@ public partial class MainViewModel : ObservableObject
 
     private NamedSession CaptureCurrentSession(string sessionName)
     {
-        var openTabs = Tabs
-            .Select(static tab => tab.CurrentPath)
-            .Where(path => !string.IsNullOrWhiteSpace(path) && _fileSystemService.DirectoryExists(path))
+        var openTabItems = Tabs
+            .Select(static tab => tab.ToPersistedItem())
+            .Where(item => !string.IsNullOrWhiteSpace(item.Path) && _fileSystemService.DirectoryExists(item.Path))
             .ToList();
 
         return new NamedSession
         {
             Name = NormalizeSessionName(sessionName),
-            OpenTabs = openTabs,
+            OpenTabs = openTabItems.Select(static item => item.Path).ToList(),
+            OpenTabItems = openTabItems.Select(CloneTabItem).ToList(),
             ActiveTabIndex = ActiveTab != null ? Math.Max(0, Tabs.IndexOf(ActiveTab)) : 0,
             RightPanePath = IsDualPaneMode ? _rightPaneTab?.CurrentPath ?? string.Empty : string.Empty,
             IsDualPaneMode = IsDualPaneMode
@@ -395,12 +402,12 @@ public partial class MainViewModel : ObservableObject
 
     private bool ApplyNamedSession(NamedSession session, bool setCurrentSession)
     {
-        var tabPaths = session.OpenTabs
-            .Where(path => !string.IsNullOrWhiteSpace(path) && _fileSystemService.DirectoryExists(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var tabItems = GetPersistedTabItems(session.OpenTabItems, session.OpenTabs)
+            .Where(item => _fileSystemService.DirectoryExists(item.Path))
+            .DistinctBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (tabPaths.Count == 0)
+        if (tabItems.Count == 0)
             return false;
 
         foreach (var tab in Tabs.ToList())
@@ -411,13 +418,9 @@ public partial class MainViewModel : ObservableObject
         Tabs.Clear();
         ActiveTab = null;
 
-        foreach (var path in tabPaths)
+        foreach (var tabState in tabItems)
         {
-            var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
-            AttachTab(tab);
-            Tabs.Add(tab);
-            tab.NavigateTo(path);
-            ApplyTabDefaults(tab);
+            CreateTab(tabState.Path, tabState, activate: false);
         }
 
         ActiveTab = Tabs[Math.Clamp(session.ActiveTabIndex, 0, Tabs.Count - 1)];
@@ -452,6 +455,49 @@ public partial class MainViewModel : ObservableObject
             tab.FileList.ShowHiddenFiles = true;
         if (_userSettings.DefaultViewMode is "List" or "Tiles")
             tab.FileList.ViewMode = _userSettings.DefaultViewMode;
+    }
+
+    private static List<TabItem> GetPersistedTabItems(IReadOnlyCollection<TabItem>? tabItems, IReadOnlyCollection<string>? fallbackPaths)
+    {
+        if (tabItems is { Count: > 0 })
+        {
+            return tabItems
+                .Where(static item => !string.IsNullOrWhiteSpace(item.Path))
+                .Select(CloneTabItem)
+                .ToList();
+        }
+
+        return (fallbackPaths ?? [])
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => new TabItem { Path = path, Title = string.Empty })
+            .ToList();
+    }
+
+    private static TabItem CloneTabItem(TabItem item)
+    {
+        return new TabItem
+        {
+            Path = item.Path?.Trim() ?? string.Empty,
+            Title = item.Title ?? string.Empty,
+            IsLocked = item.IsLocked,
+            LockedRootPath = item.LockedRootPath?.Trim() ?? string.Empty,
+            TabColor = item.TabColor?.Trim() ?? string.Empty
+        };
+    }
+
+    private TabViewModel CreateTab(string path, TabItem? tabState, bool activate)
+    {
+        var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+        AttachTab(tab);
+        Tabs.Add(tab);
+        ApplyTabDefaults(tab);
+        tab.ApplyPersistedState(tabState);
+        if (activate)
+            ActiveTab = tab;
+        tab.NavigateTo(path);
+        if (!activate && ActiveTab == null)
+            ActiveTab = tab;
+        return tab;
     }
 
     public bool SaveNamedSession(string rawName, bool overwriteExisting)
@@ -547,6 +593,7 @@ public partial class MainViewModel : ObservableObject
     private void AttachTab(TabViewModel tab)
     {
         ApplyFilterPreferences(tab.FileList);
+        tab.NavigateRequested += OnTabNavigateRequested;
         tab.FileList.FilterHistoryEntryAdded += OnFilterHistoryEntryAdded;
         tab.PropertyChanged += OnTabPropertyChanged;
         tab.FileList.PropertyChanged += OnFileListPropertyChanged;
@@ -554,15 +601,30 @@ public partial class MainViewModel : ObservableObject
 
     private void DetachTab(TabViewModel tab)
     {
+        tab.NavigateRequested -= OnTabNavigateRequested;
         tab.FileList.FilterHistoryEntryAdded -= OnFilterHistoryEntryAdded;
         tab.PropertyChanged -= OnTabPropertyChanged;
         tab.FileList.PropertyChanged -= OnFileListPropertyChanged;
+    }
+
+    private void OnTabNavigateRequested(object? sender, string path)
+    {
+        if (sender is TabViewModel tab)
+            NavigateTabToPath(tab, path);
     }
 
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (sender is not TabViewModel tab)
             return;
+
+        if (e.PropertyName is nameof(TabViewModel.IsLocked)
+            or nameof(TabViewModel.LockedRootPath)
+            or nameof(TabViewModel.TabColor))
+        {
+            SaveSettings();
+            return;
+        }
 
         if (e.PropertyName != nameof(TabViewModel.CurrentPath))
             return;
@@ -575,6 +637,8 @@ public partial class MainViewModel : ObservableObject
 
         if (tab == CurrentPaneTab)
             RefreshCurrentPaneState();
+
+        SaveSettings();
     }
 
     private void OnFileListPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -1046,19 +1110,13 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NewTab()
     {
-        var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
-        AttachTab(tab);
-        Tabs.Add(tab);
-        ActiveTab = tab;
-        ApplyTabDefaults(tab);
-
         // Navigate to startup folder or user profile
         var startupFolder = _userSettings.StartupFolder;
         var defaultPath = !string.IsNullOrWhiteSpace(startupFolder)
             && _fileSystemService.DirectoryExists(startupFolder)
             ? startupFolder
             : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        tab.NavigateTo(defaultPath);
+        CreateTab(defaultPath, null, activate: true);
     }
 
     [RelayCommand]
@@ -1087,7 +1145,7 @@ public partial class MainViewModel : ObservableObject
         var resolvedPath = _fileSystemService.ResolveDirectoryPath(AddressBarText);
         if (!string.IsNullOrWhiteSpace(resolvedPath))
         {
-            targetTab.NavigateTo(resolvedPath);
+            NavigateTabToPath(targetTab, resolvedPath);
         }
     }
 
@@ -1099,20 +1157,20 @@ public partial class MainViewModel : ObservableObject
         var parent = _fileSystemService.GetParentPath(targetTab.CurrentPath);
         if (parent != targetTab.CurrentPath)
         {
-            targetTab.NavigateTo(parent);
+            NavigateTabToPath(targetTab, parent);
         }
     }
 
     [RelayCommand]
     private void GoBack()
     {
-        ExecuteOnCurrentPaneTab(tab => ExecuteCommand(tab.GoBackCommand));
+        ExecuteOnCurrentPaneTab(GoBackOnTab);
     }
 
     [RelayCommand]
     private void GoForward()
     {
-        ExecuteOnCurrentPaneTab(tab => ExecuteCommand(tab.GoForwardCommand));
+        ExecuteOnCurrentPaneTab(GoForwardOnTab);
     }
 
     [RelayCommand]
@@ -1481,9 +1539,10 @@ public partial class MainViewModel : ObservableObject
 
     public void DuplicateTab(TabViewModel sourceTab)
     {
-        NewTab();
-        if (!string.IsNullOrWhiteSpace(sourceTab.CurrentPath))
-            ActiveTab!.NavigateTo(sourceTab.CurrentPath);
+        if (sourceTab == null || string.IsNullOrWhiteSpace(sourceTab.CurrentPath))
+            return;
+
+        CreateTab(sourceTab.CurrentPath, sourceTab.ToPersistedItem(), activate: true);
     }
 
     private TabViewModel? FindOpenTab(string? rawPath)
@@ -1559,7 +1618,7 @@ public partial class MainViewModel : ObservableObject
             return;
 
         if (ActiveTab == null) NewTab();
-        ActiveTab!.NavigateTo(resolvedPath);
+        NavigateTabToPath(ActiveTab!, resolvedPath);
     }
 
     public void NavigateCurrentPaneToPath(string path)
@@ -1574,7 +1633,69 @@ public partial class MainViewModel : ObservableObject
                 NewTab();
         }
 
-        CurrentPaneTab?.NavigateTo(resolvedPath);
+        if (CurrentPaneTab != null)
+            NavigateTabToPath(CurrentPaneTab, resolvedPath);
+    }
+
+    public void ToggleTabLock(TabViewModel? tab)
+    {
+        if (tab == null)
+            return;
+
+        tab.SetLockState(!tab.IsLocked);
+    }
+
+    public void SetTabColor(TabViewModel? tab, string? color)
+    {
+        if (tab == null)
+            return;
+
+        tab.TabColor = NormalizeTabColor(color);
+    }
+
+    private void GoBackOnTab(TabViewModel tab)
+    {
+        var targetPath = tab.PeekBackPath();
+        if (!string.IsNullOrWhiteSpace(targetPath) && TryOpenLockedNavigationInNewTab(tab, targetPath))
+            return;
+
+        ExecuteCommand(tab.GoBackCommand);
+    }
+
+    private void GoForwardOnTab(TabViewModel tab)
+    {
+        var targetPath = tab.PeekForwardPath();
+        if (!string.IsNullOrWhiteSpace(targetPath) && TryOpenLockedNavigationInNewTab(tab, targetPath))
+            return;
+
+        ExecuteCommand(tab.GoForwardCommand);
+    }
+
+    private void NavigateTabToPath(TabViewModel tab, string path)
+    {
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return;
+
+        if (TryOpenLockedNavigationInNewTab(tab, resolvedPath))
+            return;
+
+        tab.NavigateTo(resolvedPath);
+    }
+
+    private bool TryOpenLockedNavigationInNewTab(TabViewModel tab, string destinationPath)
+    {
+        if (!tab.IsLocked || tab.AllowsPathWithinLock(destinationPath) || !Tabs.Contains(tab))
+            return false;
+
+        CreateTab(destinationPath, null, activate: true);
+        return true;
+    }
+
+    private static string NormalizeTabColor(string? color)
+    {
+        var value = color?.Trim() ?? string.Empty;
+        return string.Equals(value, "none", StringComparison.OrdinalIgnoreCase) ? string.Empty : value;
     }
 
     public async Task LoadBreadcrumbDropdownAsync(BreadcrumbSegment? segment)
@@ -2028,12 +2149,7 @@ public partial class MainViewModel : ObservableObject
             if (ActivateOpenTab(bookmark.Path))
                 return;
 
-            var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
-            AttachTab(tab);
-            Tabs.Add(tab);
-            ActiveTab = tab;
-            ApplyTabDefaults(tab);
-            tab.NavigateTo(bookmark.Path);
+            CreateTab(bookmark.Path, null, activate: true);
         }
     }
 
@@ -3348,6 +3464,7 @@ public partial class MainViewModel : ObservableObject
         if (Tabs.Count > 0)
         {
             _userSettings.OpenTabs = Tabs.Select(t => t.CurrentPath).ToList();
+            _userSettings.OpenTabItems = Tabs.Select(static t => t.ToPersistedItem()).ToList();
             _userSettings.ActiveTabIndex = ActiveTab != null ? Tabs.IndexOf(ActiveTab) : 0;
         }
         _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;

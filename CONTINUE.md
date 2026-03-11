@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after horizontal bookmarks bar
-> Status: Horizontal bookmarks bar is implemented and verified.
+> HEAD: current local `master` after tab locking and coloring
+> Status: Tab locking and coloring is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -16,6 +16,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `010-breadcrumb-dropdowns` is now complete in this checkout.
 - Spec `011-content-search` is now complete in this checkout.
 - Spec `012-bookmarks-bar` is now complete in this checkout.
+- Spec `013-tab-locking-coloring` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -48,6 +49,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added bookmark-bar button navigation, direct rename/delete context actions, and a separate persisted `ShowBookmarksBar` setting.
   - Added drag/drop folder bookmarking onto the bar through the existing bookmark persistence path with duplicate suppression.
   - Added smoke coverage for bookmarks-bar visibility persistence, navigation routing, drop-path persistence, and XAML wiring.
+- **Spec 013: Tab Locking and Coloring** (New in this session)
+  - Added persisted tab/session state for locked tabs and tab colors while preserving legacy `OpenTabs` compatibility.
+  - Locked tabs now allow descendant-folder navigation in place and fork unrelated navigation into a new tab, including back/forward history moves.
+  - Added tab context-menu actions for lock toggling and palette-based tab coloring plus header lock/color indicators.
+  - Added smoke coverage for locked-tab fork navigation, state persistence across reload, and XAML wiring.
 - **Spec 007: Bookmark Drag Feedback** (New in this session)
   - Added inline bookmark drag hint text covering folder, sibling, root, and invalid drop states.
   - Highlighted active bookmark drop targets and the bookmark-tree root surface during drag operations.
@@ -101,7 +107,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- The next incomplete specs are `013-tab-locking-coloring`, `014-file-utilities`, and `015-layout-manager`.
+- The next incomplete specs are `014-file-utilities` and `015-layout-manager`.
 - Re-check `IMPLEMENTATION_PLAN.md` and `CONTINUE.md` before starting the next roadmap slice.
 
 ## Key Files
@@ -134,7 +140,7 @@ Tracked worktree state:
 
 - Headless symbolic-link failure handling is the latest verified fix in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
-- `specs/012-bookmarks-bar.md` is now complete, and the remaining incomplete spec files are `013`, `014`, and `015`.
+- `specs/013-tab-locking-coloring.md` is now complete, and the remaining incomplete spec files are `014` and `015`.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -146,7 +152,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed (after rerun following the known transient WPF output-file lock)
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including tab-lock fork navigation, tab-state persistence coverage, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

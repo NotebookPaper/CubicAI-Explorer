@@ -38,6 +38,8 @@ internal static class Program
             Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
             Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
+            Run("locked tab opens new tab for outside navigation", failures, () => TestLockedTabOpensNewTabForOutsideNavigation(tempRoot));
+            Run("tab lock and color persistence", failures, () => TestTabLockAndColorPersistence(tempRoot));
             Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
             Run("breadcrumb segments", failures, () => TestBreadcrumbSegments(tempRoot));
             Run("breadcrumb dropdown navigation", failures, () => TestBreadcrumbDropdownNavigation(tempRoot));
@@ -1285,6 +1287,69 @@ internal static class Program
         Assert(vm.Tabs[0].CurrentPath == first, "Close tabs to right should preserve tabs on the left.");
         Assert(vm.Tabs[1] == keepTab, "Close tabs to right should retain the selected tab.");
         Assert(vm.ActiveTab == keepTab, "Close tabs to right should activate the kept tab when the active tab is closed.");
+    }
+
+    private static void TestLockedTabOpensNewTabForOutsideNavigation(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var lockedRoot = CreateCleanSubdir(root, "locked_root");
+        var child = Directory.CreateDirectory(Path.Combine(lockedRoot, "child")).FullName;
+        var outside = CreateCleanSubdir(root, "locked_outside");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(lockedRoot);
+        var lockedTab = vm.ActiveTab!;
+        vm.ToggleTabLock(lockedTab);
+
+        vm.NavigateCurrentPaneToPath(child);
+        Assert(vm.Tabs.Count == 1, "Locked tab should allow navigation inside its locked subtree.");
+        Assert(vm.ActiveTab == lockedTab, "Locked tab should remain active for descendant navigation.");
+        Assert(vm.ActiveTab!.CurrentPath == child, "Locked tab should navigate to descendant folders in-place.");
+
+        vm.NavigateCurrentPaneToPath(outside);
+        Assert(vm.Tabs.Count == 2, "Leaving a locked path should open a new tab.");
+        Assert(vm.ActiveTab != lockedTab, "Outside navigation should activate the new tab.");
+        Assert(vm.ActiveTab!.CurrentPath == outside, "New tab should navigate to the requested outside path.");
+        Assert(lockedTab.CurrentPath == child, "Locked source tab should remain at its prior location.");
+        Assert(lockedTab.IsLocked, "Original tab should remain locked.");
+    }
+
+    private static void TestTabLockAndColorPersistence(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "tab_persistence");
+        var settingsPath = Path.Combine(root, "tab_persistence_settings.json");
+        var bookmarkPath = Path.Combine(root, "tab_persistence_bookmarks.json");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkPath);
+
+        try
+        {
+            using (var settingsService = new SettingsService())
+            {
+                var vm = new MainViewModel(fs, clipboard, settingsService, settingsService.Load());
+                vm.NavigateToPath(folder);
+                vm.ToggleTabLock(vm.ActiveTab);
+                vm.SetTabColor(vm.ActiveTab, "#4B78B8");
+            }
+
+            using var reloadedSettingsService = new SettingsService();
+            var reloadedSettings = reloadedSettingsService.Load();
+            var reloadedVm = new MainViewModel(fs, clipboard, reloadedSettingsService, reloadedSettings);
+
+            Assert(reloadedVm.ActiveTab != null, "Reloaded view model should restore an active tab.");
+            Assert(reloadedVm.ActiveTab!.CurrentPath == folder, "Reloaded tab should restore the persisted path.");
+            Assert(reloadedVm.ActiveTab.IsLocked, "Reloaded tab should restore the locked state.");
+            Assert(reloadedVm.ActiveTab.LockedRootPath == folder, "Reloaded tab should restore the locked root.");
+            Assert(reloadedVm.ActiveTab.TabColor == "#4B78B8", "Reloaded tab should restore the assigned color.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", null);
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
     }
 
     private static void TestSelectionSizeStatus(string root)
@@ -2825,6 +2890,10 @@ internal static class Program
         Assert(main.Contains("EditNewMenuItem_SubmenuOpened"), "Edit New menu should repopulate dynamically.");
         Assert(main.Contains("PaneNewMenuItem_SubmenuOpened"), "Pane New menu should repopulate dynamically.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
+        Assert(main.Contains("ToggleTabLock_Click"), "Tab lock handler should be wired.");
+        Assert(main.Contains("Header=\"Tab Color\""), "Tab color submenu should exist.");
+        Assert(main.Contains("SetTabColor_Click"), "Tab color handler should be wired.");
+        Assert(main.Contains("Text=\"🔒\""), "Locked-tab indicator should be present in the tab header.");
         Assert(main.Contains("CloseTabsToLeft_Click"), "Close tabs to left handler should be wired.");
         Assert(main.Contains("CloseTabsToRight_Click"), "Close tabs to right handler should be wired.");
         Assert(main.Contains("CloseOtherTabs_Click"), "Close other tabs handler should be wired.");

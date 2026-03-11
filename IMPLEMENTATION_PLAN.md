@@ -23,6 +23,12 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Tab locking and coloring
+
+- added persisted per-tab lock and color metadata while keeping legacy tab-path settings/session payloads backward compatible
+- locked tabs now stay bound to their root folder subtree and fork outside navigation into a new tab, including back/forward history hops
+- added tab context-menu lock/color actions, colored tab-header accents, and smoke coverage for fork navigation plus reload persistence
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -191,7 +197,6 @@ Scope:
 ### 5. Advanced Parity (Cubic Final)
 Status: PLANNED
 Scope:
-- **013: Tab Locking and Coloring:** Add support for locking tabs to a path and assigning custom visual colors to tab headers.
 - **014: File Utilities (Split/Join/Checksum):** Implement a tools menu for file splitting, joining, and MD5/SHA1 checksum generation.
 - **015: UI Layout Manager:** Allow users to save and restore named window layouts (e.g., "Preview Mode", "Dual Pane Mode").
 

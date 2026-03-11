@@ -42,6 +42,7 @@ public sealed class UserSettings
     public double SidebarWidth { get; set; } = 250;
     public double PreviewWidth { get; set; } = 300;
     public List<string> OpenTabs { get; set; } = [];
+    public List<TabItem> OpenTabItems { get; set; } = [];
     public int ActiveTabIndex { get; set; } = 0;
     public string RightPanePath { get; set; } = string.Empty;
     public List<NamedSession> NamedSessions { get; set; } = [];
