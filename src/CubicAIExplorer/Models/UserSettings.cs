@@ -33,6 +33,7 @@ public sealed class UserSettings
     public bool ShowBookmarks { get; set; } = true;
     public bool ShowBookmarksBar { get; set; } = true;
     public bool ShowSavedSearches { get; set; } = true;
+    public List<ExternalTool> ExternalTools { get; set; } = [];
     public NameMatchMode FilterMatchMode { get; set; } = NameMatchMode.Contains;
     public NameMatchMode SearchMatchMode { get; set; } = NameMatchMode.Contains;
     public bool ClearFilterOnFolderChange { get; set; }

@@ -2,8 +2,8 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after grouping/manual sort
-> Status: Grouping/manual sort is implemented and verified.
+> HEAD: current local `master` after external tools
+> Status: External tools configuration is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -21,11 +21,17 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `015-layout-manager` is now complete in this checkout.
 - Spec `016-advanced-search-filters` is now complete in this checkout.
 - Spec `017-grouping-manual-sort` is now complete in this checkout.
+- Spec `018-external-tools` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
 ## Completed
 
+- **Spec 018: External Tools Configuration** (New in this session)
+  - Added an `External Tools` tab in Preferences with editable name/path/arguments rows plus add, browse, and remove actions.
+  - Persisted user-defined tools in `UserSettings` and surfaced them through `MainViewModel` so settings reloads keep the menu catalog current.
+  - Added `Tools > External Tools` and pane `Open with... (Tools)` submenus, with launches routed through `IFileSystemService.LaunchExternalTool`.
+  - Added smoke coverage for settings round-trip persistence, window loading, argument expansion, launch routing, and XAML/code-behind wiring.
 - **Roadmap: Queue history error reporting** (New in this session)
   - Added bounded recent-operation history to `FileOperationQueueService` with explicit success, failure, and canceled states plus retained detail text.
   - Exposed the recent queue history through `MainViewModel` and wired the existing status-bar queue-details toggle to a popup showing active progress and recent results.
@@ -129,7 +135,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next highest-priority incomplete spec is `018-external-tools.md`.
+- Next highest-priority incomplete spec is `019-drop-stack.md`.
 - Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting another roadmap slice.
 
 ## Key Files
@@ -149,6 +155,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - `src/CubicAIExplorer/Views/JoinFileDialog.xaml`
 - `src/CubicAIExplorer/Views/ChecksumDialog.xaml`
 - `src/CubicAIExplorer/Models/NewFileTemplateItem.cs`
+- `src/CubicAIExplorer/Models/ExternalTool.cs`
 - `src/CubicAIExplorer/Models/UserSettings.cs`
 - `src/CubicAIExplorer/PreferencesWindow.xaml`
 - `src/CubicAIExplorer/MainWindow.xaml`
@@ -164,7 +171,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Headless symbolic-link failure handling is the latest verified fix in this checkout.
+- External tools configuration is the latest verified feature slice in this checkout.
 - Legacy numbered specs already completed in this checkout remain complete.
 - `specs/015-layout-manager.md` and `specs/016-advanced-search-filters.md` are now complete.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
@@ -178,7 +185,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 
@@ -191,3 +198,4 @@ Verification run on the updated checkout on 2026-03-11:
 - **Headless Symbolic-Link Failures**: Keep symbolic-link privilege failures non-modal when `Application.Current?.MainWindow` is unavailable so Ralph/smoke runs can skip or assert on the exception instead of hanging on `MessageBox`.
 - **Content Search Scope**: Content scanning is intentionally limited to a small text-extension allowlist and files at or below 10 MB; widen that list carefully if future specs ask for richer grep behavior.
 - **Chunk Join Safety**: Join now requires a contiguous numeric chunk sequence starting from the selected `.001`-style file, so later work should preserve that validation rather than silently skipping gaps.
+- **External Tool Arguments**: `%p` is the only placeholder currently expanded for external tools. If future work adds more tokens, keep the selected-file path quoted and continue routing process launch through `IFileSystemService`.

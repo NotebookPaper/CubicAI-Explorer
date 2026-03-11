@@ -905,7 +905,7 @@ public partial class MainWindow : Window
 
         ConfigureContextMenu(e, ViewModel.ActiveTab?.FileList,
             OpenMenuItem, BrowseArchiveMenuItem, ItemSeparator1, CutMenuItem, CopyMenuItem, ItemSeparator2,
-            DeleteMenuItem, RenameMenuItem, NewMenuItem, RefreshMenuItem,
+            DeleteMenuItem, RenameMenuItem, NewMenuItem, OpenWithToolsMenuItem, RefreshMenuItem,
             PasteMenuItem, ExtractArchiveMenuItem, PropertiesSeparator, PropertiesMenuItem, OpenInExplorerMenuItem);
     }
 
@@ -924,7 +924,7 @@ public partial class MainWindow : Window
 
         ConfigureContextMenu(e, ViewModel.RightPaneTab?.FileList,
             RightOpenMenuItem, RightBrowseArchiveMenuItem, RightItemSeparator1, RightCutMenuItem, RightCopyMenuItem, RightItemSeparator2,
-            RightDeleteMenuItem, RightRenameMenuItem, RightNewMenuItem, RightRefreshMenuItem,
+            RightDeleteMenuItem, RightRenameMenuItem, RightNewMenuItem, RightOpenWithToolsMenuItem, RightRefreshMenuItem,
             RightPasteMenuItem, RightExtractArchiveMenuItem, RightPropertiesSeparator, RightPropertiesMenuItem, RightOpenInExplorerMenuItem);
     }
 
@@ -1012,7 +1012,7 @@ public partial class MainWindow : Window
         ContextMenuEventArgs e, FileListViewModel? fileList,
         FrameworkElement open, FrameworkElement browseArchive, FrameworkElement sep1, FrameworkElement cut, FrameworkElement copy,
         FrameworkElement sep2, FrameworkElement delete, FrameworkElement rename,
-        FrameworkElement newMenu, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
+        FrameworkElement newMenu, FrameworkElement openWithTools, FrameworkElement refresh, FrameworkElement paste, FrameworkElement extractArchive,
         FrameworkElement propsSep, FrameworkElement props, FrameworkElement openInExplorer)
     {
         if (fileList == null) return;
@@ -1029,6 +1029,8 @@ public partial class MainWindow : Window
             : fileList.SelectedItems.Count == 0
                 ? fileList.SelectedItem
                 : null;
+        var canShowExternalTools = selectedArchive?.ItemType == FileSystemItemType.File
+            && ViewModel.ExternalTools.Count > 0;
         var archiveVisibility = FileListViewModel.IsArchiveItem(selectedArchive)
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -1043,6 +1045,7 @@ public partial class MainWindow : Window
         rename.Visibility = itemVisibility;
 
         newMenu.Visibility = emptyVisibility;
+        openWithTools.Visibility = canShowExternalTools ? itemVisibility : Visibility.Collapsed;
         refresh.Visibility = emptyVisibility;
         paste.Visibility = Visibility.Visible;
         extractArchive.Visibility = archiveVisibility;
@@ -1065,6 +1068,18 @@ public partial class MainWindow : Window
     {
         if (sender is MenuItem menuItem)
             PopulateNewMenu(menuItem, isMainMenu: false);
+    }
+
+    private void ExternalToolsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+            PopulateExternalToolsMenu(menuItem);
+    }
+
+    private void PaneExternalToolsMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+            PopulateExternalToolsMenu(menuItem);
     }
 
     private void PopulateNewMenu(MenuItem menuItem, bool isMainMenu)
@@ -1117,6 +1132,36 @@ public partial class MainWindow : Window
             Header = "Refresh Templates",
             Command = ViewModel.RefreshNewFileTemplatesCommand
         });
+    }
+
+    private void PopulateExternalToolsMenu(MenuItem menuItem)
+    {
+        menuItem.Items.Clear();
+
+        if (ViewModel.ExternalTools.Count == 0)
+        {
+            menuItem.Items.Add(new MenuItem
+            {
+                Header = "No External Tools Configured",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        foreach (var tool in ViewModel.ExternalTools)
+        {
+            var toolItem = new MenuItem
+            {
+                Header = tool.Name,
+                ToolTip = string.IsNullOrWhiteSpace(tool.Arguments)
+                    ? tool.ToolPath
+                    : $"{tool.ToolPath} {tool.Arguments}",
+                IsEnabled = ViewModel.CanRunExternalTool(tool),
+                Command = ViewModel.RunExternalToolCommand,
+                CommandParameter = tool
+            };
+            menuItem.Items.Add(toolItem);
+        }
     }
 
     private void ClearFilter_Click(object sender, RoutedEventArgs e)

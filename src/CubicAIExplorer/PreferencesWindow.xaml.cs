@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Windows;
 using CubicAIExplorer.Models;
 
@@ -20,7 +21,15 @@ public partial class PreferencesWindow : Window
             NewFileTemplatesPath = settings.NewFileTemplatesPath,
             StartInDualPane = settings.StartInDualPane,
             StartWithPreview = settings.StartWithPreview,
-            UseShellContextMenu = settings.UseShellContextMenu
+            UseShellContextMenu = settings.UseShellContextMenu,
+            ExternalTools = settings.ExternalTools
+                .Select(static tool => new ExternalTool
+                {
+                    Name = tool.Name,
+                    ToolPath = tool.ToolPath,
+                    Arguments = tool.Arguments
+                })
+                .ToList()
         };
 
         DataContext = Settings;
@@ -76,6 +85,59 @@ public partial class PreferencesWindow : Window
         }
     }
 
+    private void AddExternalTool_Click(object sender, RoutedEventArgs e)
+    {
+        var tool = new ExternalTool
+        {
+            Name = "New Tool"
+        };
+
+        Settings.ExternalTools.Add(tool);
+        ExternalToolsGrid.SelectedItem = tool;
+        ExternalToolsGrid.ScrollIntoView(tool);
+    }
+
+    private void BrowseExternalTool_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExternalToolsGrid.SelectedItem is not ExternalTool tool)
+        {
+            MessageBox.Show(this, "Select a tool row first.", "External Tools", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select external tool",
+            Filter = "Programs (*.exe)|*.exe|All files (*.*)|*.*"
+        };
+
+        if (!string.IsNullOrWhiteSpace(tool.ToolPath))
+        {
+            var directory = System.IO.Path.GetDirectoryName(tool.ToolPath);
+            if (!string.IsNullOrWhiteSpace(directory) && System.IO.Directory.Exists(directory))
+            {
+                dialog.InitialDirectory = directory;
+            }
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            tool.ToolPath = dialog.FileName;
+            if (string.IsNullOrWhiteSpace(tool.Name))
+                tool.Name = System.IO.Path.GetFileNameWithoutExtension(dialog.FileName);
+
+            ExternalToolsGrid.Items.Refresh();
+        }
+    }
+
+    private void RemoveExternalTool_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExternalToolsGrid.SelectedItem is not ExternalTool tool)
+            return;
+
+        Settings.ExternalTools.Remove(tool);
+    }
+
     private void OK_Click(object sender, RoutedEventArgs e)
     {
         // Read ComboBox selection
@@ -83,6 +145,33 @@ public partial class PreferencesWindow : Window
             && selected.Content is string mode)
         {
             Settings.DefaultViewMode = mode;
+        }
+
+        for (var i = Settings.ExternalTools.Count - 1; i >= 0; i--)
+        {
+            var tool = Settings.ExternalTools[i];
+            tool.Name = tool.Name?.Trim() ?? string.Empty;
+            tool.ToolPath = tool.ToolPath?.Trim() ?? string.Empty;
+            tool.Arguments = tool.Arguments?.Trim() ?? string.Empty;
+
+            var hasName = !string.IsNullOrWhiteSpace(tool.Name);
+            var hasPath = !string.IsNullOrWhiteSpace(tool.ToolPath);
+            if (!hasName && !hasPath && string.IsNullOrWhiteSpace(tool.Arguments))
+            {
+                Settings.ExternalTools.RemoveAt(i);
+                continue;
+            }
+
+            if (!hasName || !hasPath)
+            {
+                MessageBox.Show(
+                    this,
+                    "Each external tool needs both a name and a program path.",
+                    "External Tools",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
         }
 
         DialogResult = true;

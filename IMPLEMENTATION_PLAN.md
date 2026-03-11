@@ -53,6 +53,12 @@ The app currently includes:
 - added a `View > Manual Sorting` toggle that switches the pane into drag-reorder mode for folder contents
 - persisted per-folder manual sort sequences in the existing settings file and added smoke coverage for date grouping plus reload persistence
 
+### External tools configuration
+
+- added an `External Tools` Preferences tab for persisted tool definitions with name, program path, and optional argument templates such as `%p`
+- added a `Tools > External Tools` submenu plus file-list `Open with... (Tools)` context-menu entries populated from the saved tool catalog
+- routed tool launches through `IFileSystemService` with selected-file argument expansion and smoke coverage for settings round-trips plus launch behavior
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -216,7 +222,7 @@ Status: IN PROGRESS
 Scope:
 - completed: 016 advanced attribute/date search filter
 - completed: 017 group by and manual sorting
-- **018: External Tools Configuration:** Add a dedicated settings section for users to define external programs and launch them with selected file arguments.
+- completed: 018 external tools configuration
 - **019: Drop-Stack (Virtual Collection):** Implement a temporary "shelf" area where users can collect items from multiple folders before performing a batch operation.
 
 ### 4. Power User Parity (Cubic Original)

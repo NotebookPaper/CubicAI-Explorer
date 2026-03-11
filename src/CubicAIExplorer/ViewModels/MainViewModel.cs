@@ -165,6 +165,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<NamedSession> NamedSessions { get; } = [];
     public ObservableCollection<WindowLayout> WindowLayouts { get; } = [];
+    public ObservableCollection<ExternalTool> ExternalTools { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
@@ -223,6 +224,7 @@ public partial class MainViewModel : ObservableObject
         _bookmarkService = bookmarkService;
         _userSettings = userSettings ?? new Models.UserSettings();
         _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(_userSettings.NewFileTemplatesPath);
+        _userSettings.ExternalTools = NormalizeExternalTools(_userSettings.ExternalTools);
 
         // Initialize UI visibility from settings
         _isToolbarVisible = _userSettings.ShowToolbar;
@@ -240,6 +242,7 @@ public partial class MainViewModel : ObservableObject
         _previewWidth = _userSettings.PreviewWidth;
         RefreshNamedSessionsFromSettings();
         RefreshWindowLayoutsFromSettings();
+        RefreshExternalToolsFromSettings();
 
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
 
@@ -315,6 +318,7 @@ public partial class MainViewModel : ObservableObject
             _userSettings.WindowLayouts = newSettings.WindowLayouts ?? [];
             _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
             _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(newSettings.NewFileTemplatesPath);
+            _userSettings.ExternalTools = NormalizeExternalTools(newSettings.ExternalTools);
             _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
             _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
             _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
@@ -324,6 +328,7 @@ public partial class MainViewModel : ObservableObject
             RefreshNewFileTemplatesCatalog();
             RefreshNamedSessionsFromSettings();
             RefreshWindowLayoutsFromSettings();
+            RefreshExternalToolsFromSettings();
             ApplyFilterPreferencesToAllTabs();
             OnPropertyChanged(nameof(DetailsColumnSettings));
             if (!string.IsNullOrWhiteSpace(CurrentNamedSessionName)
@@ -383,6 +388,25 @@ public partial class MainViewModel : ObservableObject
             : path;
     }
 
+    private static List<ExternalTool> NormalizeExternalTools(IEnumerable<ExternalTool>? tools)
+    {
+        return (tools ?? [])
+            .Select(CloneExternalTool)
+            .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name)
+                && !string.IsNullOrWhiteSpace(tool.ToolPath))
+            .ToList();
+    }
+
+    private static ExternalTool CloneExternalTool(ExternalTool tool)
+    {
+        return new ExternalTool
+        {
+            Name = tool.Name?.Trim() ?? string.Empty,
+            ToolPath = tool.ToolPath?.Trim() ?? string.Empty,
+            Arguments = tool.Arguments?.Trim() ?? string.Empty
+        };
+    }
+
     private static NamedSession CloneNamedSession(NamedSession session)
     {
         return new NamedSession
@@ -439,6 +463,19 @@ public partial class MainViewModel : ObservableObject
             ShowSavedSearches = layout.ShowSavedSearches,
             ViewMode = NormalizeLayoutViewMode(layout.ViewMode)
         };
+    }
+
+    private void RefreshExternalToolsFromSettings()
+    {
+        ExternalTools.Clear();
+        foreach (var tool in (_userSettings.ExternalTools ?? [])
+                     .Select(CloneExternalTool)
+                     .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name)
+                         && !string.IsNullOrWhiteSpace(tool.ToolPath))
+                     .OrderBy(static tool => tool.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            ExternalTools.Add(tool);
+        }
     }
 
     private NamedSession CaptureCurrentSession(string sessionName)
@@ -845,6 +882,7 @@ public partial class MainViewModel : ObservableObject
             case nameof(FileListViewModel.SelectedItem):
             case nameof(FileListViewModel.CurrentPath):
                 UpdatePreview();
+                RaiseCurrentPaneCommandProperties();
                 break;
             case nameof(FileListViewModel.UndoDescription):
             case nameof(FileListViewModel.RedoDescription):
@@ -1557,6 +1595,30 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusText = $"Run as administrator failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void RunExternalTool(ExternalTool? tool)
+    {
+        if (!CanRunExternalTool(tool))
+            return;
+
+        var selectedFilePath = GetSingleSelectedFilePath();
+        if (string.IsNullOrWhiteSpace(selectedFilePath) || tool == null)
+            return;
+
+        var arguments = BuildExternalToolArguments(tool.Arguments, selectedFilePath);
+        var workingDirectory = Path.GetDirectoryName(selectedFilePath);
+
+        try
+        {
+            _fileSystemService.LaunchExternalTool(tool.ToolPath, arguments, workingDirectory);
+            StatusText = $"Launched {tool.Name} for {Path.GetFileName(selectedFilePath)}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"External tool failed: {ex.Message}";
         }
     }
 
@@ -2850,6 +2912,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.StartInDualPane = newSettings.StartInDualPane;
         _userSettings.StartWithPreview = newSettings.StartWithPreview;
         _userSettings.UseShellContextMenu = newSettings.UseShellContextMenu;
+        _userSettings.ExternalTools = NormalizeExternalTools(newSettings.ExternalTools);
         _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
         _userSettings.SearchMatchMode = newSettings.SearchMatchMode;
         _userSettings.ClearFilterOnFolderChange = newSettings.ClearFilterOnFolderChange;
@@ -2857,6 +2920,7 @@ public partial class MainViewModel : ObservableObject
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(newSettings.DetailsColumns);
         _userSettings.ManualSortFolders = NormalizeManualSortFolders(newSettings.ManualSortFolders);
         RefreshNewFileTemplatesCatalog();
+        RefreshExternalToolsFromSettings();
         ApplyFilterPreferencesToAllTabs();
         OnPropertyChanged(nameof(DetailsColumnSettings));
         _settingsService?.Save(_userSettings);
@@ -2894,6 +2958,36 @@ public partial class MainViewModel : ObservableObject
             return fileName;
 
         return $"{baseName} ({extension})";
+    }
+
+    public bool CanRunExternalTool(ExternalTool? tool)
+    {
+        return tool != null
+            && !string.IsNullOrWhiteSpace(tool.Name)
+            && !string.IsNullOrWhiteSpace(tool.ToolPath)
+            && !string.IsNullOrWhiteSpace(GetSingleSelectedFilePath());
+    }
+
+    public string BuildExternalToolArguments(ExternalTool tool, string selectedFilePath)
+        => BuildExternalToolArguments(tool.Arguments, selectedFilePath);
+
+    private static string BuildExternalToolArguments(string? argumentTemplate, string selectedFilePath)
+    {
+        var quotedPath = QuoteCommandLineArgument(selectedFilePath);
+        var template = argumentTemplate?.Trim() ?? string.Empty;
+        return template.Contains("%p", StringComparison.OrdinalIgnoreCase)
+            ? template.Replace("%p", quotedPath, StringComparison.OrdinalIgnoreCase)
+            : string.IsNullOrWhiteSpace(template)
+                ? quotedPath
+                : $"{template} {quotedPath}";
+    }
+
+    private static string QuoteCommandLineArgument(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "\"\"";
+
+        return "\"" + value.Replace("\"", "\\\"") + "\"";
     }
 
     private int _previewGeneration;

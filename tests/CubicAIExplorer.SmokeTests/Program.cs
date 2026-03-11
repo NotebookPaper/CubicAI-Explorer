@@ -126,6 +126,7 @@ internal static class Program
             Run("file split and join", failures, () => TestFileSplitAndJoin(tempRoot));
             Run("checksum generation and compare", failures, () => TestChecksumGenerationAndCompare(tempRoot));
             Run("file utility tool commands", failures, () => TestFileUtilityToolCommands(tempRoot));
+            Run("external tools launch selected file", failures, () => TestExternalToolsLaunchSelectedFile(tempRoot));
             Run("empty recycle bin command", failures, TestEmptyRecycleBinCommand);
             Run("open in new window command", failures, () => TestOpenInNewWindowCommand(tempRoot));
             Run("run as administrator command", failures, () => TestRunAsAdministratorCommand(tempRoot));
@@ -136,6 +137,7 @@ internal static class Program
             Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
             Run("main window xaml loads", failures, TestMainWindowXamlLoads);
             Run("manage layouts dialog loads", failures, TestManageLayoutsDialogLoads);
+            Run("preferences window external tools loads", failures, TestPreferencesWindowExternalToolsLoads);
             Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
             Run("app icon configuration", failures, TestAppIconConfiguration);
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
@@ -2368,6 +2370,7 @@ internal static class Program
         Assert(settings.DetailsColumns.Count == 0, "Column settings should default to empty so the app can supply defaults.");
         Assert(settings.ManualSortFolders.Count == 0, "Manual folder sort metadata should default to empty.");
         Assert(settings.WindowLayouts.Count == 0, "Window layouts should default to empty.");
+        Assert(settings.ExternalTools.Count == 0, "External tools should default to empty.");
     }
 
     private static void TestSettingsServiceRoundTrip(string root)
@@ -2396,6 +2399,15 @@ internal static class Program
                 SearchMatchMode = NameMatchMode.Exact,
                 ClearFilterOnFolderChange = true,
                 FilterHistory = ["*.txt", "report*"],
+                ExternalTools =
+                [
+                    new ExternalTool
+                    {
+                        Name = "Notepad",
+                        ToolPath = Path.Combine(root, "notepad.exe"),
+                        Arguments = "%p"
+                    }
+                ],
                 StartupSessionName = "Morning",
                 NamedSessions =
                 [
@@ -2468,6 +2480,9 @@ internal static class Program
             Assert(reloaded.SearchMatchMode == NameMatchMode.Exact, "Settings round-trip should persist search match mode.");
             Assert(reloaded.ClearFilterOnFolderChange, "Settings round-trip should persist clear-on-navigation.");
             Assert(reloaded.FilterHistory.Count == 2, "Settings round-trip should persist filter history.");
+            Assert(reloaded.ExternalTools.Count == 1, "Settings round-trip should persist external tools.");
+            Assert(reloaded.ExternalTools[0].Name == "Notepad", "Settings round-trip should preserve external tool names.");
+            Assert(reloaded.ExternalTools[0].Arguments == "%p", "Settings round-trip should preserve external tool arguments.");
             Assert(reloaded.StartupSessionName == "Morning", "Settings round-trip should persist startup session.");
             Assert(reloaded.NamedSessions.Count == 1, "Settings round-trip should persist named sessions.");
             Assert(reloaded.NamedSessions[0].IsDualPaneMode, "Settings round-trip should persist dual-pane session state.");
@@ -3339,7 +3354,9 @@ internal static class Program
         Assert(main.Contains("Header=\"_Split File...\""), "Tools menu should expose Split File.");
         Assert(main.Contains("Header=\"_Join File...\""), "Tools menu should expose Join File.");
         Assert(main.Contains("Header=\"_Checksum...\""), "Tools menu should expose Checksum.");
+        Assert(main.Contains("Header=\"E_xternal Tools\""), "Tools menu should expose the external tools submenu.");
         Assert(main.Contains("Header=\"Empty _Recycle Bin...\""), "Tools menu should expose Empty Recycle Bin.");
+        Assert(main.Contains("Header=\"Open with... (_Tools)\""), "Pane context menus should expose the external tools submenu.");
         Assert(main.Contains("OpenSplitFileToolCommand"), "Split File should bind through the main view model.");
         Assert(main.Contains("OpenJoinFileToolCommand"), "Join File should bind through the main view model.");
         Assert(main.Contains("OpenChecksumToolCommand"), "Checksum should bind through the main view model.");
@@ -3393,6 +3410,7 @@ internal static class Program
         Assert(mainCs.Contains("SavedSearchList_MouseDoubleClick"), "Saved search double-click handler should be wired.");
         Assert(mainCs.Contains("FileListViewModel_ArchiveBrowseRequested"), "Archive browser handler should be wired.");
         Assert(mainCs.Contains("PopulateNewMenu"), "Dynamic new-file template menu should be built in code-behind.");
+        Assert(mainCs.Contains("PopulateExternalToolsMenu"), "Dynamic external tools menu should be built in code-behind.");
         Assert(mainCs.Contains("PopulateLayoutsMenu"), "Layout menu population should be implemented.");
         Assert(mainCs.Contains("PreviewGridSplitter_DragCompleted"), "Preview splitter resize persistence should be implemented.");
         Assert(mainCs.Contains("ApplyGrouping"), "Grouping should be applied from code-behind for both panes.");
@@ -3784,6 +3802,34 @@ internal static class Program
         Assert(File.ReadAllText(createdPath) == "# Report\n\n- item", "Redo template creation should preserve the template contents.");
     }
 
+    private static void TestPreferencesWindowExternalToolsLoads()
+    {
+        EnsureSmokeApplication();
+
+        var window = new CubicAIExplorer.PreferencesWindow(new UserSettings
+        {
+            ExternalTools =
+            [
+                new ExternalTool
+                {
+                    Name = "Notepad",
+                    ToolPath = @"C:\Windows\notepad.exe",
+                    Arguments = "%p"
+                }
+            ]
+        });
+
+        window.ApplyTemplate();
+        window.UpdateLayout();
+
+        var grid = window.FindName("ExternalToolsGrid") as DataGrid;
+        Assert(grid != null, "Preferences window should expose the external tools grid.");
+        Assert(window.Settings.ExternalTools.Count == 1, "Preferences window should clone external tools into the editable settings copy.");
+        Assert(window.Settings.ExternalTools[0].Name == "Notepad", "Preferences window should preserve external tool names.");
+
+        window.Close();
+    }
+
     private static void TestBookmarkDragFeedback(string root)
     {
         var fs = new FileSystemService();
@@ -3907,6 +3953,51 @@ internal static class Program
         vm.OpenJoinFileToolCommand.Execute(null);
 
         Assert(string.Equals(joinRequestedPath, chunkPath, StringComparison.OrdinalIgnoreCase), "Join command should preselect a numbered chunk file.");
+    }
+
+    private static void TestExternalToolsLaunchSelectedFile(string root)
+    {
+        var folder = CreateCleanSubdir(root, "external_tools");
+        var selectedFile = Path.Combine(folder, "item.txt");
+        File.WriteAllText(selectedFile, "payload");
+
+        var fs = new RecordingFileSystemService(new FileSystemService());
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard, userSettings: new UserSettings
+        {
+            ExternalTools =
+            [
+                new ExternalTool
+                {
+                    Name = "Tool With Placeholder",
+                    ToolPath = @"C:\Tools\runner.exe",
+                    Arguments = "--open %p --flag"
+                },
+                new ExternalTool
+                {
+                    Name = "Tool Without Placeholder",
+                    ToolPath = @"C:\Tools\runner.exe",
+                    Arguments = "--wait"
+                }
+            ]
+        });
+
+        vm.NavigateCurrentPaneToPath(folder);
+        var selectedItem = vm.CurrentPaneFileList!.Items.Single(item => string.Equals(item.FullPath, selectedFile, StringComparison.OrdinalIgnoreCase));
+        vm.CurrentPaneFileList.SelectedItem = selectedItem;
+
+        var placeholderTool = vm.ExternalTools.Single(tool => tool.Name == "Tool With Placeholder");
+        vm.RunExternalToolCommand.Execute(placeholderTool);
+
+        Assert(fs.LastExternalToolPath == @"C:\Tools\runner.exe", "External tools should launch the configured program path.");
+        Assert(fs.LastExternalToolArguments == $"--open \"{selectedFile}\" --flag", "External tools should replace %p with the selected file path.");
+        Assert(fs.LastExternalToolWorkingDirectory == folder, "External tools should use the selected file directory as the working directory.");
+
+        var appendedTool = vm.ExternalTools.Single(tool => tool.Name == "Tool Without Placeholder");
+        vm.RunExternalToolCommand.Execute(appendedTool);
+
+        Assert(fs.LastExternalToolArguments == $"--wait \"{selectedFile}\"", "External tools should append the selected file path when %p is omitted.");
+        Assert(vm.StatusText.Contains("Launched", StringComparison.OrdinalIgnoreCase), "External tool execution should update the status text.");
     }
 
     private static void TestEmptyRecycleBinCommand()
@@ -4059,6 +4150,9 @@ internal static class Program
         public string? LastRevealPath { get; private set; }
         public List<string> LastRevealPaths { get; } = [];
         public string? LastOpenedFolderPath { get; private set; }
+        public string? LastExternalToolPath { get; private set; }
+        public string? LastExternalToolArguments { get; private set; }
+        public string? LastExternalToolWorkingDirectory { get; private set; }
         public string? LastShellVerbPath { get; private set; }
         public string? LastShellVerb { get; private set; }
         public int EmptyRecycleBinCallCount { get; private set; }
@@ -4091,6 +4185,13 @@ internal static class Program
         public void OpenInDefaultApp(string path)
         {
             LastOpenedFolderPath = path;
+        }
+
+        public void LaunchExternalTool(string toolPath, string? arguments, string? workingDirectory = null)
+        {
+            LastExternalToolPath = toolPath;
+            LastExternalToolArguments = arguments;
+            LastExternalToolWorkingDirectory = workingDirectory;
         }
 
         public void ExecuteShellVerb(string path, string verb)
@@ -4169,6 +4270,7 @@ internal static class Program
         public void RevealInExplorer(string path) => _inner.RevealInExplorer(path);
         public void RevealInExplorer(IEnumerable<string> paths) => _inner.RevealInExplorer(paths);
         public void OpenInDefaultApp(string path) => _inner.OpenInDefaultApp(path);
+        public void LaunchExternalTool(string toolPath, string? arguments, string? workingDirectory = null) => _inner.LaunchExternalTool(toolPath, arguments, workingDirectory);
         public void ExecuteShellVerb(string path, string verb) => _inner.ExecuteShellVerb(path, verb);
         public void EmptyRecycleBin() => _inner.EmptyRecycleBin();
         public void ShowNativeProperties(string path) => _inner.ShowNativeProperties(path);

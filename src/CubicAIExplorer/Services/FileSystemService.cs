@@ -221,6 +221,34 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public void LaunchExternalTool(string toolPath, string? arguments, string? workingDirectory = null)
+    {
+        var sanitizedToolPath = SanitizePath(toolPath);
+        if (sanitizedToolPath == null)
+            throw new ArgumentException("The tool path is invalid.", nameof(toolPath));
+
+        if (!File.Exists(sanitizedToolPath))
+            throw new FileNotFoundException("The external tool does not exist.", sanitizedToolPath);
+
+        var sanitizedWorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory)
+            ? null
+            : SanitizePath(workingDirectory);
+        if (sanitizedWorkingDirectory != null && !Directory.Exists(sanitizedWorkingDirectory))
+            sanitizedWorkingDirectory = null;
+
+        var processStartInfo = new ProcessStartInfo
+        {
+            FileName = sanitizedToolPath,
+            Arguments = arguments?.Trim() ?? string.Empty,
+            UseShellExecute = true,
+            WorkingDirectory = sanitizedWorkingDirectory
+                ?? Path.GetDirectoryName(sanitizedToolPath)
+                ?? string.Empty
+        };
+
+        Process.Start(processStartInfo);
+    }
+
     public void ExecuteShellVerb(string path, string verb)
     {
         var sanitized = SanitizePath(path);

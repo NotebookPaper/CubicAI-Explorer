@@ -174,10 +174,12 @@
                 <MenuItem Header="_Import..." Click="ImportBookmarks_Click" />
                 <MenuItem Header="_Export..." Click="ExportBookmarks_Click" />
             </MenuItem>
-            <MenuItem Header="_Tools">
+            <MenuItem x:Name="ToolsMenuItem" Header="_Tools">
                 <MenuItem Header="_Split File..." Command="{Binding OpenSplitFileToolCommand}" />
                 <MenuItem Header="_Join File..." Command="{Binding OpenJoinFileToolCommand}" />
                 <MenuItem Header="_Checksum..." Command="{Binding OpenChecksumToolCommand}" />
+                <Separator />
+                <MenuItem x:Name="ExternalToolsMenuItem" Header="E_xternal Tools" SubmenuOpened="ExternalToolsMenu_SubmenuOpened" />
                 <Separator />
                 <MenuItem Header="Empty _Recycle Bin..." Click="EmptyRecycleBin_Click" />
                 <Separator />
@@ -1160,6 +1162,7 @@
                                 <MenuItem x:Name="DeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
                                 <MenuItem x:Name="RenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                 <MenuItem x:Name="NewMenuItem" Header="New" SubmenuOpened="PaneNewMenuItem_SubmenuOpened" />
+                                <MenuItem x:Name="OpenWithToolsMenuItem" Header="Open with... (_Tools)" SubmenuOpened="PaneExternalToolsMenuItem_SubmenuOpened" />
                                 <MenuItem x:Name="RefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                 <MenuItem x:Name="ExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                 <Separator x:Name="PropertiesSeparator" />
@@ -1323,6 +1326,7 @@
                                     <MenuItem x:Name="RightDeleteMenuItem" Header="Delete" Command="{Binding DeleteCommand}" />
                                     <MenuItem x:Name="RightRenameMenuItem" Header="Rename" Command="{Binding RenameCommand}" />
                                     <MenuItem x:Name="RightNewMenuItem" Header="New" SubmenuOpened="PaneNewMenuItem_SubmenuOpened" />
+                                    <MenuItem x:Name="RightOpenWithToolsMenuItem" Header="Open with... (_Tools)" SubmenuOpened="PaneExternalToolsMenuItem_SubmenuOpened" />
                                     <MenuItem x:Name="RightRefreshMenuItem" Header="Refresh" Command="{Binding RefreshCommand}" />
                                     <MenuItem x:Name="RightExtractArchiveMenuItem" Header="Extract Archive..." Command="{Binding ExtractArchiveCommand}" />
                                     <Separator x:Name="RightPropertiesSeparator" />
