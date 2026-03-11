@@ -1412,6 +1412,20 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
     }
 
+    private void EmptyRecycleBin_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show(
+            "Empty the Recycle Bin for all drives?",
+            "Empty Recycle Bin",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        ViewModel.EmptyRecycleBinCommand.Execute(null);
+    }
+
     private void MainWindow_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (_boundViewModel != null)

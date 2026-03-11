@@ -220,6 +220,14 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public void EmptyRecycleBin()
+    {
+        const uint flags = (uint)(ShEmptyRecycleBinFlags.NoProgressUi | ShEmptyRecycleBinFlags.NoSound);
+        var result = SHEmptyRecycleBin(IntPtr.Zero, null, flags);
+        if (result != 0)
+            Marshal.ThrowExceptionForHR(result);
+    }
+
     public void ShowNativeProperties(string path)
     {
         var sanitized = SanitizePath(path);
@@ -245,6 +253,17 @@ public sealed class FileSystemService : IFileSystemService
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHEmptyRecycleBinW")]
+    private static extern int SHEmptyRecycleBin(IntPtr hwnd, string? pszRootPath, uint dwFlags);
+
+    [Flags]
+    private enum ShEmptyRecycleBinFlags : uint
+    {
+        NoConfirmation = 0x00000001,
+        NoProgressUi = 0x00000002,
+        NoSound = 0x00000004
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct SHELLEXECUTEINFO

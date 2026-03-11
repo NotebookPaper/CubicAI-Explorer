@@ -16,4 +16,6 @@
 - 2026-03-11: Completed spec 005 shell property exposure with IPropertyStore integration for Company, Version, Dimensions, and Duration columns and Properties dialog.
 - 2026-03-11: Completed spec 006 broader preview support with Markdown rendering and basic source code syntax highlighting.
 - 2026-03-11: Completed spec 007 bookmark drag feedback with inline drop hints, valid-target highlighting, root-drop cues, and smoke coverage.
+- 2026-03-11: Completed spec 008 app icon refresh with the v2 ICO wired into project output, window chrome, and smoke coverage for icon-frame availability.
 - 2026-03-11: Completed new-file templates support with configurable template-folder settings, dynamic New-menu population, template-backed file creation, and smoke coverage.
+- 2026-03-11: Completed spec 009 empty recycle bin with a Tools-menu action, shell-backed `SHEmptyRecycleBinW` integration, and smoke coverage.

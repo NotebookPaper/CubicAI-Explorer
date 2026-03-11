@@ -2,16 +2,16 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after new-file templates support
-> Status: New-file templates support is implemented and verified.
+> HEAD: current local `master` after app icon refresh and recycle-bin management support
+> Status: App icon refresh and recycle-bin management support are implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
-- The branch builds and the smoke harness passes (with Spec 007 coverage).
-- Specs `001`, `002`, `003`, `004`, `005`, `006`, and `007` are complete in this checkout.
+- The branch builds and the smoke harness passes (with Spec 008 and Spec 009 coverage).
+- Specs `001`, `002`, `003`, `004`, `005`, `006`, `007`, `008`, and `009` are complete in this checkout.
 - The top roadmap item after the numbered specs, new-file templates support, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
@@ -27,6 +27,15 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
   - Added template catalog loading in `MainViewModel` and dynamic `New` submenu population in the Edit menu and background pane context menus.
   - Added template-backed file creation through `FileSystemService.CreateFileFromTemplate` with undo/redo parity in `FileListViewModel`.
   - Updated smoke coverage for template catalog loading, template file creation undo/redo, settings round-trip, and XAML wiring.
+- **Spec 008: App Icon Refresh (v2)** (New in this session)
+  - Updated `CubicAIExplorer.csproj` to stamp the build output with `Resources\appicon-v2.ico`.
+  - Updated `MainWindow.xaml` so the title bar and taskbar use the same v2 icon resource.
+  - Added smoke coverage that verifies the project wiring and that the ICO contains 16/32/48/256 frames.
+- **Spec 009: Empty Recycle Bin** (New in this session)
+  - Added a `Tools > Empty Recycle Bin...` action with confirmation handled in `MainWindow`.
+  - Added `IFileSystemService.EmptyRecycleBin()` with shell-backed `SHEmptyRecycleBinW` integration in `FileSystemService`.
+  - Updated `MainViewModel` to expose the command and surface success/failure status text without embedding modal UI in the command path.
+  - Added smoke coverage using the recording filesystem test double.
 - **Spec 006: Broader Preview Support**
   - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
   - Implemented a dependency-free Markdown renderer for bold, headers, and lists.
@@ -53,9 +62,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-1. UX polish and advanced operations:
 2. Deeper shell integration (continued):
-   - explore recycle bin management (empty recycle bin from app)
    - shell execution with different verbs (Run as administrator, etc.)
 3. Infrastructure and reliability:
    - further harden `FileSystemWatcher` callbacks across all services
@@ -75,8 +82,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Spec 007 bookmark drag feedback is the latest completed roadmap slice in this checkout.
-- New-file templates support is the latest completed roadmap slice in this checkout.
+- Spec 008 app icon refresh and spec 009 empty recycle bin are the latest completed roadmap slices in this checkout.
+- New-file templates support remains complete in this checkout.
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -88,7 +95,7 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all 90+ tests pass, including new-file templates coverage)
+  - passed (all 90+ tests pass, including app-icon and recycle-bin coverage)
 
 ## Gotchas
 

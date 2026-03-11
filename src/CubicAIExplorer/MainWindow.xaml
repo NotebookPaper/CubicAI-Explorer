@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:CubicAIExplorer.ViewModels"
         xmlns:models="clr-namespace:CubicAIExplorer.Models"
         Title="CubicAI Explorer" Height="700" Width="1100"
-        Icon="Resources/appicon.png"
+        Icon="Resources/appicon-v2.ico"
         WindowStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -153,6 +153,8 @@
                 <MenuItem Header="_Export..." Click="ExportBookmarks_Click" />
             </MenuItem>
             <MenuItem Header="_Tools">
+                <MenuItem Header="Empty _Recycle Bin..." Click="EmptyRecycleBin_Click" />
+                <Separator />
                 <MenuItem Header="_Preferences..." Command="{Binding OpenPreferencesCommand}" />
             </MenuItem>
             <MenuItem Header="_Help">

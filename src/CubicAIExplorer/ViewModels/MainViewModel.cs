@@ -2094,6 +2094,20 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void EmptyRecycleBin()
+    {
+        try
+        {
+            _fileSystemService.EmptyRecycleBin();
+            StatusText = "Recycle Bin emptied.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Failed to empty Recycle Bin: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     private void CreateFileFromTemplate(NewFileTemplateItem? template)
     {
         if (template == null

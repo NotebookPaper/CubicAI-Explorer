@@ -43,6 +43,18 @@ The app currently includes:
 - template-based file creation preserves contents and participates in the existing undo/redo history flow
 - added smoke coverage for template catalog loading, settings persistence, and template-based create/undo/redo
 
+### Recycle bin management from the app
+
+- added a Tools-menu `Empty Recycle Bin...` action with explicit confirmation in the window layer
+- routed recycle-bin emptying through `IFileSystemService` and `SHEmptyRecycleBinW` instead of direct filesystem deletion
+- added smoke coverage for the command path and success status messaging
+
+### App icon refresh (v2)
+
+- updated the project output icon metadata to use `Resources\appicon-v2.ico`
+- updated the main window icon binding to use the same v2 ICO resource at runtime
+- added smoke coverage to verify icon wiring and the presence of 16/32/48/256 icon frames
+
 ### Shell property exposure (IPropertyStore) for details and properties
 
 - Implemented `ShellPropertyHelper` using `SHGetPropertyStoreFromParsingName` and `IPropertyStore` for robust metadata retrieval.
@@ -150,15 +162,23 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-### 1. UX polish and advanced operations
-Status: PARTIALLY COMPLETE
-Scope:
-- completed: new-file templates support (parity with original CubicExplorer)
-
-### 2. Deeper shell integration (continued)
+### 0. App Icon Refresh (v2)
 Status: PLANNED
 Scope:
-- explore recycle bin management (empty recycle bin from app)
+- Update Project file (`.csproj`) to use `Resources\appicon-v2.ico` as the `ApplicationIcon`.
+- Update `App.xaml` or `MainWindow.xaml` to ensure the window icon also reflects the new asset.
+- Verify that the multi-size ICO renders correctly at all standard shell sizes (16-256px).
+
+### 1. UX polish and advanced operations
+Status: COMPLETE
+Scope:
+- completed: new-file templates support (parity with original CubicExplorer)
+- completed: app icon refresh with the v2 multi-size icon asset
+
+### 2. Deeper shell integration (continued)
+Status: PARTIALLY COMPLETE
+Scope:
+- completed: recycle bin management (empty recycle bin from app)
 - shell execution with different verbs (Run as administrator, etc.)
 
 ### 3. Infrastructure and reliability

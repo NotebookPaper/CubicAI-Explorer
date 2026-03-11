@@ -41,6 +41,7 @@ public interface IFileSystemService
     void RevealInExplorer(string path);
     void RevealInExplorer(IEnumerable<string> paths);
     void OpenInDefaultApp(string path);
+    void EmptyRecycleBin();
     void ShowNativeProperties(string path);
     void ShowNativeProperties(IEnumerable<string> paths);
     IReadOnlyList<FileTransferResult> CopyFiles(

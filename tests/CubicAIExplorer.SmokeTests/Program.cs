@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media.Imaging;
 using CubicAIExplorer.Converters;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
@@ -103,12 +104,14 @@ internal static class Program
             Run("new file and link creation", failures, () => TestNewFileAndLink(tempRoot));
             Run("new file templates catalog", failures, () => TestNewFileTemplatesCatalog(tempRoot));
             Run("new file template creation", failures, () => TestNewFileTemplateCreation(tempRoot));
+            Run("empty recycle bin command", failures, TestEmptyRecycleBinCommand);
             Run("undo/redo after duplicate", failures, () => TestUndoRedoAfterDuplicate(tempRoot));
             Run("undo/redo after new file and link creation", failures, () => TestUndoRedoAfterNewFileAndLink(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
             Run("main window xaml loads", failures, TestMainWindowXamlLoads);
             Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
+            Run("app icon configuration", failures, TestAppIconConfiguration);
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
             Run("xaml wiring checks", failures, TestXamlWiring);
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
@@ -2409,6 +2412,37 @@ internal static class Program
         Assert(mainCs.Contains("Tabs_CollectionChanged"), "Tab collection changes should refresh overflow affordances.");
     }
 
+    private static void TestAppIconConfiguration()
+    {
+        var projectFile = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "CubicAIExplorer.csproj"));
+        var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
+        var iconPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "Resources", "appicon-v2.ico"));
+
+        var project = File.ReadAllText(projectFile);
+        var main = File.ReadAllText(mainXaml);
+
+        Assert(project.Contains("<ApplicationIcon>Resources\\appicon-v2.ico</ApplicationIcon>"),
+            "The project should stamp the built executable with the v2 app icon.");
+        Assert(project.Contains("<Resource Include=\"Resources\\appicon-v2.ico\" />"),
+            "The v2 ICO should be embedded as a WPF resource.");
+        Assert(main.Contains("Icon=\"Resources/appicon-v2.ico\""),
+            "MainWindow should use the v2 icon resource.");
+        Assert(File.Exists(iconPath), "The v2 ICO asset should exist.");
+
+        using var stream = File.OpenRead(iconPath);
+        var decoder = new IconBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var sizes = decoder.Frames
+            .Select(frame => frame.PixelWidth)
+            .Distinct()
+            .OrderBy(size => size)
+            .ToArray();
+
+        Assert(sizes.Contains(16), "The v2 ICO should contain a 16x16 frame.");
+        Assert(sizes.Contains(32), "The v2 ICO should contain a 32x32 frame.");
+        Assert(sizes.Contains(48), "The v2 ICO should contain a 48x48 frame.");
+        Assert(sizes.Contains(256), "The v2 ICO should contain a 256x256 frame.");
+    }
+
     private static void TestXamlWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -2482,6 +2516,7 @@ internal static class Program
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding AddCurrentSearchCommand}\""), "Saved-search save bindings should route through the main view model.");
         Assert(main.Contains("Header=\"_Sessions\""), "Sessions menu should exist.");
+        Assert(main.Contains("Header=\"Empty _Recycle Bin...\""), "Tools menu should expose Empty Recycle Bin.");
         Assert(main.Contains("SaveCurrentSessionAs_Click"), "Save Session As menu item should be wired.");
         Assert(main.Contains("UpdateCurrentNamedSessionCommand"), "Update Current Session should be wired.");
         Assert(main.Contains("SessionsMenu_SubmenuOpened"), "Sessions submenu population should be wired.");
@@ -2521,6 +2556,7 @@ internal static class Program
         Assert(mainCs.Contains("FileListViewModel_ArchiveBrowseRequested"), "Archive browser handler should be wired.");
         Assert(mainCs.Contains("PopulateNewMenu"), "Dynamic new-file template menu should be built in code-behind.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
+        Assert(mainCs.Contains("EmptyRecycleBin_Click"), "Empty Recycle Bin confirmation handler should be wired.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
         Assert(app.Contains("IconSearch"), "Search icon resource should exist.");
         Assert(!main.Contains("&#x25C0;"), "Unicode arrow symbols should be replaced with vector icons.");
@@ -2831,6 +2867,19 @@ internal static class Program
         }
     }
 
+    private static void TestEmptyRecycleBinCommand()
+    {
+        var fs = new RecordingFileSystemService(new FileSystemService());
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+
+        vm.EmptyRecycleBinCommand.Execute(null);
+
+        Assert(fs.EmptyRecycleBinCallCount == 1, "Empty Recycle Bin should call the filesystem service.");
+        Assert(vm.StatusText.Contains("Recycle Bin emptied", StringComparison.OrdinalIgnoreCase),
+            "Empty Recycle Bin should update the status text on success.");
+    }
+
     private static string CreateCleanSubdir(string root, string name)
     {
         var path = Path.Combine(root, name);
@@ -2919,6 +2968,7 @@ internal static class Program
         public string? LastRevealPath { get; private set; }
         public List<string> LastRevealPaths { get; } = [];
         public string? LastOpenedFolderPath { get; private set; }
+        public int EmptyRecycleBinCallCount { get; private set; }
 
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
         public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
@@ -2948,6 +2998,11 @@ internal static class Program
         public void OpenInDefaultApp(string path)
         {
             LastOpenedFolderPath = path;
+        }
+
+        public void EmptyRecycleBin()
+        {
+            EmptyRecycleBinCallCount++;
         }
 
         public void ShowNativeProperties(string path) { }
