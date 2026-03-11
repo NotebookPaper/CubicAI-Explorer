@@ -556,7 +556,14 @@ public partial class MainWindow : Window
         {
             var data = new DataObject();
             data.SetData(BookmarkDragFormat, bookmark);
-            DragDrop.DoDragDrop(BookmarkTree, data, DragDropEffects.Move);
+            try
+            {
+                DragDrop.DoDragDrop(BookmarkTree, data, DragDropEffects.Move);
+            }
+            finally
+            {
+                ViewModel.ClearBookmarkDragFeedback();
+            }
         }
     }
 
@@ -564,6 +571,7 @@ public partial class MainWindow : Window
     {
         if (!e.Data.GetDataPresent(BookmarkDragFormat))
         {
+            ViewModel.ClearBookmarkDragFeedback();
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
@@ -573,16 +581,17 @@ public partial class MainWindow : Window
         var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
         var target = targetItem?.DataContext as BookmarkItem;
 
-        // Don't allow dropping on self or a descendant
-        if (source == null || target == source || IsDescendant(source, target))
-        {
-            e.Effects = DragDropEffects.None;
-        }
-        else
-        {
-            e.Effects = DragDropEffects.Move;
-        }
+        ViewModel.UpdateBookmarkDragFeedback(source, target);
+        e.Effects = ViewModel.CanDropBookmark(source, target)
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
 
+        e.Handled = true;
+    }
+
+    private void BookmarkTree_DragLeave(object sender, DragEventArgs e)
+    {
+        ViewModel.ClearBookmarkDragFeedback();
         e.Handled = true;
     }
 
@@ -594,19 +603,13 @@ public partial class MainWindow : Window
         var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
         var target = targetItem?.DataContext as BookmarkItem;
 
-        if (source != null && target != source && !IsDescendant(source, target))
+        if (ViewModel.CanDropBookmark(source, target))
         {
-            ViewModel.MoveBookmark(source, target);
+            ViewModel.MoveBookmark(source!, target);
         }
-        e.Handled = true;
-    }
 
-    private static bool IsDescendant(BookmarkItem parent, BookmarkItem? potentialDescendant)
-    {
-        if (potentialDescendant == null) return false;
-        var current = potentialDescendant;
-        // This is a bit tricky without parent pointers, but we can check if parent's children contain it recursively
-        return parent.Children.Any(c => c == potentialDescendant || IsDescendant(c, potentialDescendant));
+        ViewModel.ClearBookmarkDragFeedback();
+        e.Handled = true;
     }
 
     private void ImportBookmarks_Click(object sender, RoutedEventArgs e)

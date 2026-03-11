@@ -58,6 +58,7 @@ internal static class Program
             Run("archive browser filter", failures, TestArchiveBrowserFilter);
             Run("shell icon service", failures, () => TestShellIconService(tempRoot));
             Run("bookmarks add + dedupe", failures, () => TestBookmarks(tempRoot));
+            Run("bookmark drag feedback", failures, () => TestBookmarkDragFeedback(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
             Run("redo move", failures, () => TestRedoMove(tempRoot));
             Run("view mode property", failures, () => TestViewModeProperty(tempRoot));
@@ -2456,6 +2457,10 @@ internal static class Program
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
         Assert(main.Contains("BookmarkTree_MouseMove"), "Bookmark drag/drop handler should be wired.");
+        Assert(main.Contains("BookmarkTree_DragLeave"), "Bookmark drag-leave handler should be wired.");
+        Assert(main.Contains("BookmarkDragFeedbackText"), "Bookmark drag feedback should be bound.");
+        Assert(main.Contains("IsBookmarkRootDropTarget"), "Bookmark root drop styling should be bound.");
+        Assert(main.Contains("IsDropTarget"), "Bookmark drop target styling should be bound.");
         Assert(main.Contains("SavedSearchList"), "Saved search list should exist.");
         Assert(main.Contains("SearchTextBox"), "Search text box should exist.");
         Assert(main.Contains("CurrentPaneFileList.SearchMatchMode"), "Search mode selector should bind to the active pane.");
@@ -2714,6 +2719,55 @@ internal static class Program
             var vmReloaded = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService2);
             Assert(vmReloaded.Bookmarks.Any(b => string.Equals(b.Path, folder, StringComparison.OrdinalIgnoreCase)),
                 "Bookmarks should persist across MainViewModel instances.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestBookmarkDragFeedback(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var bookmarkFile = Path.Combine(root, "bookmark_drag_feedback.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
+
+        try
+        {
+            using var bookmarkService = new BookmarkService();
+            var vm = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService);
+            vm.Bookmarks.Clear();
+
+            var folder = new BookmarkItem { Name = "Folder", IsFolder = true };
+            var child = new BookmarkItem { Name = "Child", Path = @"C:\Temp\Child" };
+            var sibling = new BookmarkItem { Name = "Sibling", Path = @"C:\Temp\Sibling" };
+            folder.Children.Add(child);
+            vm.Bookmarks.Add(folder);
+            vm.Bookmarks.Add(sibling);
+
+            vm.UpdateBookmarkDragFeedback(sibling, folder);
+            Assert(vm.HasBookmarkDragFeedback, "Bookmark drag feedback should become visible for valid targets.");
+            Assert(!vm.IsBookmarkDragFeedbackInvalid, "Valid bookmark drop target should not be flagged invalid.");
+            Assert(folder.IsDropTarget, "Hovered bookmark target should be highlighted.");
+            Assert(vm.BookmarkDragFeedbackText.Contains("move into", StringComparison.OrdinalIgnoreCase),
+                "Folder drag feedback should describe moving into the folder.");
+
+            vm.UpdateBookmarkDragFeedback(folder, child);
+            Assert(vm.IsBookmarkDragFeedbackInvalid, "Dragging onto a descendant should be rejected.");
+            Assert(!child.IsDropTarget, "Invalid targets should not stay highlighted.");
+
+            vm.UpdateBookmarkDragFeedback(child, null);
+            Assert(vm.IsBookmarkRootDropTarget, "Dragging over empty bookmark space should mark the root drop zone.");
+            Assert(vm.BookmarkDragFeedbackText.Contains("top level", StringComparison.OrdinalIgnoreCase),
+                "Root drag feedback should explain the top-level drop behavior.");
+
+            vm.ClearBookmarkDragFeedback();
+            Assert(!vm.HasBookmarkDragFeedback, "Clearing bookmark drag feedback should hide the hint.");
+            Assert(!vm.IsBookmarkRootDropTarget, "Clearing bookmark drag feedback should reset the root target.");
+            Assert(!folder.IsDropTarget && !child.IsDropTarget && !sibling.IsDropTarget,
+                "Clearing bookmark drag feedback should remove all bookmark highlights.");
         }
         finally
         {

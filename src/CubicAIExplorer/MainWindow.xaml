@@ -515,13 +515,40 @@
                                 Padding="2,2"
                                 Margin="2,0,0,0" />
                     </UniformGrid>
-                    <Border Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}">
+                    <TextBlock Margin="6,0,6,4"
+                               Text="{Binding BookmarkDragFeedbackText}"
+                               Visibility="{Binding HasBookmarkDragFeedback, Converter={StaticResource BoolToVisibility}}"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#4A5F77" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBookmarkDragFeedbackInvalid}" Value="True">
+                                        <Setter Property="Foreground" Value="#A12727" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Border Margin="4,0,4,4">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource ClassicPaneSurfaceStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBookmarkRootDropTarget}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#D39B1A" />
+                                        <Setter Property="Background" Value="#FFF8DD" />
+                                        <Setter Property="BorderThickness" Value="2" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <TreeView x:Name="BookmarkTree"
                                   ItemsSource="{Binding Bookmarks}"
                                   AllowDrop="True"
                                   PreviewMouseLeftButtonDown="BookmarkTree_PreviewMouseLeftButtonDown"
                                   MouseMove="BookmarkTree_MouseMove"
                                   DragOver="BookmarkTree_DragOver"
+                                  DragLeave="BookmarkTree_DragLeave"
                                   Drop="BookmarkTree_Drop"
                                   ContextMenuOpening="BookmarkTree_ContextMenuOpening"
                                   TabIndex="30">
@@ -562,6 +589,12 @@
                                             <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
                                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
                                         </Trigger>
+                                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                            <Setter Property="Background" Value="#FFF1BF" />
+                                            <Setter Property="BorderBrush" Value="#D39B1A" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TreeView.ItemContainerStyle>

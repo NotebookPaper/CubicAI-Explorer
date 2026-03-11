@@ -30,6 +30,12 @@ The app currently includes:
 - Implemented regex-based syntax highlighting for C#, XML, JSON, and Python.
 - Enhanced `UpdatePreview` to detect and route to rich previews for relevant extensions.
 
+### Bookmark drag/drop feedback and visual cues
+
+- added inline bookmark drag hint text so the sidebar explains folder, sibling, root, and invalid drops in plain language
+- highlighted active bookmark drop targets and the root bookmark surface during drag operations
+- centralized bookmark drop validation and added smoke coverage for drag-feedback state transitions
+
 ### Shell property exposure (IPropertyStore) for details and properties
 
 - Implemented `ShellPropertyHelper` using `SHGetPropertyStoreFromParsingName` and `IPropertyStore` for robust metadata retrieval.
@@ -140,7 +146,6 @@ Smoke coverage explicitly includes:
 ### 1. UX polish and advanced operations
 Status: PLANNED
 Scope:
-- improve bookmark drag/drop feedback and visual cues
 - add new-file templates support (parity with original CubicExplorer)
 
 ### 2. Deeper shell integration (continued)

@@ -19,5 +19,8 @@ public partial class BookmarkItem : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
+    [ObservableProperty]
+    private bool _isDropTarget;
+
     public ObservableCollection<BookmarkItem> Children { get; } = [];
 }

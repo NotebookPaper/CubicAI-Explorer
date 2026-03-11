@@ -138,6 +138,18 @@ public partial class MainViewModel : ObservableObject
     private bool _isSavedSearchesVisible = true;
 
     [ObservableProperty]
+    private string _bookmarkDragFeedbackText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasBookmarkDragFeedback;
+
+    [ObservableProperty]
+    private bool _isBookmarkDragFeedbackInvalid;
+
+    [ObservableProperty]
+    private bool _isBookmarkRootDropTarget;
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UpdateCurrentNamedSessionCommand))]
     private string _currentNamedSessionName = string.Empty;
 
@@ -1593,6 +1605,46 @@ public partial class MainViewModel : ObservableObject
         return false;
     }
 
+    public bool CanDropBookmark(BookmarkItem? source, BookmarkItem? target)
+    {
+        return source != null && target != source && !IsBookmarkDescendant(source, target);
+    }
+
+    public void UpdateBookmarkDragFeedback(BookmarkItem? source, BookmarkItem? target)
+    {
+        ClearBookmarkDropTargets();
+
+        if (source == null)
+        {
+            BookmarkDragFeedbackText = string.Empty;
+            HasBookmarkDragFeedback = false;
+            IsBookmarkDragFeedbackInvalid = false;
+            IsBookmarkRootDropTarget = false;
+            return;
+        }
+
+        var canDrop = CanDropBookmark(source, target);
+        HasBookmarkDragFeedback = true;
+        IsBookmarkDragFeedbackInvalid = !canDrop;
+        IsBookmarkRootDropTarget = canDrop && target == null;
+
+        if (target != null)
+            target.IsDropTarget = canDrop;
+
+        BookmarkDragFeedbackText = canDrop
+            ? BuildBookmarkDropHint(target)
+            : "Can't drop a bookmark onto itself or one of its children.";
+    }
+
+    public void ClearBookmarkDragFeedback()
+    {
+        ClearBookmarkDropTargets();
+        BookmarkDragFeedbackText = string.Empty;
+        HasBookmarkDragFeedback = false;
+        IsBookmarkDragFeedbackInvalid = false;
+        IsBookmarkRootDropTarget = false;
+    }
+
     public void MoveBookmark(BookmarkItem source, BookmarkItem? target)
     {
         if (source == null) return;
@@ -1650,6 +1702,46 @@ public partial class MainViewModel : ObservableObject
             if (parent != null) return parent;
         }
         return null;
+    }
+
+    private void ClearBookmarkDropTargets()
+    {
+        foreach (var bookmark in EnumerateBookmarks(Bookmarks))
+            bookmark.IsDropTarget = false;
+    }
+
+    private static IEnumerable<BookmarkItem> EnumerateBookmarks(IEnumerable<BookmarkItem> bookmarks)
+    {
+        foreach (var bookmark in bookmarks)
+        {
+            yield return bookmark;
+            foreach (var child in EnumerateBookmarks(bookmark.Children))
+                yield return child;
+        }
+    }
+
+    private static bool IsBookmarkDescendant(BookmarkItem parent, BookmarkItem? potentialDescendant)
+    {
+        if (potentialDescendant == null)
+            return false;
+
+        foreach (var child in parent.Children)
+        {
+            if (child == potentialDescendant || IsBookmarkDescendant(child, potentialDescendant))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string BuildBookmarkDropHint(BookmarkItem? target)
+    {
+        if (target == null)
+            return "Release to move the bookmark to the top level.";
+
+        return target.IsFolder
+            ? $"Release to move into '{target.Name}'."
+            : $"Release to move after '{target.Name}'.";
     }
 
     [RelayCommand]

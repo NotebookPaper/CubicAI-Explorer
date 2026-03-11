@@ -15,3 +15,4 @@
 - 2026-03-11: Unified RevealInExplorer with native shell APIs (SHOpenFolderAndSelectItems) and added ShowNativeProperties integration using ShellExecuteEx.
 - 2026-03-11: Completed spec 005 shell property exposure with IPropertyStore integration for Company, Version, Dimensions, and Duration columns and Properties dialog.
 - 2026-03-11: Completed spec 006 broader preview support with Markdown rendering and basic source code syntax highlighting.
+- 2026-03-11: Completed spec 007 bookmark drag feedback with inline drop hints, valid-target highlighting, root-drop cues, and smoke coverage.
