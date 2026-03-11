@@ -1,3 +1,4 @@
+using System.Windows.Documents;
 using System.Xml.Linq;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -85,6 +86,12 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasPreviewText;
+
+    [ObservableProperty]
+    private FlowDocument? _previewFlowDocument;
+
+    [ObservableProperty]
+    private bool _hasPreviewRichText;
 
     [ObservableProperty]
     private ImageSource? _previewImageSource;
@@ -2012,6 +2019,8 @@ public partial class MainViewModel : ObservableObject
         PreviewFileInfo = string.Empty;
         PreviewText = string.Empty;
         HasPreviewText = false;
+        PreviewFlowDocument = null;
+        HasPreviewRichText = false;
         PreviewImageSource = null;
         HasPreviewImage = false;
         PreviewStatusText = string.Empty;
@@ -2060,11 +2069,19 @@ public partial class MainViewModel : ObservableObject
         {
             if (item.Size > 1024 * 1024)
             {
-                PreviewStatusText = "Text preview is limited to files up to 1 MB.";
+                PreviewStatusText = "Preview is limited to files up to 1 MB.";
                 HasPreviewStatus = true;
                 return;
             }
-            LoadTextPreviewAsync(item.FullPath, generation);
+
+            if (ext == ".md" || IsCodeExtension(ext))
+            {
+                LoadRichPreviewAsync(item.FullPath, generation);
+            }
+            else
+            {
+                LoadTextPreviewAsync(item.FullPath, generation);
+            }
         }
         else if (item.Size <= 4 * 1024)
         {
@@ -2075,6 +2092,164 @@ public partial class MainViewModel : ObservableObject
             ShowFileMetadata(item.FullPath);
         }
     }
+
+    private async void LoadRichPreviewAsync(string path, int generation)
+    {
+        try
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var doc = await Task.Run(() =>
+            {
+                if (ext == ".md")
+                    return RenderMarkdown(path);
+                else
+                    return RenderSourceCode(path, ext);
+            });
+
+            if (_previewGeneration != generation) return;
+
+            PreviewFlowDocument = doc;
+            HasPreviewRichText = true;
+            PreviewStatusText = BuildRichPreviewStatus(path, ext);
+            HasPreviewStatus = true;
+        }
+        catch
+        {
+            if (_previewGeneration != generation) return;
+            LoadTextPreviewAsync(path, generation);
+        }
+    }
+
+    private FlowDocument RenderMarkdown(string path)
+    {
+        var doc = new FlowDocument
+        {
+            FontFamily = new FontFamily("Segoe UI"),
+            FontSize = 12,
+            PagePadding = new Thickness(10)
+        };
+
+        var lines = File.ReadLines(path).Take(500); // Performance limit
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                doc.Blocks.Add(new Paragraph(new Run(" ")));
+                continue;
+            }
+
+            var p = new Paragraph();
+
+            // Headers
+            if (line.StartsWith("### "))
+            {
+                p.Inlines.Add(new Run(line[4..]) { FontWeight = FontWeights.Bold, FontSize = 14 });
+                doc.Blocks.Add(p);
+                continue;
+            }
+            if (line.StartsWith("## "))
+            {
+                p.Inlines.Add(new Run(line[3..]) { FontWeight = FontWeights.Bold, FontSize = 16 });
+                doc.Blocks.Add(p);
+                continue;
+            }
+            if (line.StartsWith("# "))
+            {
+                p.Inlines.Add(new Run(line[2..]) { FontWeight = FontWeights.Bold, FontSize = 18 });
+                doc.Blocks.Add(p);
+                continue;
+            }
+
+            // Simple bold/italic and lists
+            var text = line;
+            if (text.StartsWith("- ") || text.StartsWith("* "))
+            {
+                p.Margin = new Thickness(10, 0, 0, 0);
+                text = "• " + text[2..];
+            }
+
+            // Handle basic bold **text**
+            var parts = text.Split("**");
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (i % 2 == 1)
+                    p.Inlines.Add(new Run(parts[i]) { FontWeight = FontWeights.Bold });
+                else
+                    p.Inlines.Add(new Run(parts[i]));
+            }
+
+            doc.Blocks.Add(p);
+        }
+
+        return doc;
+    }
+
+    private FlowDocument RenderSourceCode(string path, string ext)
+    {
+        var doc = new FlowDocument
+        {
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 11,
+            PagePadding = new Thickness(10),
+            Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
+        };
+
+        var content = File.ReadAllText(path);
+        if (content.Length > 64 * 1024) content = content[..(64 * 1024)] + "\n... (truncated)";
+
+        var p = new Paragraph();
+        
+        // Very basic regex-based syntax highlighting for common keywords
+        string keywordPattern;
+        if (ext == ".xml" || ext == ".xaml" || ext == ".csproj")
+            keywordPattern = @"(</?[\w:]+)|([\w:]+=)|("".*?"")|<!--.*?-->";
+        else if (ext == ".json")
+            keywordPattern = @"("".*?""\s*:)|("".*?"")|([-+]?\d*\.?\d+)|(true|false|null)";
+        else // C#, Python, etc.
+            keywordPattern = @"\b(public|private|protected|internal|class|struct|interface|enum|static|void|string|int|var|if|else|for|foreach|while|return|using|namespace|import|def|async|await)\b|(""[^""]*"")|(\/\/.*)|(#.*)";
+
+        var regex = new System.Text.RegularExpressions.Regex(keywordPattern);
+        int lastIndex = 0;
+
+        foreach (System.Text.RegularExpressions.Match match in regex.Matches(content))
+        {
+            // Normal text before match
+            if (match.Index > lastIndex)
+                p.Inlines.Add(new Run(content[lastIndex..match.Index]));
+
+            var run = new Run(match.Value);
+            if (match.Value.StartsWith("\"") || (match.Value.Contains("\"") && ext == ".json"))
+                run.Foreground = Brushes.Brown;
+            else if (match.Value.StartsWith("//") || match.Value.StartsWith("#") || (match.Value.StartsWith("<!--") && match.Value.EndsWith("-->")))
+                run.Foreground = Brushes.Green;
+            else if (ext == ".xml" || ext == ".xaml" || ext == ".csproj")
+            {
+                if (match.Value.StartsWith("<")) run.Foreground = Brushes.Blue;
+                else run.Foreground = Brushes.DarkRed; // Attribute names
+            }
+            else
+                run.Foreground = Brushes.Blue;
+
+            p.Inlines.Add(run);
+            lastIndex = match.Index + match.Length;
+        }
+
+        if (lastIndex < content.Length)
+            p.Inlines.Add(new Run(content[lastIndex..]));
+
+        doc.Blocks.Add(p);
+        return doc;
+    }
+
+    private string BuildRichPreviewStatus(string path, string ext)
+    {
+        var kind = ext == ".md" ? "Markdown document" : "Source code";
+        return $"{kind}\n\n{GetBasicFileMetadata(path)}";
+    }
+
+    private static bool IsCodeExtension(string ext) => ext is
+        ".cs" or ".xaml" or ".csproj" or ".xml" or ".json" or ".py" or
+        ".js" or ".ts" or ".cpp" or ".h" or ".java" or ".rs" or ".py" or ".sh" or ".ps1" or ".sql";
 
     private async void LoadImagePreviewAsync(string path, int generation)
     {

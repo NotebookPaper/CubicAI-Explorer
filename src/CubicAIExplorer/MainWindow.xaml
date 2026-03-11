@@ -998,6 +998,14 @@
                                    Stretch="Uniform" MaxHeight="400"
                                    Margin="4" RenderOptions.BitmapScalingMode="HighQuality"
                                    Visibility="{Binding HasPreviewImage, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- Rich Text preview (Markdown / Source) -->
+                            <FlowDocumentScrollViewer Document="{Binding PreviewFlowDocument}"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Auto"
+                                                      BorderThickness="0" Background="Transparent"
+                                                      Padding="0"
+                                                      Visibility="{Binding HasPreviewRichText, Converter={StaticResource BoolToVisibility}}" />
+
                             <!-- Text preview -->
                             <ScrollViewer VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"

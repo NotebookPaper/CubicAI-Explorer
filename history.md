@@ -14,3 +14,4 @@
 - 2026-03-11: Completed REAL Windows Shell context menu integration for file lists, including a preference toggle and native interop for IContextMenu.
 - 2026-03-11: Unified RevealInExplorer with native shell APIs (SHOpenFolderAndSelectItems) and added ShowNativeProperties integration using ShellExecuteEx.
 - 2026-03-11: Completed spec 005 shell property exposure with IPropertyStore integration for Company, Version, Dimensions, and Duration columns and Properties dialog.
+- 2026-03-11: Completed spec 006 broader preview support with Markdown rendering and basic source code syntax highlighting.

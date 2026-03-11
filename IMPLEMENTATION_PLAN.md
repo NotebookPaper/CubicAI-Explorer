@@ -23,6 +23,13 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Broader preview support (Markdown and Syntax Highlighting)
+
+- Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
+- Implemented a dependency-free Markdown renderer for bold, headers, and lists.
+- Implemented regex-based syntax highlighting for C#, XML, JSON, and Python.
+- Enhanced `UpdatePreview` to detect and route to rich previews for relevant extensions.
+
 ### Shell property exposure (IPropertyStore) for details and properties
 
 - Implemented `ShellPropertyHelper` using `SHGetPropertyStoreFromParsingName` and `IPropertyStore` for robust metadata retrieval.
@@ -133,7 +140,6 @@ Smoke coverage explicitly includes:
 ### 1. UX polish and advanced operations
 Status: PLANNED
 Scope:
-- broader preview type support (e.g., syntax highlighting for code, Markdown rendering)
 - improve bookmark drag/drop feedback and visual cues
 - add new-file templates support (parity with original CubicExplorer)
 

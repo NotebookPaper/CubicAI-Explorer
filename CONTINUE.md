@@ -2,21 +2,27 @@
 
 > Last updated: 2026-03-11
 > Branch: `master`
-> HEAD: current local `master` after Spec 005
-> Status: Shell property exposure (IPropertyStore) for details columns and Properties dialog is implemented and verified.
+> HEAD: current local `master` after Spec 006
+> Status: Broader preview support (Markdown, Syntax Highlighting) is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Status
 
 - Local `master` contains the latest verified roadmap slices in this checkout.
-- The branch builds and the smoke harness passes (with Spec 005 coverage).
-- Specs `001`, `002`, `003`, `004`, and `005` are complete in this checkout.
+- The branch builds and the smoke harness passes (with Spec 006 coverage).
+- Specs `001`, `002`, `003`, `004`, `005`, and `006` are complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders (`.claude/`, `.cursor/`, `.specify/`, `completion_log/`, `obj_verify/`, helper scripts).
 
 ## Completed
 
-- **Spec 005: Shell Property Exposure** (New in this session)
+- **Spec 006: Broader Preview Support** (New in this session)
+  - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
+  - Implemented a dependency-free Markdown renderer for bold, headers, and lists.
+  - Implemented regex-based syntax highlighting for C#, XML, JSON, and Python.
+  - Enhanced `UpdatePreview` to detect and route to rich previews for relevant extensions.
+  - Updated smoke tests to verify rich preview properties and rendering.
+- **Spec 005: Shell Property Exposure**
   - Implemented `ShellPropertyHelper` using `SHGetPropertyStoreFromParsingName` and `IPropertyStore` for robust metadata retrieval.
   - Added "Company", "Version", "Dimensions", and "Duration" columns to the Details view.
   - Updated `MainWindow` and `MainViewModel` to handle these new columns (toggling, sorting, persistence).
@@ -37,7 +43,6 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 ## Next Steps
 
 1. UX polish and advanced operations:
-   - add broader preview type support (e.g., syntax highlighting for code, Markdown rendering)
    - improve bookmark drag/drop feedback and visual cues
    - add new-file templates support (parity with original CubicExplorer)
 2. Deeper shell integration (continued):
@@ -49,19 +54,17 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Key Files
 
+- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
+- `src/CubicAIExplorer/MainWindow.xaml`
+- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 - `src/CubicAIExplorer/Services/ShellPropertyHelper.cs`
 - `src/CubicAIExplorer/Services/FileSystemService.cs`
-- `src/CubicAIExplorer/Models/FileSystemItem.cs`
-- `src/CubicAIExplorer/Models/ShellProperties.cs`
-- `src/CubicAIExplorer/Views/PropertiesDialog.xaml.cs`
-- `src/CubicAIExplorer/ViewModels/MainViewModel.cs`
-- `tests/CubicAIExplorer.SmokeTests/Program.cs`
 
 ## Worktree
 
 Tracked worktree state:
 
-- Shell property exposure, context menu integration, and reveal-with-selection behavior are local and uncommitted.
+- Broader preview support, shell property exposure, context menu integration, and reveal-with-selection behavior are local and uncommitted.
 - planning/history/spec docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
@@ -73,10 +76,11 @@ Verification run on the updated checkout on 2026-03-11:
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all 85+ tests pass, including shell properties)
+  - passed (all 88+ tests pass, including rich preview support)
 
 ## Gotchas
 
+- **FlowDocument Performance**: For preview purposes, we limit Markdown rendering to the first 500 lines and source code highlighting to the first 64 KB to maintain UI responsiveness.
 - **PROPVARIANT Size**: On 64-bit, the `PROPVARIANT` structure must be at least 24 bytes. My implementation uses `IntPtr` and `Marshal.AllocCoTaskMem(24)` for safety.
 - **IShellItem2 Vtable**: When defining `IShellItem2`, ensure all methods are in the correct order (including the 3 methods between `GetPropertyStore` and `GetProperty`).
 - **Smoke Test App State**: Creating a WPF `App` instance in a smoke test can have side effects on subsequent tests. Move app-dependent tests to the end if possible.

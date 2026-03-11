@@ -79,8 +79,10 @@ internal static class Program
             Run("active pane status labels", failures, () => TestActivePaneStatusLabels(tempRoot));
             Run("current pane navigation routing", failures, () => TestCurrentPaneNavigationRouting(tempRoot));
             Run("current pane navigation sources", failures, () => TestCurrentPaneNavigationSources(tempRoot));
-            Run("preview properties", failures, () => TestPreviewProperties(tempRoot));
+            Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
+            Run("rich preview support", failures, () => TestRichPreviewSupport(tempRoot));
             Run("image preview metadata", failures, () => TestImagePreviewMetadata(tempRoot));
+
             Run("archive preview metadata", failures, () => TestArchivePreviewMetadata(tempRoot));
             Run("preview refresh on tab switch", failures, () => TestPreviewRefreshOnTabSwitch(tempRoot));
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
@@ -922,6 +924,38 @@ internal static class Program
         // If it's empty, it should have one child (the italic "No additional details" message)
         Assert(detailsStack!.Children.Count > 0, "DetailsStack should be populated.");
         dialog.Close();
+    }
+
+    private static void TestRichPreviewSupport(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "rich_preview");
+        var mdFile = Path.Combine(folder, "test.md");
+        var csFile = Path.Combine(folder, "test.cs");
+        File.WriteAllText(mdFile, "# Header\n**bold** and - list");
+        File.WriteAllText(csFile, "public class Test { // comment\n}");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+        vm.TogglePreviewCommand.Execute(null);
+
+        // Test Markdown
+        var mdItem = vm.ActiveTab!.FileList.Items.Single(i => i.Name == "test.md");
+        vm.ActiveTab.FileList.SelectedItem = mdItem;
+        WaitFor(() => vm.HasPreviewRichText && vm.HasPreviewStatus);
+        Assert(vm.HasPreviewRichText, "Markdown files should produce rich preview content.");
+        Assert(vm.PreviewStatusText.Contains("Markdown document"), "Markdown status should be correct.");
+        Assert(vm.PreviewFlowDocument != null, "Markdown should produce a FlowDocument.");
+
+        // Test Code
+        var csItem = vm.ActiveTab.FileList.Items.Single(i => i.Name == "test.cs");
+        vm.ActiveTab.FileList.SelectedItem = csItem;
+        WaitFor(() => vm.HasPreviewRichText && vm.HasPreviewStatus);
+        Assert(vm.HasPreviewRichText, "C# files should produce rich preview content.");
+        Assert(vm.PreviewStatusText.Contains("Source code"), "C# status should be correct.");
+        Assert(vm.PreviewFlowDocument != null, "C# should produce a FlowDocument.");
     }
 
     private static void TestDuplicateTab(string root)
