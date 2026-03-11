@@ -1309,6 +1309,14 @@ public partial class MainWindow : Window
         PopulateStartupSessionMenu();
     }
 
+    private void LayoutsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, e.OriginalSource))
+            return;
+
+        PopulateLayoutsMenu();
+    }
+
     private void SaveCurrentSessionAs_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new NewFolderDialog
@@ -1460,6 +1468,138 @@ public partial class MainWindow : Window
         if (sender is MenuItem { Tag: TabViewModel tab })
         {
             ViewModel.DuplicateTab(tab);
+        }
+    }
+
+    private void SaveCurrentLayoutAs_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new NewFolderDialog
+        {
+            Title = "Save Layout As",
+            Message = "Enter layout name:"
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var layoutName = dialog.FolderName.Trim();
+        if (string.IsNullOrWhiteSpace(layoutName))
+        {
+            MessageBox.Show(
+                "Layout name cannot be empty.",
+                "Layout Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var existing = ViewModel.WindowLayouts.Any(layout =>
+            string.Equals(layout.Name, layoutName, StringComparison.OrdinalIgnoreCase));
+        var overwriteExisting = false;
+
+        if (existing)
+        {
+            overwriteExisting = MessageBox.Show(
+                $"Overwrite the existing layout '{layoutName}'?",
+                "Layout Manager",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+            if (!overwriteExisting)
+                return;
+        }
+
+        if (!ViewModel.SaveWindowLayout(layoutName, overwriteExisting))
+        {
+            MessageBox.Show(
+                "Unable to save the layout.",
+                "Layout Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void ManageLayouts_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ManageLayoutsDialog(
+            ViewModel.WindowLayouts.Select(static layout => new WindowLayout
+            {
+                Name = layout.Name,
+                SidebarWidth = layout.SidebarWidth,
+                PreviewWidth = layout.PreviewWidth,
+                IsDualPaneMode = layout.IsDualPaneMode,
+                IsPreviewVisible = layout.IsPreviewVisible,
+                ShowDrives = layout.ShowDrives,
+                ShowRecentFolders = layout.ShowRecentFolders,
+                ShowBookmarks = layout.ShowBookmarks,
+                ShowBookmarksBar = layout.ShowBookmarksBar,
+                ShowSavedSearches = layout.ShowSavedSearches,
+                ViewMode = layout.ViewMode
+            }),
+            ViewModel.CurrentWindowLayoutName,
+            layoutName =>
+            {
+                if (!ViewModel.ApplyWindowLayout(layoutName))
+                {
+                    MessageBox.Show(
+                        $"Unable to apply layout '{layoutName}'.",
+                        "Layout Manager",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            },
+            layoutName =>
+            {
+                var confirmed = MessageBox.Show(
+                    $"Delete layout '{layoutName}'?",
+                    "Layout Manager",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                return confirmed == MessageBoxResult.Yes && ViewModel.DeleteWindowLayout(layoutName);
+            })
+        {
+            Owner = this
+        };
+
+        dialog.ShowDialog();
+    }
+
+    private void PopulateLayoutsMenu()
+    {
+        while (LayoutsMenuItem.Items.Count > 3)
+            LayoutsMenuItem.Items.RemoveAt(LayoutsMenuItem.Items.Count - 1);
+
+        if (ViewModel.WindowLayouts.Count == 0)
+        {
+            LayoutsMenuItem.Items.Add(new MenuItem
+            {
+                Header = "No Saved Layouts",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        foreach (var layout in ViewModel.WindowLayouts)
+        {
+            var layoutName = layout.Name;
+            var item = new MenuItem
+            {
+                Header = layoutName,
+                IsCheckable = true,
+                IsChecked = string.Equals(ViewModel.CurrentWindowLayoutName, layoutName, StringComparison.OrdinalIgnoreCase)
+            };
+            item.Click += (_, _) =>
+            {
+                if (!ViewModel.ApplyWindowLayout(layoutName))
+                {
+                    MessageBox.Show(
+                        $"Unable to apply layout '{layoutName}'.",
+                        "Layout Manager",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            };
+            LayoutsMenuItem.Items.Add(item);
         }
     }
 
@@ -1688,6 +1828,10 @@ public partial class MainWindow : Window
         else if (e.PropertyName == nameof(MainViewModel.DetailsColumnSettings))
         {
             ApplyDetailsLayoutToBothPanes();
+        }
+        else if (e.PropertyName == nameof(MainViewModel.PreviewWidth))
+        {
+            UpdatePreviewPanelWidth();
         }
 
         if (e.PropertyName == nameof(MainViewModel.IsRightPaneActive)
@@ -2396,7 +2540,23 @@ public partial class MainWindow : Window
     {
         var enabled = _boundViewModel?.IsPreviewVisible == true;
         PreviewSplitterCol.Width = enabled ? GridLength.Auto : new GridLength(0);
-        PreviewCol.Width = enabled ? new GridLength(280) : new GridLength(0);
+        UpdatePreviewPanelWidth();
+    }
+
+    private void UpdatePreviewPanelWidth()
+    {
+        var enabled = _boundViewModel?.IsPreviewVisible == true;
+        PreviewCol.Width = enabled
+            ? new GridLength(Math.Max(180, _boundViewModel?.PreviewWidth ?? 280))
+            : new GridLength(0);
+    }
+
+    private void PreviewGridSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (_boundViewModel == null || !_boundViewModel.IsPreviewVisible)
+            return;
+
+        _boundViewModel.PreviewWidth = Math.Max(180, PreviewCol.ActualWidth);
     }
 
     private void ViewModel_OpenPreferencesRequested(object? sender, EventArgs e)

@@ -156,11 +156,15 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(UpdateCurrentNamedSessionCommand))]
     private string _currentNamedSessionName = string.Empty;
 
+    [ObservableProperty]
+    private string _currentWindowLayoutName = string.Empty;
+
     public ObservableCollection<TabViewModel> Tabs { get; } = [];
     public ObservableCollection<FileSystemItem> Drives { get; } = [];
     public ObservableCollection<FolderTreeNodeViewModel> FolderTreeRoots { get; } = [];
     public ObservableCollection<BookmarkItem> Bookmarks { get; } = [];
     public ObservableCollection<NamedSession> NamedSessions { get; } = [];
+    public ObservableCollection<WindowLayout> WindowLayouts { get; } = [];
     public ObservableCollection<BreadcrumbSegment> BreadcrumbSegments { get; } = [];
     public ObservableCollection<RecentFolderItem> RecentFolders { get; } = [];
     public ObservableCollection<SavedSearchItem> SavedSearches { get; } = [];
@@ -235,6 +239,7 @@ public partial class MainViewModel : ObservableObject
         _sidebarWidth = _userSettings.SidebarWidth;
         _previewWidth = _userSettings.PreviewWidth;
         RefreshNamedSessionsFromSettings();
+        RefreshWindowLayoutsFromSettings();
 
         _fileOperationQueueService.PropertyChanged += OnFileOperationQueuePropertyChanged;
 
@@ -307,6 +312,7 @@ public partial class MainViewModel : ObservableObject
             _userSettings.OpenTabs = newSettings.OpenTabs ?? [];
             _userSettings.OpenTabItems = GetPersistedTabItems(newSettings.OpenTabItems, newSettings.OpenTabs);
             _userSettings.NamedSessions = newSettings.NamedSessions ?? [];
+            _userSettings.WindowLayouts = newSettings.WindowLayouts ?? [];
             _userSettings.StartupSessionName = newSettings.StartupSessionName ?? string.Empty;
             _userSettings.NewFileTemplatesPath = NormalizeNewFileTemplatesPath(newSettings.NewFileTemplatesPath);
             _userSettings.FilterMatchMode = newSettings.FilterMatchMode;
@@ -316,12 +322,18 @@ public partial class MainViewModel : ObservableObject
             _userSettings.DetailsColumns = CloneDetailsColumnSettings(newSettings.DetailsColumns);
             RefreshNewFileTemplatesCatalog();
             RefreshNamedSessionsFromSettings();
+            RefreshWindowLayoutsFromSettings();
             ApplyFilterPreferencesToAllTabs();
             OnPropertyChanged(nameof(DetailsColumnSettings));
             if (!string.IsNullOrWhiteSpace(CurrentNamedSessionName)
                 && FindNamedSession(CurrentNamedSessionName) == null)
             {
                 CurrentNamedSessionName = string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(CurrentWindowLayoutName)
+                && FindWindowLayout(CurrentWindowLayoutName) == null)
+            {
+                CurrentWindowLayoutName = string.Empty;
             }
         });
     }
@@ -359,6 +371,9 @@ public partial class MainViewModel : ObservableObject
     private static string NormalizeSessionName(string? rawName)
         => rawName?.Trim() ?? string.Empty;
 
+    private static string NormalizeLayoutName(string? rawName)
+        => rawName?.Trim() ?? string.Empty;
+
     private static string NormalizeNewFileTemplatesPath(string? rawPath)
     {
         var path = rawPath?.Trim();
@@ -382,6 +397,46 @@ public partial class MainViewModel : ObservableObject
             ActiveTabIndex = session.ActiveTabIndex,
             RightPanePath = session.RightPanePath ?? string.Empty,
             IsDualPaneMode = session.IsDualPaneMode
+        };
+    }
+
+    private void RefreshWindowLayoutsFromSettings()
+    {
+        WindowLayouts.Clear();
+        foreach (var layout in (_userSettings.WindowLayouts ?? [])
+                     .Select(CloneWindowLayout)
+                     .Where(static layout => !string.IsNullOrWhiteSpace(layout.Name))
+                     .OrderBy(static layout => layout.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            WindowLayouts.Add(layout);
+        }
+    }
+
+    private WindowLayout? FindWindowLayout(string? rawName)
+    {
+        var name = NormalizeLayoutName(rawName);
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        return WindowLayouts.FirstOrDefault(layout =>
+            string.Equals(layout.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static WindowLayout CloneWindowLayout(WindowLayout layout)
+    {
+        return new WindowLayout
+        {
+            Name = NormalizeLayoutName(layout.Name),
+            SidebarWidth = layout.SidebarWidth,
+            PreviewWidth = layout.PreviewWidth,
+            IsDualPaneMode = layout.IsDualPaneMode,
+            IsPreviewVisible = layout.IsPreviewVisible,
+            ShowDrives = layout.ShowDrives,
+            ShowRecentFolders = layout.ShowRecentFolders,
+            ShowBookmarks = layout.ShowBookmarks,
+            ShowBookmarksBar = layout.ShowBookmarksBar,
+            ShowSavedSearches = layout.ShowSavedSearches,
+            ViewMode = NormalizeLayoutViewMode(layout.ViewMode)
         };
     }
 
@@ -583,6 +638,120 @@ public partial class MainViewModel : ObservableObject
         NamedSessions.Clear();
         foreach (var session in ordered)
             NamedSessions.Add(session);
+    }
+
+    private static string NormalizeLayoutViewMode(string? rawMode)
+        => rawMode is "List" or "Tiles" ? rawMode : "Details";
+
+    private WindowLayout CaptureCurrentLayout(string layoutName)
+    {
+        return new WindowLayout
+        {
+            Name = NormalizeLayoutName(layoutName),
+            SidebarWidth = Math.Max(150, SidebarWidth),
+            PreviewWidth = Math.Max(180, PreviewWidth),
+            IsDualPaneMode = IsDualPaneMode,
+            IsPreviewVisible = IsPreviewVisible,
+            ShowDrives = IsDrivesVisible,
+            ShowRecentFolders = IsRecentFoldersVisible,
+            ShowBookmarks = IsBookmarksVisible,
+            ShowBookmarksBar = IsBookmarksBarVisible,
+            ShowSavedSearches = IsSavedSearchesVisible,
+            ViewMode = NormalizeLayoutViewMode(CurrentPaneFileList?.ViewMode ?? _userSettings.DefaultViewMode)
+        };
+    }
+
+    public bool SaveWindowLayout(string rawName, bool overwriteExisting)
+    {
+        var layoutName = NormalizeLayoutName(rawName);
+        if (string.IsNullOrWhiteSpace(layoutName))
+            return false;
+
+        var layout = CaptureCurrentLayout(layoutName);
+        var existing = FindWindowLayout(layoutName);
+        if (existing != null && !overwriteExisting)
+            return false;
+
+        if (existing != null)
+        {
+            var existingIndex = WindowLayouts.IndexOf(existing);
+            WindowLayouts[existingIndex] = layout;
+        }
+        else
+        {
+            WindowLayouts.Add(layout);
+        }
+
+        ReorderWindowLayouts();
+        CurrentWindowLayoutName = layoutName;
+        SaveSettings();
+        return true;
+    }
+
+    public bool ApplyWindowLayout(string rawName)
+    {
+        var layout = FindWindowLayout(rawName);
+        if (layout == null)
+            return false;
+
+        ApplyWindowLayout(layout);
+        return true;
+    }
+
+    public bool DeleteWindowLayout(string rawName)
+    {
+        var layout = FindWindowLayout(rawName);
+        if (layout == null)
+            return false;
+
+        WindowLayouts.Remove(layout);
+        if (string.Equals(CurrentWindowLayoutName, layout.Name, StringComparison.OrdinalIgnoreCase))
+            CurrentWindowLayoutName = string.Empty;
+
+        SaveSettings();
+        return true;
+    }
+
+    private void ApplyWindowLayout(WindowLayout layout)
+    {
+        var normalizedViewMode = NormalizeLayoutViewMode(layout.ViewMode);
+
+        IsDrivesVisible = layout.ShowDrives;
+        IsRecentFoldersVisible = layout.ShowRecentFolders;
+        IsBookmarksVisible = layout.ShowBookmarks;
+        IsBookmarksBarVisible = layout.ShowBookmarksBar;
+        IsSavedSearchesVisible = layout.ShowSavedSearches;
+        SidebarWidth = Math.Max(150, layout.SidebarWidth);
+        PreviewWidth = Math.Max(180, layout.PreviewWidth);
+
+        if (IsDualPaneMode != layout.IsDualPaneMode)
+            ToggleDualPane();
+
+        if (IsPreviewVisible != layout.IsPreviewVisible)
+            TogglePreview();
+
+        foreach (var tab in Tabs)
+            tab.FileList.ViewMode = normalizedViewMode;
+
+        if (_rightPaneTab != null)
+            _rightPaneTab.FileList.ViewMode = normalizedViewMode;
+
+        _userSettings.DefaultViewMode = normalizedViewMode;
+        CurrentWindowLayoutName = layout.Name;
+        RefreshCurrentPaneState();
+        SaveSettings();
+    }
+
+    private void ReorderWindowLayouts()
+    {
+        var ordered = WindowLayouts
+            .OrderBy(static layout => layout.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CloneWindowLayout)
+            .ToList();
+
+        WindowLayouts.Clear();
+        foreach (var layout in ordered)
+            WindowLayouts.Add(layout);
     }
 
     public void ActivateLeftPane() => IsRightPaneActive = false;
@@ -3609,6 +3778,7 @@ public partial class MainViewModel : ObservableObject
         }
         _userSettings.RightPanePath = _rightPaneTab?.CurrentPath ?? string.Empty;
         _userSettings.NamedSessions = NamedSessions.Select(CloneNamedSession).ToList();
+        _userSettings.WindowLayouts = WindowLayouts.Select(CloneWindowLayout).ToList();
         _userSettings.FilterHistory = GetFilterHistorySnapshot();
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(_userSettings.DetailsColumns);
         _settingsService?.Save(_userSettings);

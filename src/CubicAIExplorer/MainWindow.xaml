@@ -140,6 +140,12 @@
                 <MenuItem Header="_Search in Folder..." InputGestureText="Ctrl+E"
                           Command="{Binding SearchInFolderCommand}" />
                 <Separator />
+                <MenuItem x:Name="LayoutsMenuItem" Header="_Layouts" SubmenuOpened="LayoutsMenu_SubmenuOpened">
+                    <MenuItem Header="_Save Layout As..." Click="SaveCurrentLayoutAs_Click" />
+                    <MenuItem Header="_Manage Layouts..." Click="ManageLayouts_Click" />
+                    <Separator />
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="Dual _Pane" InputGestureText="F6" IsCheckable="True"
                           IsChecked="{Binding IsDualPaneMode}"
                           Command="{Binding ToggleDualPaneCommand}" />
@@ -1276,7 +1282,9 @@
                     </Grid>
 
                     <!-- Preview Splitter -->
-                    <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Center"
+                    <GridSplitter x:Name="PreviewGridSplitter"
+                                  Grid.Column="3" Width="4" HorizontalAlignment="Center"
+                                  DragCompleted="PreviewGridSplitter_DragCompleted"
                                   VerticalAlignment="Stretch" Background="#96B3D8" />
 
                     <!-- Preview Panel -->

@@ -111,6 +111,8 @@ internal static class Program
             Run("named session load", failures, () => TestNamedSessionLoad(tempRoot));
             Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
             Run("named session startup selection", failures, () => TestNamedSessionStartupSelection(tempRoot));
+            Run("window layout save + apply", failures, () => TestWindowLayoutSaveAndApply(tempRoot));
+            Run("window layout delete", failures, () => TestWindowLayoutDelete(tempRoot));
             Run("replace file failure", failures, () => TestReplaceFileFailure(tempRoot));
             Run("copy replace directory failure", failures, () => TestCopyReplaceDirectoryFailure(tempRoot));
             Run("duplicate item", failures, () => TestDuplicateItem(tempRoot));
@@ -129,6 +131,7 @@ internal static class Program
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
             Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
             Run("main window xaml loads", failures, TestMainWindowXamlLoads);
+            Run("manage layouts dialog loads", failures, TestManageLayoutsDialogLoads);
             Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
             Run("app icon configuration", failures, TestAppIconConfiguration);
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
@@ -2272,6 +2275,7 @@ internal static class Program
         Assert(settings.ShowBookmarksBar, "Bookmarks bar should be visible by default.");
         Assert(settings.FilterHistory.Count == 0, "Filter history should default to empty.");
         Assert(settings.DetailsColumns.Count == 0, "Column settings should default to empty so the app can supply defaults.");
+        Assert(settings.WindowLayouts.Count == 0, "Window layouts should default to empty.");
     }
 
     private static void TestSettingsServiceRoundTrip(string root)
@@ -2313,6 +2317,23 @@ internal static class Program
                     }
                 ]
                 ,
+                WindowLayouts =
+                [
+                    new WindowLayout
+                    {
+                        Name = "Preview Mode",
+                        SidebarWidth = 320,
+                        PreviewWidth = 420,
+                        IsDualPaneMode = true,
+                        IsPreviewVisible = true,
+                        ShowDrives = false,
+                        ShowRecentFolders = true,
+                        ShowBookmarks = true,
+                        ShowBookmarksBar = false,
+                        ShowSavedSearches = false,
+                        ViewMode = "Tiles"
+                    }
+                ],
                 DetailsColumns =
                 [
                     new DetailsColumnSetting
@@ -2350,6 +2371,9 @@ internal static class Program
             Assert(reloaded.StartupSessionName == "Morning", "Settings round-trip should persist startup session.");
             Assert(reloaded.NamedSessions.Count == 1, "Settings round-trip should persist named sessions.");
             Assert(reloaded.NamedSessions[0].IsDualPaneMode, "Settings round-trip should persist dual-pane session state.");
+            Assert(reloaded.WindowLayouts.Count == 1, "Settings round-trip should persist window layouts.");
+            Assert(reloaded.WindowLayouts[0].IsPreviewVisible, "Settings round-trip should persist layout preview visibility.");
+            Assert(reloaded.WindowLayouts[0].ViewMode == "Tiles", "Settings round-trip should persist layout view mode.");
             Assert(reloaded.DetailsColumns.Count == 2, "Settings round-trip should persist details column settings.");
             Assert(reloaded.DetailsColumns.Any(c => c.ColumnId == DetailsColumnId.Name && c.Width == 420),
                 "Settings round-trip should preserve details column widths.");
@@ -2801,6 +2825,107 @@ internal static class Program
             "Startup session selection should restore the right pane path.");
     }
 
+    private static void TestWindowLayoutSaveAndApply(string root)
+    {
+        var settingsPath = Path.Combine(root, "window_layout_save.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var fs = new FileSystemService();
+            var clipboard = new FakeClipboardService();
+            using var service = new SettingsService();
+            var left = CreateCleanSubdir(root, "layout_left");
+            var right = CreateCleanSubdir(root, "layout_right");
+
+            var vm = new MainViewModel(fs, clipboard, service, service.Load());
+            vm.NavigateToPath(left);
+            vm.ToggleDualPaneCommand.Execute(null);
+            vm.ActivateRightPane();
+            vm.NavigateCurrentPaneToPath(right);
+            vm.ActivateLeftPane();
+            vm.TogglePreviewCommand.Execute(null);
+            vm.IsDrivesVisible = false;
+            vm.IsRecentFoldersVisible = false;
+            vm.IsBookmarksVisible = true;
+            vm.IsBookmarksBarVisible = false;
+            vm.IsSavedSearchesVisible = false;
+            vm.SidebarWidth = 310;
+            vm.PreviewWidth = 420;
+            vm.CurrentPaneFileList!.ViewMode = "Tiles";
+
+            Assert(vm.SaveWindowLayout("Preview Mode", overwriteExisting: false), "Saving a window layout should succeed.");
+            Assert(File.Exists(settingsPath), "Saving a window layout should persist settings.");
+
+            vm.IsDrivesVisible = true;
+            vm.IsRecentFoldersVisible = true;
+            vm.IsBookmarksVisible = false;
+            vm.IsBookmarksBarVisible = true;
+            vm.IsSavedSearchesVisible = true;
+            vm.SidebarWidth = 250;
+            vm.PreviewWidth = 220;
+            vm.CurrentPaneFileList.ViewMode = "Details";
+            vm.TogglePreviewCommand.Execute(null);
+            vm.ToggleDualPaneCommand.Execute(null);
+
+            Assert(vm.ApplyWindowLayout("Preview Mode"), "Applying a saved layout should succeed.");
+            Assert(vm.IsDualPaneMode, "Applying a saved layout should restore dual-pane mode.");
+            Assert(vm.IsPreviewVisible, "Applying a saved layout should restore preview visibility.");
+            Assert(!vm.IsDrivesVisible, "Applying a saved layout should restore drives visibility.");
+            Assert(!vm.IsRecentFoldersVisible, "Applying a saved layout should restore recent-folders visibility.");
+            Assert(vm.IsBookmarksVisible, "Applying a saved layout should restore bookmarks visibility.");
+            Assert(!vm.IsBookmarksBarVisible, "Applying a saved layout should restore bookmarks-bar visibility.");
+            Assert(!vm.IsSavedSearchesVisible, "Applying a saved layout should restore saved-searches visibility.");
+            Assert(vm.SidebarWidth == 310, "Applying a saved layout should restore the sidebar width.");
+            Assert(vm.PreviewWidth == 420, "Applying a saved layout should restore the preview width.");
+            Assert(vm.CurrentPaneFileList!.ViewMode == "Tiles", "Applying a saved layout should restore the active pane view mode.");
+            Assert(vm.RightPaneTab?.FileList.ViewMode == "Tiles", "Applying a saved layout should restore the right pane view mode.");
+
+            var reloadedSettings = service.Load();
+            Assert(reloadedSettings.WindowLayouts.Count == 1, "Saved window layouts should round-trip through settings.");
+            Assert(reloadedSettings.WindowLayouts[0].Name == "Preview Mode", "Saved window layout names should persist.");
+            Assert(reloadedSettings.WindowLayouts[0].PreviewWidth == 420, "Saved window layouts should persist preview width.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
+    private static void TestWindowLayoutDelete(string root)
+    {
+        var settingsPath = Path.Combine(root, "window_layout_delete.json");
+        var originalOverridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsPath);
+
+        try
+        {
+            TryDelete(settingsPath);
+            var fs = new FileSystemService();
+            var clipboard = new FakeClipboardService();
+            using var service = new SettingsService();
+            var folder = CreateCleanSubdir(root, "layout_delete_folder");
+
+            var vm = new MainViewModel(fs, clipboard, service, service.Load());
+            vm.NavigateToPath(folder);
+            Assert(vm.SaveWindowLayout("Disposable", overwriteExisting: false), "Precondition failed: layout should save.");
+
+            Assert(vm.DeleteWindowLayout("Disposable"), "Deleting a saved layout should succeed.");
+            Assert(!vm.WindowLayouts.Any(layout => layout.Name == "Disposable"), "Deleted layouts should be removed from the UI collection.");
+
+            var reloadedSettings = service.Load();
+            Assert(reloadedSettings.WindowLayouts.Count == 0, "Deleted layouts should be removed from persisted settings.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalOverridePath);
+            TryDelete(settingsPath);
+        }
+    }
+
     private static void TestTabOverflowWiring()
     {
         var mainXaml = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "CubicAIExplorer", "MainWindow.xaml"));
@@ -2848,6 +2973,26 @@ internal static class Program
         Assert(sizes.Contains(32), "The v2 ICO should contain a 32x32 frame.");
         Assert(sizes.Contains(48), "The v2 ICO should contain a 48x48 frame.");
         Assert(sizes.Contains(256), "The v2 ICO should contain a 256x256 frame.");
+    }
+
+    private static void TestManageLayoutsDialogLoads()
+    {
+        EnsureSmokeApplication();
+
+        var dialog = new ManageLayoutsDialog(
+            [
+                new WindowLayout { Name = "Preview Mode", IsPreviewVisible = true, ViewMode = "Tiles" }
+            ],
+            "Preview Mode",
+            _ => { },
+            _ => true);
+
+        dialog.ApplyTemplate();
+        dialog.UpdateLayout();
+
+        Assert(dialog.Layouts.Count == 1, "Manage layouts dialog should load the provided layouts.");
+        Assert(dialog.Layouts[0].Name == "Preview Mode", "Manage layouts dialog should retain layout names.");
+        dialog.Close();
     }
 
     private static void TestXamlWiring()
@@ -2936,6 +3081,7 @@ internal static class Program
         Assert(main.Contains("Command=\"{Binding SearchInFolderCommand}\""), "Search bindings should route through the main view model.");
         Assert(main.Contains("Command=\"{Binding AddCurrentSearchCommand}\""), "Saved-search save bindings should route through the main view model.");
         Assert(main.Contains("Header=\"_Sessions\""), "Sessions menu should exist.");
+        Assert(main.Contains("Header=\"_Layouts\""), "Layouts menu should exist.");
         Assert(main.Contains("Header=\"_Split File...\""), "Tools menu should expose Split File.");
         Assert(main.Contains("Header=\"_Join File...\""), "Tools menu should expose Join File.");
         Assert(main.Contains("Header=\"_Checksum...\""), "Tools menu should expose Checksum.");
@@ -2944,6 +3090,9 @@ internal static class Program
         Assert(main.Contains("OpenJoinFileToolCommand"), "Join File should bind through the main view model.");
         Assert(main.Contains("OpenChecksumToolCommand"), "Checksum should bind through the main view model.");
         Assert(main.Contains("SaveCurrentSessionAs_Click"), "Save Session As menu item should be wired.");
+        Assert(main.Contains("SaveCurrentLayoutAs_Click"), "Save Layout As menu item should be wired.");
+        Assert(main.Contains("ManageLayouts_Click"), "Manage Layouts menu item should be wired.");
+        Assert(main.Contains("LayoutsMenu_SubmenuOpened"), "Layouts submenu population should be wired.");
         Assert(main.Contains("UpdateCurrentNamedSessionCommand"), "Update Current Session should be wired.");
         Assert(main.Contains("SessionsMenu_SubmenuOpened"), "Sessions submenu population should be wired.");
         Assert(main.Contains("CurrentPaneFileList.FilterText"), "Filter bar should bind to the current active pane.");
@@ -2976,6 +3125,7 @@ internal static class Program
         Assert(main.Contains("GotKeyboardFocus=\"RightPane_GotKeyboardFocus\""), "Right pane focus tracking should be wired.");
         Assert(main.Contains("ToggleDualPaneCommand"), "Dual pane menu should invoke the dual pane command.");
         Assert(main.Contains("TogglePreviewCommand"), "Preview menu should invoke the preview command.");
+        Assert(main.Contains("PreviewGridSplitter"), "Preview splitter should be named for layout-width persistence.");
         Assert(main.Contains("PreviewPanel"), "Preview panel should be focusable for keyboard navigation.");
         Assert(mainCs.Contains("Key.D1"), "Ctrl+1 shortcut should be handled.");
         Assert(mainCs.Contains("Key.D2"), "Ctrl+2 shortcut should be handled.");
@@ -2985,6 +3135,8 @@ internal static class Program
         Assert(mainCs.Contains("SavedSearchList_MouseDoubleClick"), "Saved search double-click handler should be wired.");
         Assert(mainCs.Contains("FileListViewModel_ArchiveBrowseRequested"), "Archive browser handler should be wired.");
         Assert(mainCs.Contains("PopulateNewMenu"), "Dynamic new-file template menu should be built in code-behind.");
+        Assert(mainCs.Contains("PopulateLayoutsMenu"), "Layout menu population should be implemented.");
+        Assert(mainCs.Contains("PreviewGridSplitter_DragCompleted"), "Preview splitter resize persistence should be implemented.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(mainCs.Contains("EmptyRecycleBin_Click"), "Empty Recycle Bin confirmation handler should be wired.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");

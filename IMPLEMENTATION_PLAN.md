@@ -35,6 +35,12 @@ The app currently includes:
 - added queue-backed file chunk splitting and contiguous reassembly with numbered suffixes such as `.001`
 - added one-pass MD5/SHA1/SHA256 generation plus compare-against-string support in the checksum tool and smoke coverage for the end-to-end behavior
 
+### UI layout manager
+
+- added persisted named window layouts inside the existing settings file
+- added a View-menu `Layouts` section with save, manage, and one-click apply actions
+- applying a layout now restores sidebar visibility/width, preview visibility/width, dual-pane mode, bookmarks bar visibility, and file-list view mode
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.
@@ -201,9 +207,9 @@ Scope:
 - completed: content search (grep-style recursive file scanning)
 
 ### 5. Advanced Parity (Cubic Final)
-Status: PLANNED
+Status: COMPLETE
 Scope:
-- **015: UI Layout Manager:** Allow users to save and restore named window layouts (e.g., "Preview Mode", "Dual Pane Mode").
+- completed: 015 UI layout manager with persisted named layouts and View-menu switching
 
 ### 1. UX polish and advanced operations
 Status: COMPLETE

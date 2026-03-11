@@ -29,3 +29,4 @@
 - 2026-03-11: Completed spec 012 horizontal bookmarks bar with a toggleable top-level bookmark strip, drag-drop bookmark creation, direct context actions, and smoke coverage.
 - 2026-03-11: Completed spec 013 tab locking and coloring with locked-path fork navigation, persisted tab state, colored headers, and smoke coverage.
 - 2026-03-11: Completed spec 014 file utilities with Tools-menu split/join/checksum dialogs, queue-backed chunk processing, one-pass checksum generation, and smoke coverage.
+- 2026-03-11: Completed spec 015 layout manager with persisted named window layouts, View-menu switching, a manage-layouts dialog, and smoke coverage.
