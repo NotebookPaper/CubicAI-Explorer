@@ -45,69 +45,70 @@ public sealed class ShellIconService : IShellIconService
 
     private static BitmapSource? LoadIcon(string path, FileSystemItemType itemType, bool smallIcon)
     {
-        var flags = SHGFI_ICON | (smallIcon ? SHGFI_SMALLICON : SHGFI_LARGEICON);
-        var fileAttributes = FILE_ATTRIBUTE_NORMAL;
-        var shellPath = path;
-
-        if (itemType == FileSystemItemType.File)
+        try
         {
-            shellPath = string.IsNullOrWhiteSpace(Path.GetExtension(path)) ? ".txt" : Path.GetExtension(path);
-            flags |= SHGFI_USEFILEATTRIBUTES;
-        }
-        else if (itemType == FileSystemItemType.Directory || itemType == FileSystemItemType.Drive || itemType == FileSystemItemType.Bookmark)
-        {
-            fileAttributes = FILE_ATTRIBUTE_DIRECTORY;
-            
-            if (itemType == FileSystemItemType.Bookmark)
-            {
-                flags |= SHGFI_LINKOVERLAY;
-            }
+            var flags = SHGFI_ICON | (smallIcon ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+            var fileAttributes = FILE_ATTRIBUTE_NORMAL;
+            var shellPath = path;
 
-            // If the directory doesn't exist, or if we want a guaranteed folder icon regardless of path extension,
-            // we use SHGFI_USEFILEATTRIBUTES.
-            if (!Directory.Exists(path) || itemType == FileSystemItemType.Bookmark)
+            if (itemType == FileSystemItemType.File)
             {
+                shellPath = string.IsNullOrWhiteSpace(Path.GetExtension(path)) ? ".txt" : Path.GetExtension(path);
                 flags |= SHGFI_USEFILEATTRIBUTES;
-                // Use a dummy path if we are using attributes to avoid shell getting confused by the real path's potential extension
-                shellPath = "C:\\dummy_folder"; 
             }
-        }
+            else if (itemType == FileSystemItemType.Directory || itemType == FileSystemItemType.Drive || itemType == FileSystemItemType.Bookmark)
+            {
+                fileAttributes = FILE_ATTRIBUTE_DIRECTORY;
 
-        var fileInfo = new SHFILEINFO();
-        var result = SHGetFileInfo(
-            shellPath,
-            fileAttributes,
-            ref fileInfo,
-            (uint)Marshal.SizeOf<SHFILEINFO>(),
-            flags);
+                if (itemType == FileSystemItemType.Bookmark)
+                    flags |= SHGFI_LINKOVERLAY;
 
-        // Fallback
-        if ((result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero) && (flags & SHGFI_USEFILEATTRIBUTES) == 0)
-        {
-            flags |= SHGFI_USEFILEATTRIBUTES;
-            result = SHGetFileInfo(
-                "C:\\dummy_folder",
-                FILE_ATTRIBUTE_DIRECTORY,
+                if (!Directory.Exists(path) || itemType == FileSystemItemType.Bookmark)
+                {
+                    flags |= SHGFI_USEFILEATTRIBUTES;
+                    shellPath = "C:\\dummy_folder";
+                }
+            }
+
+            var fileInfo = new SHFILEINFO();
+            var result = SHGetFileInfo(
+                shellPath,
+                fileAttributes,
                 ref fileInfo,
                 (uint)Marshal.SizeOf<SHFILEINFO>(),
                 flags);
-        }
 
-        if (result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero)
+            if ((result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero) && (flags & SHGFI_USEFILEATTRIBUTES) == 0)
+            {
+                flags |= SHGFI_USEFILEATTRIBUTES;
+                result = SHGetFileInfo(
+                    "C:\\dummy_folder",
+                    FILE_ATTRIBUTE_DIRECTORY,
+                    ref fileInfo,
+                    (uint)Marshal.SizeOf<SHFILEINFO>(),
+                    flags);
+            }
+
+            if (result == IntPtr.Zero || fileInfo.hIcon == IntPtr.Zero)
+                return null;
+
+            try
+            {
+                var image = Imaging.CreateBitmapSourceFromHIcon(
+                    fileInfo.hIcon,
+                    Int32Rect.Empty,
+                    BitmapSizeOptions.FromEmptyOptions());
+                image.Freeze();
+                return image;
+            }
+            finally
+            {
+                DestroyIcon(fileInfo.hIcon);
+            }
+        }
+        catch
+        {
             return null;
-
-        try
-        {
-            var image = Imaging.CreateBitmapSourceFromHIcon(
-                fileInfo.hIcon,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions());
-            image.Freeze();
-            return image;
-        }
-        finally
-        {
-            DestroyIcon(fileInfo.hIcon);
         }
     }
 

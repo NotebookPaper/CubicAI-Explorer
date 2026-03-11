@@ -71,6 +71,7 @@ public partial class MainWindow : Window
     {
         EnsureTabStripParts();
         QueueTabStripUpdate(scrollActiveIntoView: true);
+        QueueFilePaneVisibilityCheck();
     }
 
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -265,13 +266,16 @@ public partial class MainWindow : Window
 
     private void BreadcrumbBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        // Click on empty area of breadcrumb bar to switch to edit mode
-        if (e.OriginalSource is System.Windows.Controls.Border
-            || e.OriginalSource is System.Windows.Controls.DockPanel
-            || e.OriginalSource is System.Windows.Controls.Grid)
-        {
-            SwitchToEditMode();
-        }
+        if (e.ChangedButton != MouseButton.Left)
+            return;
+
+        // Any click in the breadcrumb chrome that is not on an actual button should
+        // switch to editable path mode so the full path can be copied/pasted quickly.
+        if (FindVisualParent<System.Windows.Controls.Button>(e.OriginalSource as DependencyObject) != null)
+            return;
+
+        SwitchToEditMode();
+        e.Handled = true;
     }
 
     private void BreadcrumbSegment_Click(object sender, RoutedEventArgs e)
@@ -1221,6 +1225,7 @@ public partial class MainWindow : Window
             ApplyDetailsLayoutToBothPanes();
             UpdatePaneHighlight();
             QueueTabStripUpdate(scrollActiveIntoView: true);
+            QueueFilePaneVisibilityCheck();
         }
     }
 
@@ -1317,10 +1322,12 @@ public partial class MainWindow : Window
         {
             HookFileListViewModel(_boundViewModel?.ActiveTab?.FileList);
             QueueTabStripUpdate(scrollActiveIntoView: true);
+            QueueFilePaneVisibilityCheck();
         }
         else if (e.PropertyName == nameof(MainViewModel.RightPaneTab))
         {
             HookRightFileListViewModel(_boundViewModel?.RightPaneTab?.FileList);
+            QueueFilePaneVisibilityCheck();
         }
         else if (e.PropertyName == nameof(MainViewModel.DetailsColumnSettings))
         {
@@ -1373,6 +1380,32 @@ public partial class MainWindow : Window
             if (scrollActiveIntoView)
                 EnsureActiveTabVisible();
         }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void QueueFilePaneVisibilityCheck()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            EnsureVisibleFileRows(FileListView, _boundFileListViewModel);
+            EnsureVisibleFileRows(RightPaneListView, _boundRightFileListViewModel);
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void EnsureVisibleFileRows(ListView listView, FileListViewModel? fileListViewModel)
+    {
+        if (fileListViewModel == null || listView.Items.Count == 0)
+            return;
+
+        listView.UpdateLayout();
+        listView.ScrollIntoView(listView.Items[0]);
+        listView.UpdateLayout();
+
+        if (listView.ItemContainerGenerator.ContainerFromIndex(0) == null
+            && string.Equals(fileListViewModel.ViewMode, "Details", StringComparison.OrdinalIgnoreCase))
+        {
+            fileListViewModel.ViewMode = "List";
+            listView.UpdateLayout();
+        }
     }
 
     private void UpdateTabStripAffordances()
@@ -1604,19 +1637,26 @@ public partial class MainWindow : Window
         switch (mode)
         {
             case "Details":
-                listView.View = CreateDetailsGridView();
-                listView.ItemTemplate = null;
-                listView.ItemsPanel = null;
+                listView.ClearValue(ItemsControl.ItemTemplateProperty);
+                listView.ClearValue(ItemsControl.ItemsPanelProperty);
+                if (listView.View is GridView existingGridView)
+                {
+                    PopulateDetailsColumns(existingGridView);
+                }
+                else
+                {
+                    listView.View = CreateDetailsGridView();
+                }
                 break;
             case "List":
                 listView.View = null;
-                listView.ItemTemplate = (DataTemplate)FindResource("ListViewItemTemplate");
-                listView.ItemsPanel = null;
+                listView.ItemTemplate = FindApplicationResource<DataTemplate>("ListViewItemTemplate");
+                listView.ClearValue(ItemsControl.ItemsPanelProperty);
                 break;
             case "Tiles":
                 listView.View = null;
-                listView.ItemTemplate = (DataTemplate)FindResource("TileViewItemTemplate");
-                listView.ItemsPanel = (ItemsPanelTemplate)FindResource("TileItemsPanelTemplate");
+                listView.ItemTemplate = FindApplicationResource<DataTemplate>("TileViewItemTemplate");
+                listView.ItemsPanel = FindApplicationResource<ItemsPanelTemplate>("TileItemsPanelTemplate");
                 break;
         }
     }
@@ -1624,10 +1664,15 @@ public partial class MainWindow : Window
     private GridView CreateDetailsGridView()
     {
         var gridView = new GridView();
+        PopulateDetailsColumns(gridView);
+        return gridView;
+    }
+
+    private void PopulateDetailsColumns(GridView gridView)
+    {
+        gridView.Columns.Clear();
         foreach (var setting in GetDetailsColumnSettings().Where(static setting => setting.IsVisible))
             gridView.Columns.Add(CreateDetailsColumn(setting));
-
-        return gridView;
     }
 
     private GridViewColumn CreateDetailsColumn(DetailsColumnSetting setting)
@@ -1638,7 +1683,7 @@ public partial class MainWindow : Window
             {
                 Header = "Name",
                 Width = setting.Width,
-                CellTemplate = (DataTemplate)FindResource("DetailsNameCellTemplate")
+                CellTemplate = FindApplicationResource<DataTemplate>("DetailsNameCellTemplate")
             },
             DetailsColumnId.Size => new GridViewColumn
             {
@@ -1669,6 +1714,15 @@ public partial class MainWindow : Window
     {
         return _boundViewModel?.GetDetailsColumnSettings()
             ?? ViewModel.GetDetailsColumnSettings();
+    }
+
+    private static T FindApplicationResource<T>(object key) where T : class
+    {
+        var resource = Application.Current?.TryFindResource(key) as T;
+        if (resource != null)
+            return resource;
+
+        throw new InvalidOperationException($"Required resource '{key}' was not found.");
     }
 
     private void ApplyDetailsLayoutToBothPanes()

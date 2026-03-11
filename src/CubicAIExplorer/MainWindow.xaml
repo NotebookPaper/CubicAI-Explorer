@@ -4,12 +4,12 @@
         xmlns:vm="clr-namespace:CubicAIExplorer.ViewModels"
         xmlns:models="clr-namespace:CubicAIExplorer.Models"
         Title="CubicAI Explorer" Height="700" Width="1100"
+        Icon="Resources/appicon.png"
         WindowStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d"
-        Icon="{StaticResource AppIconFluid}">
+        mc:Ignorable="d">
 
     <Window.InputBindings>
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding NewTabCommand}" />

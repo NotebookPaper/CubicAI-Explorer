@@ -892,13 +892,17 @@ public partial class MainViewModel : ObservableObject
         var nextPath = Path.Combine(node.FullPath, currentPart);
 
         // Try to find the child. If not found, maybe it's not loaded yet?
-        var child = node.Children.FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+        var child = node.Children
+            .ToList()
+            .FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
         
         if (child == null)
         {
             // If we just expanded, it should be there. If not, wait a bit more or retry.
             await Task.Delay(50);
-            child = node.Children.FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+            child = node.Children
+                .ToList()
+                .FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
         }
 
         if (child != null)

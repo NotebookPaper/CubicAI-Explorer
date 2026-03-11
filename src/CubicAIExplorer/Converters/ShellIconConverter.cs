@@ -16,14 +16,22 @@ public sealed class ShellIconConverter : IValueConverter
         if (IconService == null)
             return null;
 
-        return value switch
+        try
         {
-            FileSystemItem item => IconService.GetIcon(item.FullPath, item.ItemType),
-            FolderTreeNodeViewModel node => IconService.GetIcon(node.FullPath, GetTreeNodeType(node.FullPath)),
-            BookmarkItem bookmark => IconService.GetIcon(bookmark.Path, bookmark.IsFolder ? FileSystemItemType.Directory : FileSystemItemType.File),
-            string path => IconService.GetIcon(path, Directory.Exists(path) ? FileSystemItemType.Directory : FileSystemItemType.File),
-            _ => null
-        };
+            return value switch
+            {
+                FileSystemItem item => IconService.GetIcon(item.FullPath, item.ItemType),
+                FolderTreeNodeViewModel node => IconService.GetIcon(node.FullPath, GetTreeNodeType(node.FullPath)),
+                BookmarkItem bookmark => IconService.GetIcon(bookmark.Path, bookmark.IsFolder ? FileSystemItemType.Directory : FileSystemItemType.File),
+                string path => IconService.GetIcon(path, Directory.Exists(path) ? FileSystemItemType.Directory : FileSystemItemType.File),
+                _ => null
+            };
+        }
+        catch
+        {
+            // Rendering a row should not fail because the shell icon lookup failed.
+            return null;
+        }
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

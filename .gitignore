@@ -21,6 +21,11 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
+## Ralph Wiggum
+logs/
+PROMPT_build.md
+PROMPT_plan.md
+
 ## Original source reference (not part of rewrite)
 cubicexplorer-src/
 cubicexplorer-code/

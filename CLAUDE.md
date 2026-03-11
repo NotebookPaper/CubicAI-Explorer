@@ -4,6 +4,12 @@
 > Both `CLAUDE.md` (Claude Code) and `AGENTS.md` (OpenAI Codex) point here.
 > **If you update project instructions, update this file.**
 
+## Ralph Wiggum
+
+- Ralph Wiggum loop configuration lives in `.specify/memory/constitution.md`
+- If you are running from `scripts/ralph-loop*.sh`, read that constitution after this file
+- `CLAUDE.md` remains the source of truth for project-specific engineering constraints; the constitution adds Ralph workflow and autonomy settings
+
 ## Project Overview
 
 - **Name:** CubicAI Explorer — a modern Windows file manager

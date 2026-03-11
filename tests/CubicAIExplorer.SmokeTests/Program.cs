@@ -1,6 +1,8 @@
 using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using CubicAIExplorer.Converters;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 using CubicAIExplorer.ViewModels;
@@ -95,6 +97,9 @@ internal static class Program
             Run("named session delete", failures, () => TestNamedSessionDelete(tempRoot));
             Run("named session startup selection", failures, () => TestNamedSessionStartupSelection(tempRoot));
             Run("new tab applies settings", failures, () => TestNewTabAppliesSettings(tempRoot));
+            Run("startup tab loads visible items", failures, () => TestStartupTabLoadsVisibleItems(tempRoot));
+            Run("main window xaml loads", failures, TestMainWindowXamlLoads);
+            Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
             Run("xaml wiring checks", failures, TestXamlWiring);
         }
@@ -2085,6 +2090,84 @@ internal static class Program
         Assert(vm.ActiveTab.FileList.FilterHistory.SequenceEqual(["*.txt"]), "Filter history should apply to new tabs.");
     }
 
+    private static void TestStartupTabLoadsVisibleItems(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var startupFolder = CreateCleanSubdir(root, "startup_visible_items");
+        File.WriteAllText(Path.Combine(startupFolder, "visible.txt"), "hello");
+
+        var settings = new UserSettings
+        {
+            OpenTabs = [startupFolder],
+            ActiveTabIndex = 0
+        };
+
+        var vm = new MainViewModel(fs, clipboard, userSettings: settings);
+
+        Assert(vm.ActiveTab != null, "Startup restore should create an active tab.");
+        Assert(vm.ActiveTab!.CurrentPath == startupFolder, "Startup restore should navigate to the saved folder.");
+        Assert(vm.ActiveTab.FileList.Items.Any(i => i.Name == "visible.txt"),
+            "Startup restore should populate the file list for a saved non-empty folder.");
+    }
+
+    private static void TestMainWindowXamlLoads()
+    {
+        EnsureSmokeApplication();
+
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var vm = new MainViewModel(fs, clipboard);
+        var window = new CubicAIExplorer.MainWindow
+        {
+            DataContext = vm
+        };
+
+        window.ApplyTemplate();
+        window.UpdateLayout();
+
+        Assert(window.DataContext == vm, "Main window should accept the main view model as its data context.");
+        window.Close();
+    }
+
+    private static void TestMainWindowFileListShowsStartupItems(string root)
+    {
+        EnsureSmokeApplication();
+
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var startupFolder = CreateCleanSubdir(root, "window_startup_items");
+        File.WriteAllText(Path.Combine(startupFolder, "alpha.txt"), "a");
+        File.WriteAllText(Path.Combine(startupFolder, "beta.txt"), "b");
+
+        var vm = new MainViewModel(fs, clipboard, userSettings: new UserSettings
+        {
+            OpenTabs = [startupFolder],
+            ActiveTabIndex = 0
+        });
+
+        var window = new CubicAIExplorer.MainWindow
+        {
+            DataContext = vm
+        };
+
+        window.Show();
+        window.ApplyTemplate();
+        window.UpdateLayout();
+        DoEvents();
+
+        var fileListView = window.FindName("FileListView") as ListView;
+        Assert(fileListView != null, "Main window should expose the file list control.");
+        Assert(fileListView!.Items.Count >= 2, "Main window file list should render startup folder items.");
+        fileListView.ScrollIntoView(fileListView.Items[0]);
+        fileListView.UpdateLayout();
+        DoEvents();
+        var firstContainer = fileListView.ItemContainerGenerator.ContainerFromIndex(0) as ListViewItem;
+        Assert(firstContainer != null, "Main window should generate a visible row container for startup items.");
+
+        window.Close();
+    }
+
     private static void TestNamedSessionSave(string root)
     {
         var settingsPath = Path.Combine(root, "named_session_save.json");
@@ -2425,11 +2508,27 @@ internal static class Program
             throw new InvalidOperationException(message);
     }
 
+    private static void EnsureSmokeApplication()
+    {
+        if (Application.Current == null)
+        {
+            var app = new CubicAIExplorer.App();
+            app.InitializeComponent();
+        }
+
+        ShellIconConverter.IconService ??= new ShellIconService();
+    }
+
     private static void WaitFor(Func<bool> condition, int timeoutMs = 2000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
         while (!condition() && Environment.TickCount64 < deadline)
             Thread.Sleep(50);
+    }
+
+    private static void DoEvents()
+    {
+        Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private sealed class FakeClipboardService : IClipboardService
