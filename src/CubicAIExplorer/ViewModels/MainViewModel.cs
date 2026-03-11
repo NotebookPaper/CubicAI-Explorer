@@ -23,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     };
 
     private readonly IFileSystemService _fileSystemService;
+    public IFileSystemService FileSystemService => _fileSystemService;
     private readonly IClipboardService _clipboardService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
     private readonly Services.SettingsService? _settingsService;

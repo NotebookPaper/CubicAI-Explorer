@@ -148,13 +148,16 @@ public sealed class FileSystemService : IFileSystemService
         if (sanitized == null) return;
         if (!File.Exists(sanitized) && !Directory.Exists(sanitized)) return;
 
-        var psi = new ProcessStartInfo
+        if (!TryRevealMultipleInExplorer([sanitized]))
         {
-            FileName = "explorer.exe",
-            Arguments = $"/select,\"{sanitized}\"",
-            UseShellExecute = true
-        };
-        Process.Start(psi);
+            var psi = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{sanitized}\"",
+                UseShellExecute = true
+            };
+            Process.Start(psi);
+        }
     }
 
     public void RevealInExplorer(IEnumerable<string> paths)
@@ -170,12 +173,6 @@ public sealed class FileSystemService : IFileSystemService
         if (sanitizedPaths.Length == 0)
             return;
 
-        if (sanitizedPaths.Length == 1)
-        {
-            RevealInExplorer(sanitizedPaths[0]);
-            return;
-        }
-
         if (!TryRevealMultipleInExplorer(sanitizedPaths))
             RevealInExplorer(sanitizedPaths[0]);
     }
@@ -187,11 +184,66 @@ public sealed class FileSystemService : IFileSystemService
 
         var psi = new ProcessStartInfo
         {
-            FileName = "explorer.exe",
-            Arguments = $"\"{sanitized}\"",
+            FileName = sanitized,
             UseShellExecute = true
         };
-        Process.Start(psi);
+        try
+        {
+            Process.Start(psi);
+        }
+        catch
+        {
+            // Fallback for directories if ShellExecute on path directly fails
+            psi.FileName = "explorer.exe";
+            psi.Arguments = $"\"{sanitized}\"";
+            Process.Start(psi);
+        }
+    }
+
+    public void ShowNativeProperties(string path)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null) return;
+
+        var info = new SHELLEXECUTEINFO();
+        info.cbSize = Marshal.SizeOf(info);
+        info.lpVerb = "properties";
+        info.lpFile = sanitized;
+        info.nShow = 5; // SW_SHOW
+        info.fMask = 0x0000000C; // SEE_MASK_INVOKEIDLIST
+
+        ShellExecuteEx(ref info);
+    }
+
+    public void ShowNativeProperties(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            ShowNativeProperties(path);
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SHELLEXECUTEINFO
+    {
+        public int cbSize;
+        public uint fMask;
+        public IntPtr hwnd;
+        public string lpVerb;
+        public string lpFile;
+        public string lpParameters;
+        public string lpDirectory;
+        public int nShow;
+        public IntPtr hInstApp;
+        public IntPtr lpIDList;
+        public string lpClass;
+        public IntPtr hkeyClass;
+        public uint dwHotKey;
+        public IntPtr hIcon;
+        public IntPtr hProcess;
     }
 
     public IReadOnlyList<FileTransferResult> CopyFiles(

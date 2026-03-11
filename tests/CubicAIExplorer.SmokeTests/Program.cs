@@ -2776,6 +2776,9 @@ internal static class Program
             LastOpenedFolderPath = path;
         }
 
+        public void ShowNativeProperties(string path) { }
+        public void ShowNativeProperties(IEnumerable<string> paths) { }
+
         public IReadOnlyList<FileTransferResult> CopyFiles(
             IEnumerable<string> sourcePaths,
             string destinationDirectory,

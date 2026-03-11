@@ -1721,6 +1721,19 @@ public partial class MainWindow : Window
 
     private void FileListViewModel_PropertiesRequested(object? sender, FileSystemItem item)
     {
+        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        {
+            var selectedItems = (sender as FileListViewModel)?.SelectedItems;
+            if (selectedItems != null && selectedItems.Count > 1)
+            {
+                ViewModel.FileSystemService.ShowNativeProperties(selectedItems.Select(static i => i.FullPath));
+                return;
+            }
+            
+            ViewModel.FileSystemService.ShowNativeProperties(item.FullPath);
+            return;
+        }
+
         var dialog = new PropertiesDialog(item) { Owner = this };
         dialog.ShowDialog();
     }
@@ -2122,6 +2135,15 @@ public partial class MainWindow : Window
 
     private void ViewModel_BookmarkPropertiesRequested(object? sender, FileSystemItem item)
     {
+        if (ViewModel.CurrentSettings.UseShellContextMenu && !string.IsNullOrWhiteSpace(item.FullPath))
+        {
+            if (Path.IsPathRooted(item.FullPath) && (File.Exists(item.FullPath) || Directory.Exists(item.FullPath)))
+            {
+                ViewModel.FileSystemService.ShowNativeProperties(item.FullPath);
+                return;
+            }
+        }
+
         var dialog = new Views.PropertiesDialog(item);
         dialog.Owner = this;
         dialog.Show();
