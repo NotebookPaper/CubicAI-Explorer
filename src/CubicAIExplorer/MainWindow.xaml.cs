@@ -53,6 +53,9 @@ public partial class MainWindow : Window
     private bool _suppressAutoComplete;
     private bool _suppressRightPaneAutoComplete;
     private bool _isApplyingDetailsLayout;
+    private readonly System.Windows.Threading.DispatcherTimer _bookmarkHoverExpandTimer;
+    private TreeViewItem? _bookmarkPendingExpandItem;
+    private BookmarkItem? _bookmarkPendingExpandBookmark;
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
     private const string InternalManualReorderFormat = "CubicAIExplorer_ManualReorder";
@@ -70,6 +73,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _bookmarkHoverExpandTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(650)
+        };
+        _bookmarkHoverExpandTimer.Tick += BookmarkHoverExpandTimer_Tick;
         DataContextChanged += MainWindow_DataContextChanged;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
@@ -625,78 +633,162 @@ public partial class MainWindow : Window
     private void BookmarkTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _bookmarkDragStart = e.GetPosition(BookmarkTree);
+        var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        _bookmarkClickedItem = treeItem?.DataContext as BookmarkItem;
+        _isBookmarkMouseDragging = false;
     }
 
     private Point _bookmarkDragStart;
-    private const string BookmarkDragFormat = "CubicAIExplorer_BookmarkDrag";
+    private BookmarkItem? _bookmarkClickedItem;
+    private bool _isBookmarkMouseDragging;
 
-    private void BookmarkTree_MouseMove(object sender, MouseEventArgs e)
+    private void BookmarkTree_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (e.LeftButton != MouseButtonState.Pressed || _bookmarkClickedItem == null) return;
 
-        var delta = e.GetPosition(BookmarkTree) - _bookmarkDragStart;
-        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+        var pos = e.GetPosition(BookmarkTree);
+        var delta = pos - _bookmarkDragStart;
+        if (!_isBookmarkMouseDragging
+            && Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
             return;
 
-        if (BookmarkTree.SelectedItem is BookmarkItem bookmark)
+        if (!_isBookmarkMouseDragging)
         {
-            var data = new DataObject();
-            data.SetData(BookmarkDragFormat, bookmark);
-            try
-            {
-                DragDrop.DoDragDrop(BookmarkTree, data, DragDropEffects.Move);
-            }
-            finally
-            {
-                ViewModel.ClearBookmarkDragFeedback();
-            }
+            _isBookmarkMouseDragging = true;
+            BookmarkTree.CaptureMouse();
         }
+
+        var dropTarget = ResolveBookmarkDropTarget(pos);
+        UpdateBookmarkHoverExpand(dropTarget);
+        ViewModel.UpdateBookmarkDragFeedback(_bookmarkClickedItem, dropTarget.Target, dropTarget.Placement);
+
+        e.Handled = true;
     }
 
-    private void BookmarkTree_DragOver(object sender, DragEventArgs e)
+    private void BookmarkTree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!e.Data.GetDataPresent(BookmarkDragFormat))
+        if (_isBookmarkMouseDragging && _bookmarkClickedItem != null)
         {
-            ViewModel.ClearBookmarkDragFeedback();
-            e.Effects = DragDropEffects.None;
+            var dropTarget = ResolveBookmarkDropTarget(e.GetPosition(BookmarkTree));
+
+            if (ViewModel.CanDropBookmark(_bookmarkClickedItem, dropTarget.Target, dropTarget.Placement))
+            {
+                ViewModel.MoveBookmark(_bookmarkClickedItem, dropTarget.Target, dropTarget.Placement);
+            }
+
             e.Handled = true;
-            return;
         }
 
-        var source = e.Data.GetData(BookmarkDragFormat) as BookmarkItem;
-        var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
-        var target = targetItem?.DataContext as BookmarkItem;
+        CancelBookmarkMouseDrag();
+    }
 
-        ViewModel.UpdateBookmarkDragFeedback(source, target);
-        e.Effects = ViewModel.CanDropBookmark(source, target)
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
+    private void BookmarkTree_MouseLeave(object sender, MouseEventArgs e)
+    {
+        // Don't cancel if we have capture — we're still dragging
+        if (!BookmarkTree.IsMouseCaptured)
+            CancelBookmarkMouseDrag();
+    }
 
+    private void CancelBookmarkMouseDrag()
+    {
+        if (_isBookmarkMouseDragging)
+            BookmarkTree.ReleaseMouseCapture();
+        ResetBookmarkHoverExpand();
+        _isBookmarkMouseDragging = false;
+        _bookmarkClickedItem = null;
+        ViewModel.ClearBookmarkDragFeedback();
+    }
+
+    // DragOver/Drop still needed for external drops (e.g., folders from folder tree)
+    private void BookmarkTree_DragOver(object sender, DragEventArgs e)
+    {
+        if (GetDroppedDirectories(e).Any())
+        {
+            e.Effects = DragDropEffects.Copy;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
         e.Handled = true;
     }
 
     private void BookmarkTree_DragLeave(object sender, DragEventArgs e)
     {
-        ViewModel.ClearBookmarkDragFeedback();
         e.Handled = true;
     }
 
     private void BookmarkTree_Drop(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(BookmarkDragFormat)) return;
+        var dropTarget = ResolveBookmarkDropTarget(e.GetPosition(BookmarkTree));
+        var targetParent = dropTarget.Placement == BookmarkDropPlacement.Into
+            ? dropTarget.Target
+            : null;
 
-        var source = e.Data.GetData(BookmarkDragFormat) as BookmarkItem;
-        var targetItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
-        var target = targetItem?.DataContext as BookmarkItem;
+        foreach (var path in GetDroppedDirectories(e))
+            ViewModel.AddBookmarkFromPath(path, targetParent);
 
-        if (ViewModel.CanDropBookmark(source, target))
+        e.Handled = true;
+    }
+
+    private void BookmarkHoverExpandTimer_Tick(object? sender, EventArgs e)
+    {
+        _bookmarkHoverExpandTimer.Stop();
+        if (_bookmarkPendingExpandItem?.DataContext == _bookmarkPendingExpandBookmark
+            && _bookmarkPendingExpandBookmark is { IsFolder: true, IsExpanded: false })
         {
-            ViewModel.MoveBookmark(source!, target);
+            _bookmarkPendingExpandBookmark.IsExpanded = true;
+        }
+    }
+
+    private void UpdateBookmarkHoverExpand((BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container) dropTarget)
+    {
+        if (dropTarget.Placement == BookmarkDropPlacement.Into
+            && dropTarget.Target is { IsFolder: true, IsExpanded: false }
+            && dropTarget.Container != null)
+        {
+            if (_bookmarkPendingExpandBookmark == dropTarget.Target)
+                return;
+
+            _bookmarkPendingExpandBookmark = dropTarget.Target;
+            _bookmarkPendingExpandItem = dropTarget.Container;
+            _bookmarkHoverExpandTimer.Stop();
+            _bookmarkHoverExpandTimer.Start();
+            return;
         }
 
-        ViewModel.ClearBookmarkDragFeedback();
-        e.Handled = true;
+        ResetBookmarkHoverExpand();
+    }
+
+    private void ResetBookmarkHoverExpand()
+    {
+        _bookmarkHoverExpandTimer.Stop();
+        _bookmarkPendingExpandBookmark = null;
+        _bookmarkPendingExpandItem = null;
+    }
+
+    private (BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container) ResolveBookmarkDropTarget(Point position)
+    {
+        var hit = BookmarkTree.InputHitTest(position) as DependencyObject;
+        var targetItem = hit != null ? FindVisualParent<TreeViewItem>(hit) : null;
+        var target = targetItem?.DataContext as BookmarkItem;
+        if (targetItem == null || target == null)
+            return (null, BookmarkDropPlacement.Root, null);
+
+        var relativePosition = position;
+        if (targetItem.IsVisible)
+            relativePosition = BookmarkTree.TranslatePoint(position, targetItem);
+
+        if (target.IsFolder)
+        {
+            var centerBandTop = targetItem.ActualHeight * 0.25;
+            var centerBandBottom = targetItem.ActualHeight * 0.75;
+            if (relativePosition.Y >= centerBandTop && relativePosition.Y <= centerBandBottom)
+                return (target, BookmarkDropPlacement.Into, targetItem);
+        }
+
+        return (target, BookmarkDropPlacement.After, targetItem);
     }
 
     private void ImportBookmarks_Click(object sender, RoutedEventArgs e)
@@ -1308,6 +1400,34 @@ public partial class MainWindow : Window
         ViewModel.SaveDetailsColumnSettings([]);
         ApplyDetailsLayoutToBothPanes();
         DetailsColumnsMenu_SubmenuOpened(sender, e);
+    }
+
+    private Point _folderTreeDragStart;
+    private bool _folderTreeDragStarting;
+
+    private void FolderTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _folderTreeDragStart = e.GetPosition(FolderTree);
+        _folderTreeDragStarting = true;
+    }
+
+    private void FolderTree_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || !_folderTreeDragStarting) return;
+
+        var delta = e.GetPosition(FolderTree) - _folderTreeDragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _folderTreeDragStarting = false;
+
+        var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (treeItem?.DataContext is FolderTreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath))
+        {
+            var data = new DataObject(DataFormats.FileDrop, new[] { node.FullPath });
+            DragDrop.DoDragDrop(FolderTree, data, DragDropEffects.Copy | DragDropEffects.Link);
+        }
     }
 
     private void FolderTree_DragOver(object sender, DragEventArgs e)
@@ -3066,10 +3186,10 @@ public partial class MainWindow : Window
             return;
 
         BookmarksBarDropZone.BorderBrush = isActive
-            ? new SolidColorBrush(Color.FromRgb(0xD3, 0x9B, 0x1A))
+            ? new SolidColorBrush(Color.FromRgb(0x00, 0x78, 0xD7))
             : (Brush)FindResource("ClassicPaneBorderBrush");
         BookmarksBarDropZone.Background = isActive
-            ? new SolidColorBrush(Color.FromRgb(0xFF, 0xF8, 0xDD))
+            ? new SolidColorBrush(Color.FromRgb(0xCC, 0xE4, 0xF7))
             : new SolidColorBrush(Color.FromRgb(0xF5, 0xF6, 0xF8));
     }
 

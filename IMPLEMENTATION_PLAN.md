@@ -23,6 +23,12 @@ The app currently includes:
 
 ## Recently Completed Slices
 
+### Bookmark drop target visibility and precision
+
+- refined bookmark drag targeting to distinguish row-center folder drops (`into`) from sibling-placement drops (`after`)
+- added hover-to-expand behavior for collapsed bookmark folders during drag operations so nested folders stay reachable
+- updated the bookmark tree visuals and smoke coverage to verify nested child drops, distinct drag hints, and drop-target wiring
+
 ### Tab locking and coloring
 
 - added persisted per-tab lock and color metadata while keeping legacy tab-path settings/session payloads backward compatible
@@ -228,6 +234,8 @@ Smoke coverage explicitly includes:
 - cross-session tab restoration
 
 ## Next Planned Work
+
+No incomplete numbered specs remain in `specs/` on this checkout. Re-check this file, `CONTINUE.md`, and any newly added specs before starting the next roadmap slice.
 
 ### 6. Final Polished Parity (Cubic Conclusion)
 Status: COMPLETE

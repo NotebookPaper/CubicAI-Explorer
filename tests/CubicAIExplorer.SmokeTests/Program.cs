@@ -3416,11 +3416,12 @@ internal static class Program
         Assert(mainCs.Contains("BreadcrumbDropdownItem_Click"), "Breadcrumb dropdown item handler should be implemented.");
         Assert(main.Contains("RecentFolders"), "Recent folders binding should exist.");
         Assert(main.Contains("RecentFolders_KeyDown"), "Recent folders keyboard handler should be wired.");
-        Assert(main.Contains("BookmarkTree_MouseMove"), "Bookmark drag/drop handler should be wired.");
+        Assert(main.Contains("BookmarkTree_PreviewMouseMove"), "Bookmark drag/drop handler should be wired.");
         Assert(main.Contains("BookmarkTree_DragLeave"), "Bookmark drag-leave handler should be wired.");
         Assert(main.Contains("BookmarkDragFeedbackText"), "Bookmark drag feedback should be bound.");
         Assert(main.Contains("IsBookmarkRootDropTarget"), "Bookmark root drop styling should be bound.");
-        Assert(main.Contains("IsDropTarget"), "Bookmark drop target styling should be bound.");
+        Assert(main.Contains("IsDropIntoTarget"), "Bookmark drop-into styling should be bound.");
+        Assert(main.Contains("IsDropAfterTarget"), "Bookmark drop-after styling should be bound.");
         Assert(main.Contains("IsBookmarksBarVisible"), "Bookmarks bar visibility should be bound.");
         Assert(main.Contains("BookmarksBar_Drop"), "Bookmarks bar drop handler should be wired.");
         Assert(main.Contains("BookmarkBarButton_Click"), "Bookmarks bar click handler should be wired.");
@@ -3516,6 +3517,8 @@ internal static class Program
         Assert(mainCs.Contains("ManualSorting_Click"), "Manual sorting handler should be implemented.");
         Assert(mainCs.Contains("DropStackCopyTo_Click"), "Drop Stack action handlers should be implemented.");
         Assert(mainCs.Contains("DropStackList_KeyDown"), "Drop Stack keyboard delete handler should be implemented.");
+        Assert(mainCs.Contains("BookmarkHoverExpandTimer_Tick"), "Bookmark hover-expand handling should be implemented.");
+        Assert(mainCs.Contains("ResolveBookmarkDropTarget"), "Bookmark drag target classification should be implemented.");
         Assert(mainCs.Contains("ModifierKeys.Alt"), "Alt+D address shortcut should be handled.");
         Assert(mainCs.Contains("EmptyRecycleBin_Click"), "Empty Recycle Bin confirmation handler should be wired.");
         Assert(app.Contains("IconBack"), "Vector icon resources should exist.");
@@ -3947,22 +3950,34 @@ internal static class Program
             var folder = new BookmarkItem { Name = "Folder", IsFolder = true };
             var child = new BookmarkItem { Name = "Child", Path = @"C:\Temp\Child" };
             var sibling = new BookmarkItem { Name = "Sibling", Path = @"C:\Temp\Sibling" };
+            var nestedFolder = new BookmarkItem { Name = "Nested", IsFolder = true };
             folder.Children.Add(child);
+            folder.Children.Add(nestedFolder);
             vm.Bookmarks.Add(folder);
             vm.Bookmarks.Add(sibling);
 
-            vm.UpdateBookmarkDragFeedback(sibling, folder);
+            vm.UpdateBookmarkDragFeedback(sibling, folder, BookmarkDropPlacement.Into);
             Assert(vm.HasBookmarkDragFeedback, "Bookmark drag feedback should become visible for valid targets.");
             Assert(!vm.IsBookmarkDragFeedbackInvalid, "Valid bookmark drop target should not be flagged invalid.");
             Assert(folder.IsDropTarget, "Hovered bookmark target should be highlighted.");
+            Assert(folder.IsDropIntoTarget, "Folder hover should use the drop-into highlight state.");
             Assert(vm.BookmarkDragFeedbackText.Contains("move into", StringComparison.OrdinalIgnoreCase),
                 "Folder drag feedback should describe moving into the folder.");
 
-            vm.UpdateBookmarkDragFeedback(folder, child);
+            vm.UpdateBookmarkDragFeedback(sibling, child, BookmarkDropPlacement.After);
+            Assert(child.IsDropAfterTarget, "Non-folder hover should use the drop-after highlight state.");
+            Assert(vm.BookmarkDragFeedbackText.Contains("move after", StringComparison.OrdinalIgnoreCase),
+                "Sibling drag feedback should describe moving after the hovered bookmark.");
+
+            vm.MoveBookmark(sibling, nestedFolder, BookmarkDropPlacement.Into);
+            Assert(nestedFolder.Children.Contains(sibling), "Dropping into a nested folder should add the bookmark as a child.");
+            Assert(!vm.Bookmarks.Contains(sibling), "Nested bookmark drops should remove the bookmark from the root level.");
+
+            vm.UpdateBookmarkDragFeedback(folder, child, BookmarkDropPlacement.Into);
             Assert(vm.IsBookmarkDragFeedbackInvalid, "Dragging onto a descendant should be rejected.");
             Assert(!child.IsDropTarget, "Invalid targets should not stay highlighted.");
 
-            vm.UpdateBookmarkDragFeedback(child, null);
+            vm.UpdateBookmarkDragFeedback(child, null, BookmarkDropPlacement.Root);
             Assert(vm.IsBookmarkRootDropTarget, "Dragging over empty bookmark space should mark the root drop zone.");
             Assert(vm.BookmarkDragFeedbackText.Contains("top level", StringComparison.OrdinalIgnoreCase),
                 "Root drag feedback should explain the top-level drop behavior.");

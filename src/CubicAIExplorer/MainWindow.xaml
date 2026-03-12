@@ -809,8 +809,8 @@
                             <Style TargetType="Border" BasedOn="{StaticResource ClassicPaneSurfaceStyle}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsBookmarkRootDropTarget}" Value="True">
-                                        <Setter Property="BorderBrush" Value="#D39B1A" />
-                                        <Setter Property="Background" Value="#FFF8DD" />
+                                        <Setter Property="BorderBrush" Value="#0078D7" />
+                                        <Setter Property="Background" Value="#CCE4F7" />
                                         <Setter Property="BorderThickness" Value="2" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -820,7 +820,9 @@
                                   ItemsSource="{Binding Bookmarks}"
                                   AllowDrop="True"
                                   PreviewMouseLeftButtonDown="BookmarkTree_PreviewMouseLeftButtonDown"
-                                  MouseMove="BookmarkTree_MouseMove"
+                                  PreviewMouseMove="BookmarkTree_PreviewMouseMove"
+                                  PreviewMouseLeftButtonUp="BookmarkTree_PreviewMouseLeftButtonUp"
+                                  MouseLeave="BookmarkTree_MouseLeave"
                                   DragOver="BookmarkTree_DragOver"
                                   DragLeave="BookmarkTree_DragLeave"
                                   Drop="BookmarkTree_Drop"
@@ -855,18 +857,18 @@
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                     <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_MouseDoubleClick" />
                                     <EventSetter Event="Selected" Handler="BookmarkItem_Selected" />
                                     <Setter Property="ContextMenu" Value="{StaticResource BookmarkContextMenu}" />
+                                    <Style.Resources>
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D7" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
+                                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White" />
+                                    </Style.Resources>
                                     <Style.Triggers>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                        </Trigger>
                                         <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                                            <Setter Property="Background" Value="#FFF1BF" />
-                                            <Setter Property="BorderBrush" Value="#D39B1A" />
-                                            <Setter Property="BorderThickness" Value="1" />
                                             <Setter Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -874,11 +876,32 @@
                             </TreeView.ItemContainerStyle>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate DataType="{x:Type models:BookmarkItem}" ItemsSource="{Binding Children}">
-                                    <StackPanel Orientation="Horizontal" Margin="2">
-                                        <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
-                                               Width="16" Height="16" Margin="0,0,6,0" />
-                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                    </StackPanel>
+                                    <Border Margin="1,1,6,1"
+                                            Padding="2"
+                                            BorderBrush="Transparent"
+                                            BorderThickness="0"
+                                            Background="Transparent">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDropIntoTarget}" Value="True">
+                                                        <Setter Property="Background" Value="#CCE4F7" />
+                                                        <Setter Property="BorderBrush" Value="#0078D7" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsDropAfterTarget}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#0078D7" />
+                                                        <Setter Property="BorderThickness" Value="0,0,0,2" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
+                                                   Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
@@ -1059,6 +1082,8 @@
                     <Border Margin="4,0,4,4" Style="{StaticResource ClassicPaneSurfaceStyle}">
                         <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderTreeRoots}"
                                   AllowDrop="True"
+                                  PreviewMouseLeftButtonDown="FolderTree_PreviewMouseLeftButtonDown"
+                                  MouseMove="FolderTree_MouseMove"
                                   DragOver="FolderTree_DragOver"
                                   Drop="FolderTree_Drop"
                                   ContextMenuOpening="FolderTree_ContextMenuOpening"

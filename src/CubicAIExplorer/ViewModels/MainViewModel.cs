@@ -2494,12 +2494,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    public bool CanDropBookmark(BookmarkItem? source, BookmarkItem? target)
+    public bool CanDropBookmark(BookmarkItem? source, BookmarkItem? target, BookmarkDropPlacement placement = BookmarkDropPlacement.None)
     {
-        return source != null && target != source && !IsBookmarkDescendant(source, target);
+        if (source == null)
+            return false;
+
+        return placement switch
+        {
+            BookmarkDropPlacement.Root => true,
+            BookmarkDropPlacement.Into => target is { IsFolder: true } && target != source && !IsBookmarkDescendant(source, target),
+            BookmarkDropPlacement.After => target != null && target != source && !IsBookmarkDescendant(source, target),
+            _ => false
+        };
     }
 
-    public void UpdateBookmarkDragFeedback(BookmarkItem? source, BookmarkItem? target)
+    public void UpdateBookmarkDragFeedback(BookmarkItem? source, BookmarkItem? target, BookmarkDropPlacement placement = BookmarkDropPlacement.None)
     {
         ClearBookmarkDropTargets();
 
@@ -2512,16 +2521,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var canDrop = CanDropBookmark(source, target);
+        var canDrop = CanDropBookmark(source, target, placement);
         HasBookmarkDragFeedback = true;
         IsBookmarkDragFeedbackInvalid = !canDrop;
-        IsBookmarkRootDropTarget = canDrop && target == null;
+        IsBookmarkRootDropTarget = canDrop && placement == BookmarkDropPlacement.Root;
 
         if (target != null)
+        {
             target.IsDropTarget = canDrop;
+            target.IsDropIntoTarget = canDrop && placement == BookmarkDropPlacement.Into;
+            target.IsDropAfterTarget = canDrop && placement == BookmarkDropPlacement.After;
+        }
 
         BookmarkDragFeedbackText = canDrop
-            ? BuildBookmarkDropHint(target)
+            ? BuildBookmarkDropHint(target, placement)
             : "Can't drop a bookmark onto itself or one of its children.";
     }
 
@@ -2534,9 +2547,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsBookmarkRootDropTarget = false;
     }
 
-    public void MoveBookmark(BookmarkItem source, BookmarkItem? target)
+    public void MoveBookmark(BookmarkItem source, BookmarkItem? target, BookmarkDropPlacement placement = BookmarkDropPlacement.None)
     {
-        if (source == null) return;
+        if (!CanDropBookmark(source, target, placement))
+            return;
 
         // 1. Remove from current location
         if (Bookmarks.Contains(source))
@@ -2549,20 +2563,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         // 2. Add to new location
-        if (target == null)
+        if (placement == BookmarkDropPlacement.Root)
         {
-            // Drop on empty area -> move to root
             Bookmarks.Add(source);
         }
-        else if (target.IsFolder)
+        else if (placement == BookmarkDropPlacement.Into && target != null)
         {
-            // Drop on folder -> move inside
             target.Children.Add(source);
             target.IsExpanded = true;
         }
-        else
+        else if (placement == BookmarkDropPlacement.After && target != null)
         {
-            // Drop on bookmark -> move to same level as bookmark
             var parent = FindParent(Bookmarks, target);
             if (parent != null)
             {
@@ -2596,7 +2607,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ClearBookmarkDropTargets()
     {
         foreach (var bookmark in EnumerateBookmarks(Bookmarks))
+        {
             bookmark.IsDropTarget = false;
+            bookmark.IsDropIntoTarget = false;
+            bookmark.IsDropAfterTarget = false;
+        }
     }
 
     private static IEnumerable<BookmarkItem> EnumerateBookmarks(IEnumerable<BookmarkItem> bookmarks)
@@ -2623,12 +2638,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    private static string BuildBookmarkDropHint(BookmarkItem? target)
+    private static string BuildBookmarkDropHint(BookmarkItem? target, BookmarkDropPlacement placement)
     {
-        if (target == null)
+        if (placement == BookmarkDropPlacement.Root || target == null)
             return "Release to move the bookmark to the top level.";
 
-        return target.IsFolder
+        return placement == BookmarkDropPlacement.Into
             ? $"Release to move into '{target.Name}'."
             : $"Release to move after '{target.Name}'.";
     }
