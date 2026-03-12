@@ -2,7 +2,7 @@
 
 > Last updated: 2026-03-12
 > Branch: `master`
-> HEAD: current local `master` after bookmark drop target precision
+> HEAD: current local `master` after active-pane search race fix
 > Status: All numbered specs currently present in `specs/` are implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
@@ -29,6 +29,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
 ## Latest Completed
+
+- **Regression fix: active-pane search routing race** (New in this session)
+  - Fixed a stale async directory-load race that could mutate a pane file list while pane-scoped search results were being shown.
+  - `FileListViewModel` now cancels and invalidates in-flight directory loads before starting async or sync searches.
+  - Full smoke coverage passes again, including `active pane view search routing`.
 
 - **Spec 020: Bookmark Drop Target Visibility & Precision** (New in this session)
   - Added explicit bookmark drag placement modes so the tree now distinguishes folder child drops from sibling-placement drops.
@@ -187,7 +192,7 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Spec 020 bookmark drop target visibility is the latest verified slice in this checkout.
+- Active-pane search routing regression is fixed and the smoke suite is green again on this checkout.
 - All numbered specs currently present in `specs/` are complete in this checkout.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
@@ -215,3 +220,4 @@ Verification run on the updated checkout on 2026-03-12:
 - **Chunk Join Safety**: Join now requires a contiguous numeric chunk sequence starting from the selected `.001`-style file, so later work should preserve that validation rather than silently skipping gaps.
 - **External Tool Arguments**: `%p` is the only placeholder currently expanded for external tools. If future work adds more tokens, keep the selected-file path quoted and continue routing process launch through `IFileSystemService`.
 - **Drop Stack Lifetime**: The collected entries are intentionally session-local and not persisted. If future work extends the feature, decide explicitly whether stale-path cleanup or persistence is desirable before adding either.
+- **Pane Search vs. Folder Reloads**: Pane-scoped searches must cancel any outstanding async directory load first; otherwise a stale folder-load completion can overwrite or mutate active search results.

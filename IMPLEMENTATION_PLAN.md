@@ -77,6 +77,11 @@ The app currently includes:
 - restricted single-instance named-pipe IPC to the current user and removed viewmodel-owned modal UI through a shared dialog service
 - fixed JSON identifier round-trips, archive browse model coupling, async folder/file counting loads, replace-flow TOCTOU edges, clipboard payload ownership, and event-subscription leaks
 
+### Active-pane search race fix
+
+- canceled and invalidated in-flight folder loads before pane-scoped search execution so stale async reloads can no longer mutate active search results
+- restored full smoke-suite pass status for the right-pane search-routing flow
+
 ### Broader preview support (Markdown and Syntax Highlighting)
 
 - Added rich text preview support using `FlowDocument` and `RichTextBox` for Markdown and Code.

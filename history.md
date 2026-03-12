@@ -36,3 +36,4 @@
 - 2026-03-11: Completed spec 019 drop stack with a toggleable collection pane, drag-drop shelf behavior, batch copy/move actions, and smoke coverage for collection/removal/transfer flows.
 - 2026-03-12: Completed spec 020 code review fixes covering path sanitization, current-user-only IPC, dialog-service extraction, async loading/perf cleanup, leak fixes, safer replace behavior, and validation/serialization regressions.
 - 2026-03-12: Completed spec 020 bookmark drop target visibility with precise into/after targeting, hover expansion for nested folders, and smoke coverage for nested bookmark drops.
+- 2026-03-12: Fixed an active-pane search race by canceling stale directory loads before pane-scoped searches, restoring full smoke-suite pass status.

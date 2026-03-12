@@ -405,6 +405,13 @@ public partial class FileListViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void CancelPendingDirectoryLoad()
+    {
+        Interlocked.Increment(ref _loadDirectoryVersion);
+        _loadDirectoryCts?.Cancel();
+        _loadDirectoryCts = null;
+    }
+
     [RelayCommand]
     private void OpenItem(FileSystemItem? item)
     {
@@ -812,6 +819,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
         if (IsCriteriaEmpty(criteria) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
+        CancelPendingDirectoryLoad();
         IsSearching = true;
         var searchPath = CurrentPath;
 
@@ -839,6 +847,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
         if (IsCriteriaEmpty(criteria) || string.IsNullOrWhiteSpace(CurrentPath))
             return;
 
+        CancelPendingDirectoryLoad();
         var results = SearchFilesRecursive(CurrentPath, criteria);
         ApplySearchResults(results, criteria);
     }
