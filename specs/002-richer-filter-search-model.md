@@ -1,8 +1,6 @@
 # 002 - Richer Filter And Search Model
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

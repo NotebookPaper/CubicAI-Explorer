@@ -1,8 +1,6 @@
 # 011 - File Watcher Hardening
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

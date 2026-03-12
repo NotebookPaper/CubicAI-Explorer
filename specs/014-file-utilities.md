@@ -2,9 +2,7 @@
 
 # 014 - File Utilities (Split/Join/Checksum)
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

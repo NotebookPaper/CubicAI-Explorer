@@ -1,8 +1,6 @@
 # 009 - Empty Recycle Bin
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -2,9 +2,7 @@
 
 # 016 - Advanced Attribute/Date Search Filter
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -2,9 +2,7 @@
 
 # 015 - UI Layout Manager
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -1,8 +1,6 @@
 # 010 - Shell Verb Execution
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

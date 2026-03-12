@@ -1,8 +1,6 @@
 # 001 - Named Session Manager
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

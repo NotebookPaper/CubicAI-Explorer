@@ -2,9 +2,7 @@
 
 # 011 - Content Search (Grep)
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

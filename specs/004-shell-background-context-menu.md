@@ -1,8 +1,6 @@
 # 004 - Shell Background Context Menu
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -1,9 +1,7 @@
 # 020 - Code Review Fixes
 <!-- NR_OF_TRIES: 1 -->
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

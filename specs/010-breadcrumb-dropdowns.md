@@ -2,9 +2,7 @@
 
 # 010 - Breadcrumb Dropdown Navigation
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

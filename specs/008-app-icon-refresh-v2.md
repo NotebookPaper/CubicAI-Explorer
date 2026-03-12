@@ -1,8 +1,6 @@
 # 008 - App Icon Refresh (v2)
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

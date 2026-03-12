@@ -1,8 +1,6 @@
 # 012 - Horizontal Bookmarks Bar
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -2,9 +2,7 @@
 
 # 009 - Advanced Batch Rename
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

@@ -1,8 +1,6 @@
 # 005 - Shell Property Exposure
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

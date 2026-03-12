@@ -1,8 +1,6 @@
 # 006 - Broader Preview Support
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

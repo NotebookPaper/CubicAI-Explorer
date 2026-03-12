@@ -2,9 +2,7 @@
 
 <!-- NR_OF_TRIES: 1 -->
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 

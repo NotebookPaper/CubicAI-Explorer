@@ -1,8 +1,6 @@
 # 007 - Bookmark Drag Feedback
 
-## Status
-
-COMPLETE
+## Status: COMPLETE
 
 ## Summary
 
