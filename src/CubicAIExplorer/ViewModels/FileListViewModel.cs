@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -12,7 +13,7 @@ using CubicAIExplorer.Views;
 
 namespace CubicAIExplorer.ViewModels;
 
-public partial class FileListViewModel : ObservableObject
+public partial class FileListViewModel : ObservableObject, IDisposable
 {
     private const long MaxContentSearchFileSizeBytes = 10 * 1024 * 1024;
     private static readonly HashSet<string> SearchableTextExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -25,10 +26,14 @@ public partial class FileListViewModel : ObservableObject
     private readonly IFileSystemService _fileSystemService;
     private readonly IClipboardService _clipboardService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly IDialogService _dialogService;
+    private readonly PropertyChangedEventHandler _fileOperationQueuePropertyChangedHandler;
     private readonly Stack<HistoryOperation> _undoStack = [];
     private readonly Stack<HistoryOperation> _redoStack = [];
     private bool _isApplyingHistory;
     private readonly string _undoStagingPath;
+    private CancellationTokenSource? _loadDirectoryCts;
+    private int _loadDirectoryVersion;
 
     [ObservableProperty]
     private string _currentPath = string.Empty;
@@ -158,18 +163,20 @@ public partial class FileListViewModel : ObservableObject
     public FileListViewModel(
         IFileSystemService fileSystemService,
         IClipboardService clipboardService,
-        IFileOperationQueueService? fileOperationQueueService = null)
+        IFileOperationQueueService? fileOperationQueueService = null,
+        IDialogService? dialogService = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
+        _dialogService = dialogService ?? HeadlessDialogService.Instance;
         _undoStagingPath = Path.Combine(
             Path.GetTempPath(),
             "CubicAIExplorer",
             "UndoStaging",
             Environment.ProcessId.ToString());
         Directory.CreateDirectory(_undoStagingPath);
-        _fileOperationQueueService.PropertyChanged += (_, e) =>
+        _fileOperationQueuePropertyChangedHandler = (_, e) =>
         {
             if (e.PropertyName == nameof(IFileOperationQueueService.IsBusy))
                 OnPropertyChanged(nameof(IsFileOperationQueueBusy));
@@ -179,6 +186,7 @@ public partial class FileListViewModel : ObservableObject
                 || e.PropertyName == nameof(IFileOperationQueueService.CurrentOperationText))
                 OnPropertyChanged(nameof(FileOperationQueueStatus));
         };
+        _fileOperationQueueService.PropertyChanged += _fileOperationQueuePropertyChangedHandler;
     }
 
     [RelayCommand]
@@ -253,11 +261,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Could not create file: {ex.Message}",
-                "New File Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Could not create file: {ex.Message}", "New File Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -284,11 +288,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Could not create file from template: {ex.Message}",
-                "New File Template Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Could not create file from template: {ex.Message}", "New File Template Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -309,19 +309,12 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (Application.Current?.MainWindow != null)
+            if (!_dialogService.CanShowDialogs)
             {
-                MessageBox.Show(
-                    $"Could not create symbolic link: {ex.Message}",
-                    "Symbolic Link Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-            else
-            {
-                // Re-throw when running headless (e.g. smoke tests) so callers can catch
                 throw;
             }
+
+            _dialogService.ShowMessage($"Could not create symbolic link: {ex.Message}", "Symbolic Link Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -347,7 +340,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Create file failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Create file failed: {ex.Message}", "Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -373,11 +366,14 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Create link failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Create link failed: {ex.Message}", "Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
     public void LoadDirectory(string path)
+        => LoadDirectoryAsync(path).GetAwaiter().GetResult();
+
+    public async Task LoadDirectoryAsync(string path)
     {
         if (!_fileSystemService.DirectoryExists(path)) return;
 
@@ -385,13 +381,28 @@ public partial class FileListViewModel : ObservableObject
         if (pathChanged && ClearFilterOnFolderChange && !string.IsNullOrWhiteSpace(FilterText))
             FilterText = string.Empty;
 
+        var loadVersion = Interlocked.Increment(ref _loadDirectoryVersion);
+        _loadDirectoryCts?.Cancel();
+        _loadDirectoryCts = new CancellationTokenSource();
+        var cancellationToken = _loadDirectoryCts.Token;
+
         CurrentPath = path;
         Items.Clear();
+        ItemCount = 0;
+        UpdateSelectionStatus();
 
-        var items = _fileSystemService.GetDirectoryContents(path, ShowHiddenFiles);
-        _allItems = items.ToList();
+        try
+        {
+            var items = await Task.Run(() => _fileSystemService.GetDirectoryContents(path, ShowHiddenFiles), cancellationToken);
+            if (cancellationToken.IsCancellationRequested || loadVersion != _loadDirectoryVersion)
+                return;
 
-        ApplyFilter();
+            _allItems = items.ToList();
+            ApplyFilter();
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     [RelayCommand]
@@ -530,11 +541,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Create folder failed: {ex.Message}",
-                "Create Folder Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Create folder failed: {ex.Message}", "Create Folder Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -576,15 +583,17 @@ public partial class FileListViewModel : ObservableObject
         try
         {
             var entries = _fileSystemService.GetArchiveEntries(item.FullPath, maxEntries: int.MaxValue);
-            ArchiveBrowseRequested?.Invoke(this, new ArchiveBrowseRequest(item.FullPath, entries, this));
+            ArchiveBrowseRequested?.Invoke(
+                this,
+                new ArchiveBrowseRequest(
+                    item.FullPath,
+                    entries,
+                    (entryPaths, destinationPath, openFolderWhenDone) =>
+                        ExtractArchiveEntriesToAsync(item.FullPath, entryPaths, destinationPath, openFolderWhenDone)));
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Browse archive failed: {ex.Message}",
-                "Archive Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Browse archive failed: {ex.Message}", "Archive Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -620,11 +629,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Extract failed: {ex.Message}",
-                "Extract Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Extract failed: {ex.Message}", "Extract Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -651,11 +656,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Extract entries failed: {ex.Message}",
-                "Extract Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Extract entries failed: {ex.Message}", "Extract Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -670,7 +671,7 @@ public partial class FileListViewModel : ObservableObject
     private void Refresh()
     {
         if (!string.IsNullOrWhiteSpace(CurrentPath))
-            LoadDirectory(CurrentPath);
+            ReloadDirectory(CurrentPath);
     }
 
     [RelayCommand]
@@ -695,11 +696,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Undo failed: {ex.Message}",
-                "Undo Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Undo failed: {ex.Message}", "Undo Error", System.Windows.MessageBoxImage.Error);
         }
         finally
         {
@@ -724,11 +721,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Redo failed: {ex.Message}",
-                "Redo Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Redo failed: {ex.Message}", "Redo Error", System.Windows.MessageBoxImage.Error);
         }
         finally
         {
@@ -830,11 +823,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Search failed: {ex.Message}",
-                "Search Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Search failed: {ex.Message}", "Search Error", System.Windows.MessageBoxImage.Error);
         }
         finally
         {
@@ -931,7 +920,7 @@ public partial class FileListViewModel : ObservableObject
         }
 
         if (!string.Equals(CurrentPath, searchPath, StringComparison.OrdinalIgnoreCase))
-            LoadDirectory(searchPath);
+            ReloadDirectory(searchPath);
 
         SearchMatchMode = matchMode;
         SearchText = trimmedSearchTerm;
@@ -976,7 +965,7 @@ public partial class FileListViewModel : ObservableObject
     {
         IsShowingSearchResults = false;
         SearchResultsText = string.Empty;
-        LoadDirectory(CurrentPath);
+        ReloadDirectory(CurrentPath);
     }
 
     private List<FileSystemItem> SearchFilesRecursive(string rootPath, SearchCriteria criteria)
@@ -1070,7 +1059,18 @@ public partial class FileListViewModel : ObservableObject
     partial void OnShowHiddenFilesChanged(bool value)
     {
         if (!string.IsNullOrEmpty(CurrentPath))
-            LoadDirectory(CurrentPath);
+            ReloadDirectory(CurrentPath);
+    }
+
+    private void ReloadDirectory(string path)
+    {
+        if (Application.Current == null)
+        {
+            LoadDirectory(path);
+            return;
+        }
+
+        _ = LoadDirectoryAsync(path);
     }
 
     partial void OnViewModeChanged(string value)
@@ -1364,16 +1364,12 @@ public partial class FileListViewModel : ObservableObject
         return true;
     }
 
-    private static void ShowSearchCriteriaError(string errorMessage)
+    private void ShowSearchCriteriaError(string errorMessage)
     {
-        if (string.IsNullOrWhiteSpace(errorMessage) || Application.Current?.MainWindow == null)
+        if (string.IsNullOrWhiteSpace(errorMessage))
             return;
 
-        MessageBox.Show(
-            errorMessage,
-            "Search Filter Error",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        _dialogService.ShowMessage(errorMessage, "Search Filter Error", System.Windows.MessageBoxImage.Warning);
     }
 
     private static bool FileContainsSearchText(FileInfo file, string searchText)
@@ -1473,11 +1469,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Rename failed: {ex.Message}",
-                "Rename Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Rename failed: {ex.Message}", "Rename Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -1513,11 +1505,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Batch rename failed: {ex.Message}",
-                "Batch Rename Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Batch rename failed: {ex.Message}", "Batch Rename Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -1593,11 +1581,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Operation failed: {ex.Message}",
-                errorTitle,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Operation failed: {ex.Message}", errorTitle, System.Windows.MessageBoxImage.Error);
             return [];
         }
     }
@@ -1608,11 +1592,7 @@ public partial class FileListViewModel : ObservableObject
         if (conflictCount == 0)
             return FileTransferCollisionResolution.KeepBoth;
 
-        var dialog = new FileConflictDialog(conflictCount);
-        if (dialog.ShowDialog() != true)
-            return null;
-
-        return dialog.Resolution;
+        return _dialogService.ShowFileConflictDialog(conflictCount);
     }
 
     private int CountConflictingTargets(IEnumerable<string> sourcePaths, string destinationPath)
@@ -1651,19 +1631,10 @@ public partial class FileListViewModel : ObservableObject
 
         var plan = BatchRenameDialogFactory?.Invoke(selection, Items.Select(static item => item.Name).ToArray());
         if (plan == null)
-        {
-            if (Application.Current?.MainWindow == null)
-                return;
+            plan = _dialogService.ShowBatchRenameDialog(selection, Items.Select(static item => item.Name).ToArray(), _batchRenameService);
 
-            var dialog = new BatchRenameDialog(selection, Items.Select(static item => item.Name).ToArray(), _batchRenameService)
-            {
-                Owner = Application.Current.MainWindow
-            };
-            if (dialog.ShowDialog() != true)
-                return;
-
-            plan = dialog.RenamePlan;
-        }
+        if (plan == null)
+            return;
 
         ApplyBatchRename(plan);
     }
@@ -1691,7 +1662,7 @@ public partial class FileListViewModel : ObservableObject
         return parts.Count == 0 ? string.Empty : string.Join(" | ", parts);
     }
 
-    private static void ShowTransferIssues(IReadOnlyList<FileTransferResult> transferResults, string errorTitle)
+    private void ShowTransferIssues(IReadOnlyList<FileTransferResult> transferResults, string errorTitle)
     {
         var failedItems = transferResults
             .Where(static result => result.Status == FileTransferStatus.Failed)
@@ -1709,11 +1680,7 @@ public partial class FileListViewModel : ObservableObject
             : $"{Path.GetFileName(firstFailure.SourcePath)}: {firstFailure.ErrorMessage}";
         message = $"{message}\n\nFirst failure: {details}";
 
-        MessageBox.Show(
-            message,
-            errorTitle,
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        _dialogService.ShowMessage(message, errorTitle, System.Windows.MessageBoxImage.Warning);
     }
 
     private static FileTransferResult[] GetSuccessfulTransfers(IReadOnlyList<FileTransferResult> transferResults)
@@ -1830,13 +1797,12 @@ public partial class FileListViewModel : ObservableObject
                 ? "Permanently delete selected item(s)? This cannot be undone."
                 : "Delete selected item(s) to the Recycle Bin?";
 
-            var result = MessageBox.Show(
+            var confirmed = _dialogService.ShowConfirmation(
                 confirmationText,
                 permanentDelete ? "Permanent Delete" : "Delete",
-                MessageBoxButton.YesNo,
-                permanentDelete ? MessageBoxImage.Warning : MessageBoxImage.Question);
+                permanentDelete ? System.Windows.MessageBoxImage.Warning : System.Windows.MessageBoxImage.Question);
 
-            if (result != MessageBoxResult.Yes) return;
+            if (!confirmed) return;
         }
 
         try
@@ -1871,11 +1837,7 @@ public partial class FileListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Delete failed: {ex.Message}",
-                "Delete Error",
-                MessageBoxButton.OK,
-            MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Delete failed: {ex.Message}", "Delete Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -1894,6 +1856,13 @@ public partial class FileListViewModel : ObservableObject
         CanRedo = _redoStack.Count > 0;
         UndoDescription = _undoStack.Count > 0 ? _undoStack.Peek().UndoDescription : "Undo";
         RedoDescription = _redoStack.Count > 0 ? _redoStack.Peek().RedoDescription : "Redo";
+    }
+
+    public void Dispose()
+    {
+        _loadDirectoryCts?.Cancel();
+        _loadDirectoryCts?.Dispose();
+        _fileOperationQueueService.PropertyChanged -= _fileOperationQueuePropertyChangedHandler;
     }
 
     private sealed record HistoryOperation(

@@ -58,8 +58,12 @@ public sealed class SingleInstanceService : IDisposable
             {
                 try
                 {
-                    using var server = new NamedPipeServerStream(PipeName, PipeDirection.In,
-                        1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                    using var server = new NamedPipeServerStream(
+                        PipeName,
+                        PipeDirection.In,
+                        1,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                     await server.WaitForConnectionAsync(ct);
                     using var reader = new StreamReader(server);
                     var line = await reader.ReadLineAsync(ct);

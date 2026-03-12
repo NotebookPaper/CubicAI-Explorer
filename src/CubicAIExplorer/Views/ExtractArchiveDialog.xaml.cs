@@ -1,4 +1,5 @@
 using System.Windows;
+using System.IO;
 
 namespace CubicAIExplorer.Views;
 
@@ -22,7 +23,26 @@ public partial class ExtractArchiveDialog : Window
     private void OnOkClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(DestinationPath))
+        {
+            MessageBox.Show(this, "Enter a destination folder path.", "Extract Archive", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(DestinationPath);
+            var parentDirectory = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrWhiteSpace(parentDirectory) || !Directory.Exists(parentDirectory))
+            {
+                MessageBox.Show(this, "Choose a destination whose parent folder already exists.", "Extract Archive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+        catch
+        {
+            MessageBox.Show(this, "Enter a valid destination folder path.", "Extract Archive", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         DialogResult = true;
     }

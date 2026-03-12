@@ -6,12 +6,13 @@ public sealed class UserSettings
 {
     public static string GetDefaultNewFileTemplatesPath()
     {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var fallbackPath = Path.Combine(appData, "CubicAIExplorer", "NewFileTemplates");
         var overridePath = Environment.GetEnvironmentVariable("CUBICAI_NEWFILE_TEMPLATES_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
-            return overridePath;
+            return Services.PathSecurityHelper.SanitizePathOrFallback(overridePath, fallbackPath);
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "CubicAIExplorer", "NewFileTemplates");
+        return fallbackPath;
     }
 
     public List<DetailsColumnSetting> DetailsColumns { get; set; } = [];

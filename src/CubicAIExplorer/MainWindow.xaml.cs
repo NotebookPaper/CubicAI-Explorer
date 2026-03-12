@@ -1799,6 +1799,7 @@ public partial class MainWindow : Window
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         PersistDetailsColumnLayout(saveImmediately: true);
+        _boundViewModel?.Dispose();
     }
 
     private void MainWindow_ScrollToSelectedRequested(object? sender, FolderTreeNodeViewModel node)
@@ -2214,7 +2215,7 @@ public partial class MainWindow : Window
 
     private void FileListViewModel_ArchiveBrowseRequested(object? sender, ArchiveBrowseRequest request)
     {
-        var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.SourceFileList) { Owner = this };
+        var dialog = new ArchiveBrowserDialog(request.ArchivePath, request.Entries, request.ExtractEntriesAsync) { Owner = this };
         dialog.ShowDialog();
     }
 

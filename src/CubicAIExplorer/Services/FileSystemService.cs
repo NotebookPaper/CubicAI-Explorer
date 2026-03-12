@@ -908,29 +908,7 @@ public sealed class FileSystemService : IFileSystemService
     /// Validates and normalizes a file path to prevent path traversal attacks.
     /// Returns null if the path is invalid or suspicious.
     /// </summary>
-    private static string? SanitizePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-
-        try
-        {
-            // GetFullPath resolves .., ., and normalizes separators
-            var fullPath = Path.GetFullPath(path);
-
-            // Block UNC paths unless they start with \\
-            if (fullPath.StartsWith(@"\\?\", StringComparison.Ordinal))
-                fullPath = fullPath[4..];
-
-            // Ensure the resolved path is rooted (has a drive letter or UNC)
-            if (!Path.IsPathRooted(fullPath)) return null;
-
-            return fullPath;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private static string? SanitizePath(string path) => PathSecurityHelper.SanitizePath(path);
 
     private static FileSystemItem CreateItem(DirectoryInfo dir) => new()
     {
@@ -1152,32 +1130,29 @@ public sealed class FileSystemService : IFileSystemService
         {
             transferAction(source, tempPath);
 
-            string? backupPath = CreateBackup(targetPath);
-            if (backupPath == null)
-            {
-                cleanupAction(tempPath);
-                return new FileTransferResult(source, targetPath, isDirectory, FileTransferStatus.Failed, "Could not create backup for replace.");
-            }
+            var backupPath = MoveTargetToBackupIfPresent(targetPath, isDirectory);
 
             try
             {
                 if (isDirectory)
                 {
-                    if (Directory.Exists(targetPath)) Directory.Delete(targetPath, recursive: true); // Should be gone but just in case
+                    DeleteDirectoryIfPresent(targetPath);
                     Directory.Move(tempPath, targetPath);
                 }
                 else
                 {
-                    if (File.Exists(targetPath)) File.Delete(targetPath); // Should be gone but just in case
+                    DeleteFileIfPresent(targetPath);
                     File.Move(tempPath, targetPath);
                 }
 
-                DeleteBackup(backupPath);
+                if (!string.IsNullOrWhiteSpace(backupPath))
+                    DeleteBackup(backupPath);
                 return new FileTransferResult(source, targetPath, isDirectory);
             }
             catch (Exception ex)
             {
-                RestoreBackup(backupPath, targetPath);
+                if (!string.IsNullOrWhiteSpace(backupPath))
+                    RestoreBackup(backupPath, targetPath);
                 cleanupAction(tempPath);
                 return new FileTransferResult(source, targetPath, isDirectory, FileTransferStatus.Failed, "Final swap failed: " + ex.Message);
             }
@@ -1218,20 +1193,61 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
-    private string? CreateBackup(string path)
+    private string? MoveTargetToBackupIfPresent(string path, bool isDirectory)
     {
-        if (!PathExists(path)) return null;
-
         try
         {
             var backupPath = path + ".bak_" + Guid.NewGuid().ToString("N")[..8];
-            if (File.Exists(path))
+            if (!isDirectory)
+            {
                 File.Move(path, backupPath);
-            else
+                return backupPath;
+            }
+
+            try
+            {
                 Directory.Move(path, backupPath);
-            return backupPath;
+                return backupPath;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return null;
+            }
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
         }
         catch { return null; }
+    }
+
+    private static void DeleteFileIfPresent(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+    }
+
+    private static void DeleteDirectoryIfPresent(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
     }
 
     private void RestoreBackup(string backupPath, string originalPath)

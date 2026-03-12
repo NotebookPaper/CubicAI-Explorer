@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -108,6 +109,10 @@ internal static class Program
             Run("preview status states", failures, () => TestPreviewStatusStates(tempRoot));
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
             Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
+            Run("env override paths sanitize to full paths", failures, () => TestEnvironmentOverridePathsAreSanitized(tempRoot));
+            Run("tab item id json round-trip", failures, TestTabItemIdJsonRoundTrip);
+            Run("bookmark item id json round-trip", failures, TestBookmarkItemIdJsonRoundTrip);
+            Run("saved search id json round-trip", failures, TestSavedSearchIdJsonRoundTrip);
             Run("user settings defaults", failures, TestUserSettingsDefaults);
             Run("settings service round-trip", failures, () => TestSettingsServiceRoundTrip(tempRoot));
             Run("settings watcher reloads after external recreate", failures, () => TestSettingsWatcherReloadsAfterExternalRecreate(tempRoot));
@@ -852,7 +857,11 @@ internal static class Program
             new ArchiveEntryInfo("images/logo.png", 24, false)
         };
 
-        var dialog = new ArchiveBrowserDialog("sample.zip", entries, sourceVm);
+        var dialog = new ArchiveBrowserDialog(
+            "sample.zip",
+            entries,
+            (paths, destination, openFolderWhenDone) =>
+                sourceVm.ExtractArchiveEntriesToAsync("sample.zip", paths, destination, openFolderWhenDone));
         var filterTextBox = (TextBox?)dialog.FindName("FilterTextBox");
         var foldersOnlyCheckBox = (CheckBox?)dialog.FindName("FoldersOnlyCheckBox");
         var entriesListView = (ListView?)dialog.FindName("EntriesListView");
@@ -2373,6 +2382,85 @@ internal static class Program
         Assert(settings.ManualSortFolders.Count == 0, "Manual folder sort metadata should default to empty.");
         Assert(settings.WindowLayouts.Count == 0, "Window layouts should default to empty.");
         Assert(settings.ExternalTools.Count == 0, "External tools should default to empty.");
+    }
+
+    private static void TestEnvironmentOverridePathsAreSanitized(string root)
+    {
+        var bookmarkOverride = Path.Combine(root, "bookmark-env", "..", "bookmark-env", "bookmarks.json");
+        var settingsOverride = Path.Combine(root, "settings-env", "..", "settings-env", "settings.json");
+        var templatesOverride = Path.Combine(root, "templates-env", "..", "templates-env");
+
+        var originalBookmarks = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
+        var originalSettings = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
+        var originalTemplates = Environment.GetEnvironmentVariable("CUBICAI_NEWFILE_TEMPLATES_PATH");
+
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkOverride);
+        Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", settingsOverride);
+        Environment.SetEnvironmentVariable("CUBICAI_NEWFILE_TEMPLATES_PATH", templatesOverride);
+
+        try
+        {
+            var resolvedBookmarks = BookmarkService.GetBookmarksPath();
+            var resolvedSettings = SettingsService.GetSettingsPath();
+            var resolvedTemplates = UserSettings.GetDefaultNewFileTemplatesPath();
+
+            Assert(!resolvedBookmarks.Contains(".."), "Bookmark override path should be sanitized.");
+            Assert(!resolvedSettings.Contains(".."), "Settings override path should be sanitized.");
+            Assert(!resolvedTemplates.Contains(".."), "Template override path should be sanitized.");
+            Assert(Path.IsPathRooted(resolvedBookmarks), "Bookmark override path should resolve to an absolute path.");
+            Assert(Path.IsPathRooted(resolvedSettings), "Settings override path should resolve to an absolute path.");
+            Assert(Path.IsPathRooted(resolvedTemplates), "Template override path should resolve to an absolute path.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", originalBookmarks);
+            Environment.SetEnvironmentVariable("CUBICAI_SETTINGS_PATH", originalSettings);
+            Environment.SetEnvironmentVariable("CUBICAI_NEWFILE_TEMPLATES_PATH", originalTemplates);
+        }
+    }
+
+    private static void TestTabItemIdJsonRoundTrip()
+    {
+        var item = new CubicAIExplorer.Models.TabItem
+        {
+            Id = Guid.NewGuid(),
+            Path = @"C:\Temp",
+            Title = "Temp"
+        };
+
+        var json = JsonSerializer.Serialize(item);
+        var roundTripped = JsonSerializer.Deserialize<CubicAIExplorer.Models.TabItem>(json);
+        Assert(roundTripped != null && roundTripped.Id == item.Id, "Tab item Id should survive JSON round-trip.");
+    }
+
+    private static void TestBookmarkItemIdJsonRoundTrip()
+    {
+        var item = new BookmarkItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Docs",
+            Path = @"C:\Docs",
+            IsFolder = true
+        };
+
+        var json = JsonSerializer.Serialize(item);
+        var roundTripped = JsonSerializer.Deserialize<BookmarkItem>(json);
+        Assert(roundTripped != null && roundTripped.Id == item.Id, "Bookmark item Id should survive JSON round-trip.");
+    }
+
+    private static void TestSavedSearchIdJsonRoundTrip()
+    {
+        var item = new SavedSearchItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Logs",
+            SearchPath = @"C:\Logs",
+            SearchTerm = "error"
+        };
+
+        var json = JsonSerializer.Serialize(item);
+        var roundTripped = JsonSerializer.Deserialize<SavedSearchItem>(json);
+        Assert(roundTripped != null && roundTripped.Id == item.Id, "Saved search Id should survive JSON round-trip.");
     }
 
     private static void TestSettingsServiceRoundTrip(string root)

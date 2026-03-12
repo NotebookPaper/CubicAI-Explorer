@@ -1,6 +1,6 @@
 # CubicAI Explorer — Implementation Plan
 
-> **Updated:** 2026-03-11
+> **Updated:** 2026-03-12
 > **Status:** Current with `master`
 
 ## Context
@@ -64,6 +64,12 @@ The app currently includes:
 - added a toggleable `Drop Stack` sidebar pane in the View menu for collecting files and folders across folder changes
 - dragging onto the pane now shelves paths without copying or moving anything on disk, and per-entry delete actions only remove the shelf entry
 - added `Copy all to...`, `Move all to...`, and `Clear` actions wired through the existing filesystem abstraction and queue service, with smoke coverage for collection and transfer flows
+
+### Code review fixes
+
+- sanitized bookmark/settings/template environment override paths through a shared helper before use
+- restricted single-instance named-pipe IPC to the current user and removed viewmodel-owned modal UI through a shared dialog service
+- fixed JSON identifier round-trips, archive browse model coupling, async folder/file counting loads, replace-flow TOCTOU edges, clipboard payload ownership, and event-subscription leaks
 
 ### Broader preview support (Markdown and Syntax Highlighting)
 
@@ -224,13 +230,13 @@ Smoke coverage explicitly includes:
 ## Next Planned Work
 
 ### 6. Final Polished Parity (Cubic Conclusion)
-Status: IN PROGRESS
+Status: COMPLETE
 Scope:
 - completed: 016 advanced attribute/date search filter
 - completed: 017 group by and manual sorting
 - completed: 018 external tools configuration
 - completed: 019 drop-stack (virtual collection)
-- **020: Code review fixes:** Address the prioritized security, serialization, architecture, performance, and leak issues captured in the review spec.
+- completed: 020 code review fixes
 
 ### 4. Power User Parity (Cubic Original)
 Status: COMPLETE

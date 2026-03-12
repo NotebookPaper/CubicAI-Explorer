@@ -11,6 +11,9 @@ namespace CubicAIExplorer;
 public partial class App : Application
 {
     private SingleInstanceService? _singleInstance;
+    private SettingsService? _settingsService;
+    private BookmarkService? _bookmarkService;
+    private MainViewModel? _mainViewModel;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -24,26 +27,28 @@ public partial class App : Application
             return;
         }
 
-        var settingsService = new SettingsService();
-        var settings = settingsService.Load();
+        _settingsService = new SettingsService();
+        var settings = _settingsService.Load();
 
         var fileSystemService = new FileSystemService();
         var clipboardService = new ClipboardService();
         var fileOperationQueueService = new FileOperationQueueService();
-        var bookmarkService = new BookmarkService();
+        _bookmarkService = new BookmarkService();
         var shellIconService = new ShellIconService();
+        var dialogService = new WpfDialogService();
         ShellIconConverter.IconService = shellIconService;
-        var mainViewModel = new MainViewModel(
+        _mainViewModel = new MainViewModel(
             fileSystemService,
             clipboardService,
-            settingsService,
+            _settingsService,
             settings,
             fileOperationQueueService,
-            bookmarkService);
+            _bookmarkService,
+            dialogService);
 
         var mainWindow = new MainWindow
         {
-            DataContext = mainViewModel
+            DataContext = _mainViewModel
         };
 
         _singleInstance.ArgumentsReceived += (_, args) =>
@@ -54,7 +59,7 @@ public partial class App : Application
                 var resolvedPath = args.Length > 0 ? fileSystemService.ResolveDirectoryPath(args[0]) : null;
                 if (!string.IsNullOrWhiteSpace(resolvedPath))
                 {
-                    mainViewModel.NavigateToPath(resolvedPath);
+                    _mainViewModel.NavigateToPath(resolvedPath);
                 }
             });
         };
@@ -63,14 +68,14 @@ public partial class App : Application
         var startupPath = e.Args.Length > 0 ? fileSystemService.ResolveDirectoryPath(e.Args[0]) : null;
         if (!string.IsNullOrWhiteSpace(startupPath))
         {
-            mainViewModel.NavigateToPath(startupPath);
+            _mainViewModel.NavigateToPath(startupPath);
         }
 
         // Apply startup preferences
         if (settings.StartInDualPane)
-            mainViewModel.ToggleDualPaneCommand.Execute(null);
+            _mainViewModel.ToggleDualPaneCommand.Execute(null);
         if (settings.StartWithPreview)
-            mainViewModel.TogglePreviewCommand.Execute(null);
+            _mainViewModel.TogglePreviewCommand.Execute(null);
 
         RestoreWindowBounds(mainWindow);
         mainWindow.Closing += (_, _) => SaveWindowBounds(mainWindow);
@@ -79,6 +84,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _mainViewModel?.Dispose();
+        _bookmarkService?.Dispose();
+        _settingsService?.Dispose();
         _singleInstance?.Dispose();
         base.OnExit(e);
     }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CubicAIExplorer.Services;
 
@@ -8,6 +9,7 @@ public partial class FolderTreeNodeViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
     private bool _hasLoadedChildren;
+    private bool _isLoadingChildren;
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -32,26 +34,42 @@ public partial class FolderTreeNodeViewModel : ObservableObject
     {
         if (value && !_hasLoadedChildren)
         {
-            LoadChildren();
+            _ = LoadChildrenAsync();
         }
     }
 
     public void LoadChildren()
-    {
-        _hasLoadedChildren = true;
-        Children.Clear();
+        => LoadChildrenAsync().GetAwaiter().GetResult();
 
-        var subdirs = _fileSystemService.GetSubDirectories(FullPath);
-        foreach (var dir in subdirs)
+    public async Task LoadChildrenAsync()
+    {
+        if (_hasLoadedChildren || _isLoadingChildren)
+            return;
+
+        _hasLoadedChildren = true;
+        _isLoadingChildren = true;
+        Children.Clear();
+        Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
+
+        try
         {
-            var child = new FolderTreeNodeViewModel(_fileSystemService)
+            var subdirs = await Task.Run(() => _fileSystemService.GetSubDirectories(FullPath));
+            Children.Clear();
+
+            foreach (var dir in subdirs)
             {
-                Name = dir.Name,
-                FullPath = dir.FullPath
-            };
-            // Add a dummy child so the expander arrow shows
-            child.Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
-            Children.Add(child);
+                var child = new FolderTreeNodeViewModel(_fileSystemService)
+                {
+                    Name = dir.Name,
+                    FullPath = dir.FullPath
+                };
+                child.Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
+                Children.Add(child);
+            }
+        }
+        finally
+        {
+            _isLoadingChildren = false;
         }
     }
 

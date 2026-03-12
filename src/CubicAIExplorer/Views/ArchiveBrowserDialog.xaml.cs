@@ -3,24 +3,22 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using CubicAIExplorer.Services;
-using CubicAIExplorer.ViewModels;
-
 namespace CubicAIExplorer.Views;
 
 public partial class ArchiveBrowserDialog : Window
 {
     private readonly string _archivePath;
-    private readonly FileListViewModel _sourceFileList;
+    private readonly Func<IEnumerable<string>, string, bool, Task> _extractEntriesAsync;
     private readonly List<ArchiveEntryInfo> _allEntries;
     private readonly ObservableCollection<ArchiveEntryViewModel> _visibleEntries = [];
     private string _currentFolder = string.Empty;
 
-    public ArchiveBrowserDialog(string archivePath, IReadOnlyList<ArchiveEntryInfo> entries, FileListViewModel sourceFileList)
+    public ArchiveBrowserDialog(string archivePath, IReadOnlyList<ArchiveEntryInfo> entries, Func<IEnumerable<string>, string, bool, Task> extractEntriesAsync)
     {
         InitializeComponent();
 
         _archivePath = archivePath;
-        _sourceFileList = sourceFileList;
+        _extractEntriesAsync = extractEntriesAsync;
         _allEntries = entries.ToList();
         ArchivePathTextBlock.Text = archivePath;
         EntriesListView.ItemsSource = _visibleEntries;
@@ -98,7 +96,7 @@ public partial class ArchiveBrowserDialog : Window
         try
         {
             IsEnabled = false;
-            await _sourceFileList.ExtractArchiveEntriesToAsync(_archivePath, requestedEntries, destination, openWhenDone);
+            await _extractEntriesAsync(requestedEntries, destination, openWhenDone);
         }
         finally
         {

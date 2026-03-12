@@ -98,7 +98,7 @@ public partial class BatchRenameDialog : Window
             ParseOrDefault(CounterPaddingTextBox.Text, 2),
             CounterSeparatorTextBox.Text ?? string.Empty,
             ExtensionModeComboBox.SelectedItem is BatchRenameExtensionMode extensionMode ? extensionMode : BatchRenameExtensionMode.Keep,
-            ExtensionTextBox.Text);
+            ExtensionTextBox.Text ?? string.Empty);
     }
 
     private static int ParseOrDefault(string? value, int fallback)

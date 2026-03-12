@@ -29,15 +29,19 @@ public sealed class SettingsService : IDisposable
 
     public static string GetSettingsPath()
     {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var fallbackPath = Path.Combine(appData, "CubicAIExplorer", "settings.json");
         var overridePath = Environment.GetEnvironmentVariable("CUBICAI_SETTINGS_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
-            return overridePath;
+            return PathSecurityHelper.SanitizePathOrFallback(overridePath, fallbackPath);
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "CubicAIExplorer", "settings.json");
+        return fallbackPath;
     }
 
     public UserSettings Load()
+        => LoadAsync().GetAwaiter().GetResult();
+
+    public async Task<UserSettings> LoadAsync()
     {
         var path = GetSettingsPath();
         if (!File.Exists(path)) return new UserSettings();
@@ -53,7 +57,7 @@ public sealed class SettingsService : IDisposable
             }
             catch (IOException)
             {
-                Thread.Sleep(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
             catch
             {
@@ -64,6 +68,9 @@ public sealed class SettingsService : IDisposable
     }
 
     public void Save(UserSettings settings)
+        => SaveAsync(settings).GetAwaiter().GetResult();
+
+    public async Task SaveAsync(UserSettings settings)
     {
         try
         {
@@ -86,7 +93,7 @@ public sealed class SettingsService : IDisposable
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(100);
+                    await Task.Delay(100).ConfigureAwait(false);
                 }
             }
         }

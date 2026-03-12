@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using CubicAIExplorer.Models;
@@ -28,19 +29,28 @@ public partial class PropertiesDialog : Window
         else if (item.ItemType == FileSystemItemType.Directory)
         {
             SizeText.Text = "";
-            try
+            ContainsLabel.Visibility = Visibility.Visible;
+            ContainsText.Visibility = Visibility.Visible;
+            ContainsText.Text = "Loading...";
+            Loaded += async (_, _) =>
             {
-                var dirInfo = new DirectoryInfo(item.FullPath);
-                var fileCount = dirInfo.EnumerateFiles("*", SearchOption.TopDirectoryOnly).Count();
-                var dirCount = dirInfo.EnumerateDirectories("*", SearchOption.TopDirectoryOnly).Count();
-                ContainsLabel.Visibility = Visibility.Visible;
-                ContainsText.Visibility = Visibility.Visible;
-                ContainsText.Text = $"{fileCount} files, {dirCount} folders";
-            }
-            catch
-            {
-                // Access denied — leave blank
-            }
+                try
+                {
+                    var counts = await Task.Run(() =>
+                    {
+                        var dirInfo = new DirectoryInfo(item.FullPath);
+                        var fileCount = dirInfo.EnumerateFiles("*", SearchOption.TopDirectoryOnly).Count();
+                        var dirCount = dirInfo.EnumerateDirectories("*", SearchOption.TopDirectoryOnly).Count();
+                        return (fileCount, dirCount);
+                    });
+
+                    ContainsText.Text = $"{counts.fileCount} files, {counts.dirCount} folders";
+                }
+                catch
+                {
+                    ContainsText.Text = string.Empty;
+                }
+            };
         }
 
         Title = $"{item.Name} Properties";

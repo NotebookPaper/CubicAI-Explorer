@@ -6,6 +6,7 @@ using System.Text;
 using System.Windows;
 using System.Text.Json;
 using System.ComponentModel;
+using System.Collections.Specialized;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -16,7 +17,7 @@ using CubicAIExplorer.Services;
 
 namespace CubicAIExplorer.ViewModels;
 
-public partial class MainViewModel : ObservableObject
+public partial class MainViewModel : ObservableObject, IDisposable
 {
     private static readonly JsonSerializerOptions BookmarkJsonOptions = new()
     {
@@ -27,9 +28,11 @@ public partial class MainViewModel : ObservableObject
     public IFileSystemService FileSystemService => _fileSystemService;
     private readonly IClipboardService _clipboardService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly IDialogService _dialogService;
     private readonly Services.SettingsService? _settingsService;
     private readonly Services.BookmarkService? _bookmarkService;
     private readonly Models.UserSettings _userSettings;
+    private readonly NotifyCollectionChangedEventHandler _dropStackCollectionChangedHandler;
 
     [ObservableProperty]
     private TabViewModel? _activeTab;
@@ -227,11 +230,13 @@ public partial class MainViewModel : ObservableObject
         Services.SettingsService? settingsService = null,
         Models.UserSettings? userSettings = null,
         IFileOperationQueueService? fileOperationQueueService = null,
-        Services.BookmarkService? bookmarkService = null)
+        Services.BookmarkService? bookmarkService = null,
+        IDialogService? dialogService = null)
     {
         _fileSystemService = fileSystemService;
         _clipboardService = clipboardService;
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
+        _dialogService = dialogService ?? HeadlessDialogService.Instance;
         _settingsService = settingsService;
         _bookmarkService = bookmarkService;
         _userSettings = userSettings ?? new Models.UserSettings();
@@ -265,11 +270,12 @@ public partial class MainViewModel : ObservableObject
         if (_bookmarkService != null)
             _bookmarkService.BookmarksChanged += OnExternalBookmarksChanged;
 
-        DropStackItems.CollectionChanged += (_, _) =>
+        _dropStackCollectionChangedHandler = (_, _) =>
         {
             OnPropertyChanged(nameof(HasDropStackItems));
             OnPropertyChanged(nameof(DropStackItemCount));
         };
+        DropStackItems.CollectionChanged += _dropStackCollectionChangedHandler;
 
         LoadBookmarks();
         LoadRecentFolders();
@@ -595,6 +601,7 @@ public partial class MainViewModel : ObservableObject
     {
         return new TabItem
         {
+            Id = item.Id,
             Path = item.Path?.Trim() ?? string.Empty,
             Title = item.Title ?? string.Empty,
             IsLocked = item.IsLocked,
@@ -605,7 +612,7 @@ public partial class MainViewModel : ObservableObject
 
     private TabViewModel CreateTab(string path, TabItem? tabState, bool activate)
     {
-        var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+        var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService, _dialogService);
         AttachTab(tab);
         Tabs.Add(tab);
         ApplyTabDefaults(tab);
@@ -837,6 +844,7 @@ public partial class MainViewModel : ObservableObject
         tab.FileList.FilterHistoryEntryAdded -= OnFilterHistoryEntryAdded;
         tab.PropertyChanged -= OnTabPropertyChanged;
         tab.FileList.PropertyChanged -= OnFileListPropertyChanged;
+        tab.Dispose();
     }
 
     private void OnTabNavigateRequested(object? sender, string path)
@@ -2777,7 +2785,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to import bookmarks: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Failed to import bookmarks: {ex.Message}", "Import Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -2831,7 +2839,7 @@ public partial class MainViewModel : ObservableObject
         if (count > 0)
         {
             SaveBookmarks();
-            MessageBox.Show($"Imported {count} bookmarks hierarchically.", "Import Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.ShowMessage($"Imported {count} bookmarks hierarchically.", "Import Successful", System.Windows.MessageBoxImage.Information);
         }
     }    private bool TryAddBookmarkWithFeedback(string path, string? displayName = null, bool save = true, bool ignoreExistence = false)
     {
@@ -2867,11 +2875,11 @@ public partial class MainViewModel : ObservableObject
                 .ToList();
 
             File.WriteAllText(filePath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
-            MessageBox.Show($"Exported {payload.Count} root bookmarks.", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.ShowMessage($"Exported {payload.Count} root bookmarks.", "Export Successful", System.Windows.MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to export bookmarks: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.ShowMessage($"Failed to export bookmarks: {ex.Message}", "Export Error", System.Windows.MessageBoxImage.Error);
         }
     }
 
@@ -2897,7 +2905,32 @@ public partial class MainViewModel : ObservableObject
 
     private void SaveBookmarks()
     {
-        _bookmarkService?.Save(Bookmarks);
+        if (_bookmarkService != null)
+            _ = _bookmarkService.SaveAsync(Bookmarks);
+    }
+
+    public void Dispose()
+    {
+        _fileOperationQueueService.PropertyChanged -= OnFileOperationQueuePropertyChanged;
+
+        if (_settingsService != null)
+            _settingsService.SettingsChanged -= OnExternalSettingsChanged;
+
+        if (_bookmarkService != null)
+            _bookmarkService.BookmarksChanged -= OnExternalBookmarksChanged;
+
+        DropStackItems.CollectionChanged -= _dropStackCollectionChangedHandler;
+
+        foreach (var tab in Tabs.ToArray())
+            DetachTab(tab);
+
+        Tabs.Clear();
+
+        if (_rightPaneTab != null)
+        {
+            _rightPaneTab.Dispose();
+            _rightPaneTab = null;
+        }
     }
 
     private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
@@ -2927,7 +2960,7 @@ public partial class MainViewModel : ObservableObject
         IsDualPaneMode = !IsDualPaneMode;
         if (IsDualPaneMode && _rightPaneTab == null)
         {
-            _rightPaneTab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService);
+            _rightPaneTab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService, _dialogService);
             AttachTab(_rightPaneTab);
             OnPropertyChanged(nameof(RightPaneTab));
 
@@ -4288,7 +4321,8 @@ public partial class MainViewModel : ObservableObject
         _userSettings.FilterHistory = GetFilterHistorySnapshot();
         _userSettings.DetailsColumns = NormalizeDetailsColumnSettings(_userSettings.DetailsColumns);
         _userSettings.ManualSortFolders = NormalizeManualSortFolders(_userSettings.ManualSortFolders);
-        _settingsService?.Save(_userSettings);
+        if (_settingsService != null)
+            _ = _settingsService.SaveAsync(_userSettings);
     }
 
     partial void OnIsToolbarVisibleChanged(bool value) { _userSettings.ShowToolbar = value; SaveSettings(); }

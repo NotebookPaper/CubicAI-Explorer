@@ -1,9 +1,9 @@
 # Continuation Instructions for Next Session
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-12
 > Branch: `master`
-> HEAD: current local `master` after drop stack
-> Status: Drop Stack is implemented and verified.
+> HEAD: current local `master` after spec 020
+> Status: Spec 020 is implemented and verified.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -23,8 +23,17 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `017-grouping-manual-sort` is now complete in this checkout.
 - Spec `018-external-tools` is now complete in this checkout.
 - Spec `019-drop-stack` is now complete in this checkout.
+- Spec `020-code-review-fixes` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
+
+## Latest Completed
+
+- **Spec 020: Code Review Fixes** (New in this session)
+  - Added shared path sanitization for bookmark/settings/template env overrides plus current-user-only single-instance pipe creation.
+  - Introduced `IDialogService` so `FileListViewModel` and `MainViewModel` no longer call `MessageBox.Show` or `Application.Current.MainWindow` directly.
+  - Reworked archive browse requests, async directory/folder/property loading, replace-flow cleanup, clipboard drop-effect payload handling, and viewmodel disposal/unsubscription.
+  - Added smoke coverage for sanitized env overrides and JSON Id round-trips for tab, bookmark, and saved-search models.
 
 ## Completed
 
@@ -141,8 +150,8 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- Next highest-priority incomplete spec is `020-code-review-fixes.md`.
-- Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting another roadmap slice.
+- No incomplete numbered specs remain in this checkout.
+- Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting new roadmap work.
 
 ## Key Files
 
@@ -178,21 +187,20 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Drop Stack is the latest verified feature slice in this checkout.
-- Legacy numbered specs already completed in this checkout remain complete.
-- `specs/015-layout-manager.md` and `specs/016-advanced-search-filters.md` are now complete.
+- Spec 020 code review fixes are the latest verified slice in this checkout.
+- All numbered specs currently present in `specs/` are complete in this checkout.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
 
-Verification run on the updated checkout on 2026-03-11:
+Verification run on the updated checkout on 2026-03-12:
 
 - `dotnet build CubicAIExplorer.sln -v minimal`
   - passed
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, sanitized env override coverage, JSON Id round-trips, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

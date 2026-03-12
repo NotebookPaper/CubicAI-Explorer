@@ -90,6 +90,12 @@ public partial class SplitFileDialog : Window
             return;
         }
 
+        if (!Directory.Exists(OutputDirectory))
+        {
+            MessageBox.Show(this, "Choose an existing output directory.", "Split File", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         if (ChunkSizeBytes <= 0)
         {
             MessageBox.Show(this, "Enter a valid chunk size.", "Split File", MessageBoxButton.OK, MessageBoxImage.Warning);

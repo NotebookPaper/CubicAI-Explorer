@@ -2,7 +2,7 @@ namespace CubicAIExplorer.Models;
 
 public sealed class TabItem
 {
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; set; } = Guid.NewGuid();
     public required string Path { get; set; }
     public string Title { get; set; } = string.Empty;
     public bool IsLocked { get; set; }

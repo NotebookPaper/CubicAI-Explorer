@@ -1,15 +1,17 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CubicAIExplorer.Services;
+using System.Windows;
 using System.Windows.Media;
 
 namespace CubicAIExplorer.ViewModels;
 
-public partial class TabViewModel : ObservableObject
+public partial class TabViewModel : ObservableObject, IDisposable
 {
     private readonly NavigationService _navigation = new();
     private readonly IFileSystemService _fileSystemService;
     private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly IDialogService _dialogService;
 
     [ObservableProperty]
     private string _title = "New Tab";
@@ -46,13 +48,15 @@ public partial class TabViewModel : ObservableObject
     public TabViewModel(
         IFileSystemService fileSystemService,
         IClipboardService clipboardService,
-        IFileOperationQueueService? fileOperationQueueService = null)
+        IFileOperationQueueService? fileOperationQueueService = null,
+        IDialogService? dialogService = null)
     {
         _fileSystemService = fileSystemService;
         _fileOperationQueueService = fileOperationQueueService ?? new FileOperationQueueService();
-        FileList = new FileListViewModel(fileSystemService, clipboardService, _fileOperationQueueService);
-        FileList.NavigateRequested += (_, path) => NavigateRequested?.Invoke(this, path);
-        _navigation.Navigated += (_, path) => OnNavigated(path);
+        _dialogService = dialogService ?? HeadlessDialogService.Instance;
+        FileList = new FileListViewModel(fileSystemService, clipboardService, _fileOperationQueueService, _dialogService);
+        FileList.NavigateRequested += OnFileListNavigateRequested;
+        _navigation.Navigated += OnNavigationServiceNavigated;
     }
 
     public void NavigateTo(string path)
@@ -102,6 +106,7 @@ public partial class TabViewModel : ObservableObject
     {
         return new Models.TabItem
         {
+            Id = Id,
             Path = CurrentPath,
             Title = Title,
             IsLocked = IsLocked,
@@ -129,10 +134,24 @@ public partial class TabViewModel : ObservableObject
         if (IsLocked && string.IsNullOrWhiteSpace(LockedRootPath))
             LockedRootPath = path.TrimEnd('\\');
 
-        FileList.LoadDirectory(path);
+        if (Application.Current == null)
+            FileList.LoadDirectory(path);
+        else
+            _ = FileList.LoadDirectoryAsync(path);
         CanGoBack = _navigation.CanGoBack;
         CanGoForward = _navigation.CanGoForward;
     }
+
+    public void Dispose()
+    {
+        FileList.NavigateRequested -= OnFileListNavigateRequested;
+        _navigation.Navigated -= OnNavigationServiceNavigated;
+        FileList.Dispose();
+    }
+
+    private void OnFileListNavigateRequested(object? sender, string path) => NavigateRequested?.Invoke(this, path);
+
+    private void OnNavigationServiceNavigated(object? sender, string path) => OnNavigated(path);
 
     partial void OnTabColorChanged(string value)
     {

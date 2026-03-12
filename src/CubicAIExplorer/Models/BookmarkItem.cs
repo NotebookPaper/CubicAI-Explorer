@@ -5,7 +5,7 @@ namespace CubicAIExplorer.Models;
 
 public partial class BookmarkItem : ObservableObject
 {
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     [ObservableProperty]
     private string _name = string.Empty;

@@ -1,8 +1,9 @@
 # 020 - Code Review Fixes
+<!-- NR_OF_TRIES: 1 -->
 
 ## Status
 
-INCOMPLETE
+COMPLETE
 
 ## Summary
 
@@ -12,45 +13,45 @@ Address issues found during a full codebase code review covering security, archi
 
 ### Security (Critical)
 
-- [ ] **S1: Sanitize environment variable paths** — `CUBICAI_BOOKMARKS_PATH`, `CUBICAI_SETTINGS_PATH`, and `CUBICAI_NEWFILE_TEMPLATES_PATH` are read directly without `SanitizePath()`, allowing path traversal. Files: `BookmarkService.cs:32-34`, `SettingsService.cs:32-34`, `UserSettings.cs:9-11`
-- [ ] **S2: Add ACL to named pipe** — `SingleInstanceService.cs:61-62` creates the pipe with default access, allowing any user on the machine to send commands. Restrict to current user via `PipeSecurity`/`PipeAccessRule`.
+- [x] **S1: Sanitize environment variable paths** — `CUBICAI_BOOKMARKS_PATH`, `CUBICAI_SETTINGS_PATH`, and `CUBICAI_NEWFILE_TEMPLATES_PATH` now resolve through the shared path sanitizer before use.
+- [x] **S2: Add ACL to named pipe** — single-instance IPC now uses `PipeOptions.CurrentUserOnly` so only the current user can connect to the server pipe.
 
 ### Serialization Bugs (High)
 
-- [ ] **D1: TabItem.Id is get-only** — `System.Text.Json` can't deserialize it; generates new Guid each load. Change to `{ get; set; }` or `{ get; init; }`. File: `TabItem.cs:5`
-- [ ] **D2: BookmarkItem.Id is get-only** — same issue. File: `BookmarkItem.cs:8`
-- [ ] **D3: SavedSearchItem.Id is get-only** — same issue. File: `SavedSearchItem.cs:7`
+- [x] **D1: TabItem.Id is get-only** — `System.Text.Json` can now round-trip the persisted identifier.
+- [x] **D2: BookmarkItem.Id is get-only** — `System.Text.Json` can now round-trip the persisted identifier.
+- [x] **D3: SavedSearchItem.Id is get-only** — `System.Text.Json` can now round-trip the persisted identifier.
 
 ### Architecture / MVVM Violations (High)
 
-- [ ] **A1: Extract MessageBox.Show from ViewModels** — 22 occurrences across `FileListViewModel.cs` (18x) and `MainViewModel.cs` (4x). Create a dialog service interface and inject it so ViewModels don't depend on WPF UI.
-- [ ] **A2: Remove Application.Current.MainWindow from ViewModel** — `FileListViewModel.cs:274,1458,1463` accesses UI directly. Route through a service or event.
-- [ ] **A3: Remove ViewModel reference from ArchiveBrowseRequest model** — `ArchiveBrowseRequest.cs:9` holds a `FileListViewModel` reference. Models should not depend on ViewModels.
+- [x] **A1: Extract MessageBox.Show from ViewModels** — added `IDialogService` plus WPF/headless implementations and routed viewmodel message/confirmation flows through it.
+- [x] **A2: Remove Application.Current.MainWindow from ViewModel** — batch-rename and conflict dialogs now flow through the dialog service instead of directly touching `MainWindow`.
+- [x] **A3: Remove ViewModel reference from ArchiveBrowseRequest model** — archive browse requests now carry an extraction delegate instead of a `FileListViewModel`.
 
 ### Performance (High)
 
-- [ ] **P1: Make folder tree expansion async** — `FolderTreeNodeViewModel.cs:31-56` synchronously enumerates subdirectories on the UI thread, freezing for large dirs.
-- [ ] **P2: Make LoadDirectory async** — `FileListViewModel.cs:379` blocks UI for large directories.
-- [ ] **P3: Make PropertiesDialog file counting async** — `PropertiesDialog.xaml.cs:33-35` synchronously counts files/dirs in constructor.
+- [x] **P1: Make folder tree expansion async** — folder-tree child enumeration now runs asynchronously with a loading placeholder.
+- [x] **P2: Make LoadDirectory async** — directory enumeration now uses `LoadDirectoryAsync` for UI flows while preserving deterministic headless behavior for smoke tests.
+- [x] **P3: Make PropertiesDialog file counting async** — directory counts now populate after load on a background task.
 
 ### Bugs & Race Conditions (High/Medium)
 
-- [ ] **B1: TOCTOU race in PerformStageAndRename** — `FileSystemService.cs:1132-1140` does check-then-act on directory/file existence. Use try/catch instead of pre-checking.
-- [ ] **B2: MemoryStream leak in clipboard** — `ClipboardService.cs:31,55` creates a stream with unclear ownership. Ensure proper disposal.
-- [ ] **B3: Replace Thread.Sleep with async delay** — `BookmarkService.cs:45-65` and `SettingsService.cs:45-62` use `Thread.Sleep(100)` in retry loops, blocking UI thread.
+- [x] **B1: TOCTOU race in PerformStageAndRename** — replace staging now uses try/catch-based backup/delete helpers instead of check-then-act deletion.
+- [x] **B2: MemoryStream leak in clipboard** — preferred drop-effect data now uses a byte array payload instead of a disposable stream.
+- [x] **B3: Replace Thread.Sleep with async delay** — retry loops now use async delays and async save paths.
 
 ### Memory Leaks (Medium)
 
-- [ ] **M1: Unsubscribe _fileOperationQueueService.PropertyChanged** — `MainViewModel.cs:244` subscribes but never unsubscribes.
-- [ ] **M2: Unsubscribe SettingsChanged and BookmarksChanged** — `MainViewModel.cs:247,250` subscribes but never unsubscribes.
-- [ ] **M3: Fix anonymous lambda on PropertyChanged** — `FileListViewModel.cs:356-365` uses anonymous lambda that can't be unsubscribed. Store reference.
-- [ ] **M4: Unsubscribe NavigateRequested and Navigated on tab close** — `TabViewModel.cs:54-55` subscribes but never unsubscribes.
+- [x] **M1: Unsubscribe _fileOperationQueueService.PropertyChanged** — `MainViewModel` now detaches queue handlers in `Dispose()`.
+- [x] **M2: Unsubscribe SettingsChanged and BookmarksChanged** — `MainViewModel` now detaches external service handlers in `Dispose()`.
+- [x] **M3: Fix anonymous lambda on PropertyChanged** — `FileListViewModel` now stores the queue handler delegate and unsubscribes it in `Dispose()`.
+- [x] **M4: Unsubscribe NavigateRequested and Navigated on tab close** — `TabViewModel` now detaches these handlers and disposes its file list.
 
 ### Input Validation (Low)
 
-- [ ] **V1: Validate output directory exists in SplitFileDialog** — `SplitFileDialog.xaml.cs:79-100` only checks non-empty string.
-- [ ] **V2: Validate destination path in ExtractArchiveDialog** — `ExtractArchiveDialog.xaml.cs:22-28` accepts any non-empty string.
-- [ ] **V3: Null-coalesce ExtensionTextBox.Text** — `BatchRenameDialog.xaml.cs:101` is missing `?? string.Empty`.
+- [x] **V1: Validate output directory exists in SplitFileDialog** — split now requires an existing output directory.
+- [x] **V2: Validate destination path in ExtractArchiveDialog** — extract now validates the resolved path and its parent directory before accepting.
+- [x] **V3: Null-coalesce ExtensionTextBox.Text** — batch rename now safely treats a null extension textbox value as an empty string.
 
 ## Notes
 

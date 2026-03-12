@@ -28,7 +28,7 @@ public sealed class ClipboardService : IClipboardService
 
         var dataObject = new DataObject();
         dataObject.SetFileDropList(dropList);
-        dataObject.SetData(PreferredDropEffect, CreateDropEffectStream(isCut ? DropEffectMove : DropEffectCopy));
+        dataObject.SetData(PreferredDropEffect, CreateDropEffectBytes(isCut ? DropEffectMove : DropEffectCopy));
 
         ExecuteClipboardAction(() => Clipboard.SetDataObject(dataObject, copy: true));
     }
@@ -46,14 +46,7 @@ public sealed class ClipboardService : IClipboardService
 
     public void Clear() => ExecuteClipboardAction(Clipboard.Clear);
 
-    private static MemoryStream CreateDropEffectStream(uint dropEffect)
-    {
-        var stream = new MemoryStream(4);
-        using var writer = new BinaryWriter(stream, System.Text.Encoding.Default, leaveOpen: true);
-        writer.Write(dropEffect);
-        stream.Position = 0;
-        return stream;
-    }
+    private static byte[] CreateDropEffectBytes(uint dropEffect) => BitConverter.GetBytes(dropEffect);
 
     private static uint ReadDropEffect()
     {

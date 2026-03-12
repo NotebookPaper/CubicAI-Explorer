@@ -29,15 +29,19 @@ public sealed class BookmarkService : IDisposable
 
     public static string GetBookmarksPath()
     {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var fallbackPath = Path.Combine(appData, "CubicAIExplorer", "bookmarks.json");
         var overridePath = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
-            return overridePath;
+            return PathSecurityHelper.SanitizePathOrFallback(overridePath, fallbackPath);
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "CubicAIExplorer", "bookmarks.json");
+        return fallbackPath;
     }
 
     public List<BookmarkItem> Load()
+        => LoadAsync().GetAwaiter().GetResult();
+
+    public async Task<List<BookmarkItem>> LoadAsync()
     {
         var path = GetBookmarksPath();
         if (!File.Exists(path)) return [];
@@ -54,7 +58,7 @@ public sealed class BookmarkService : IDisposable
             }
             catch (IOException)
             {
-                Thread.Sleep(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
             catch
             {
@@ -65,6 +69,9 @@ public sealed class BookmarkService : IDisposable
     }
 
     public void Save(IEnumerable<BookmarkItem> bookmarks)
+        => SaveAsync(bookmarks).GetAwaiter().GetResult();
+
+    public async Task SaveAsync(IEnumerable<BookmarkItem> bookmarks)
     {
         try
         {
@@ -89,7 +96,7 @@ public sealed class BookmarkService : IDisposable
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(100);
+                    await Task.Delay(100).ConfigureAwait(false);
                 }
             }
         }
