@@ -1,6 +1,6 @@
 # CubicAI Explorer — Implementation Plan
 
-> **Updated:** 2026-03-12
+> **Updated:** 2026-03-13
 > **Status:** Current with `master`
 
 ## Context
@@ -22,6 +22,12 @@ The app currently includes:
 - cross-machine settings and bookmark synchronization via OneDrive or shared paths
 
 ## Recently Completed Slices
+
+### Undo Close Tab
+
+- added a bounded session-local recently-closed-tab stack in `MainViewModel` that captures tab path, title, lock state, locked root, color, and original index
+- added `Undo Close Tab` to the File menu, tab context menu, and `Ctrl+Shift+T`, with command enablement tied to stack state
+- restore now reopens the most recently closed tab near its original position, reactivates it, preserves lock/color metadata, and avoids tracking session-load or shutdown tab teardown
 
 ### Bookmark drop target visibility and precision
 
@@ -240,7 +246,19 @@ Smoke coverage explicitly includes:
 
 ## Next Planned Work
 
-No incomplete numbered specs remain in `specs/` on this checkout. Re-check this file, `CONTINUE.md`, and any newly added specs before starting the next roadmap slice.
+The next concrete roadmap slices are now:
+
+### 7. Tab-management parity follow-up
+Status: COMPLETE
+Scope:
+- completed: `021-undo-close-tab`
+- rationale: restore flow is now present with menu/context-menu/shortcut access and smoke coverage for single-close, multi-close, and metadata restore cases
+
+### 8. Interaction-level smoke hardening
+Status: IN PROGRESS
+Scope:
+- next: `022-wpf-interaction-smoke-tests`
+- rationale: the current smoke suite is strong at viewmodel/persistence coverage but still misses real WPF hit-testing and mouse-capture regressions
 
 ### 6. Final Polished Parity (Cubic Conclusion)
 Status: COMPLETE

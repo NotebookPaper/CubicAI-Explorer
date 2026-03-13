@@ -37,3 +37,4 @@
 - 2026-03-12: Completed spec 020 code review fixes covering path sanitization, current-user-only IPC, dialog-service extraction, async loading/perf cleanup, leak fixes, safer replace behavior, and validation/serialization regressions.
 - 2026-03-12: Completed spec 020 bookmark drop target visibility with precise into/after targeting, hover expansion for nested folders, and smoke coverage for nested bookmark drops.
 - 2026-03-12: Fixed an active-pane search race by canceling stale directory loads before pane-scoped searches, restoring full smoke-suite pass status.
+- 2026-03-13: Completed spec 021 undo close tab with a bounded recently-closed-tab stack, File/tab-menu plus `Ctrl+Shift+T` restore surface, and smoke coverage for restore ordering and metadata preservation.

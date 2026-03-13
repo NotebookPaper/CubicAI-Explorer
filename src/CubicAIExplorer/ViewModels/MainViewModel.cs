@@ -33,6 +33,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly Services.BookmarkService? _bookmarkService;
     private readonly Models.UserSettings _userSettings;
     private readonly NotifyCollectionChangedEventHandler _dropStackCollectionChangedHandler;
+    private readonly List<ClosedTabState> _recentlyClosedTabs = [];
+    private bool _suppressRecentlyClosedTabTracking;
 
     [ObservableProperty]
     private TabViewModel? _activeTab;
@@ -212,6 +214,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public bool CanCancelFileOperationQueue => _fileOperationQueueService.CanCancel;
     public string ActiveUndoDescription => CurrentPaneFileList?.UndoDescription ?? "Undo";
     public string ActiveRedoDescription => CurrentPaneFileList?.RedoDescription ?? "Redo";
+    public bool HasRecentlyClosedTabs => _recentlyClosedTabs.Count > 0;
 
     public event EventHandler? DualPaneModeChanged;
     public event EventHandler? PreviewModeChanged;
@@ -225,6 +228,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<DetailsColumnSetting> DetailsColumnSettings => _userSettings.DetailsColumns;
 
     private const int MaxRecentFolders = 15;
+    private const int MaxRecentlyClosedTabs = 20;
 
     public MainViewModel(IFileSystemService fileSystemService, IClipboardService clipboardService,
         Services.SettingsService? settingsService = null,
@@ -524,51 +528,57 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private bool ApplyNamedSession(NamedSession session, bool setCurrentSession)
     {
-        var tabItems = GetPersistedTabItems(session.OpenTabItems, session.OpenTabs)
-            .Where(item => _fileSystemService.DirectoryExists(item.Path))
-            .DistinctBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (tabItems.Count == 0)
-            return false;
-
-        foreach (var tab in Tabs.ToList())
+        return SuppressRecentlyClosedTabTracking(() =>
         {
-            DetachTab(tab);
-        }
+            var tabItems = GetPersistedTabItems(session.OpenTabItems, session.OpenTabs)
+                .Where(item => _fileSystemService.DirectoryExists(item.Path))
+                .DistinctBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-        Tabs.Clear();
-        ActiveTab = null;
+            if (tabItems.Count == 0)
+                return false;
 
-        foreach (var tabState in tabItems)
-        {
-            CreateTab(tabState.Path, tabState, activate: false);
-        }
+            _recentlyClosedTabs.Clear();
+            RaiseRecentlyClosedTabsChanged();
 
-        ActiveTab = Tabs[Math.Clamp(session.ActiveTabIndex, 0, Tabs.Count - 1)];
+            foreach (var tab in Tabs.ToList())
+            {
+                DetachTab(tab);
+            }
 
-        if (session.IsDualPaneMode)
-        {
-            if (!IsDualPaneMode)
+            Tabs.Clear();
+            ActiveTab = null;
+
+            foreach (var tabState in tabItems)
+            {
+                CreateTab(tabState.Path, tabState, activate: false);
+            }
+
+            ActiveTab = Tabs[Math.Clamp(session.ActiveTabIndex, 0, Tabs.Count - 1)];
+
+            if (session.IsDualPaneMode)
+            {
+                if (!IsDualPaneMode)
+                    ToggleDualPane();
+
+                var rightPanePath = !string.IsNullOrWhiteSpace(session.RightPanePath)
+                    && _fileSystemService.DirectoryExists(session.RightPanePath)
+                    ? session.RightPanePath
+                    : ActiveTab.CurrentPath;
+                _rightPaneTab?.NavigateTo(rightPanePath);
+            }
+            else if (IsDualPaneMode)
+            {
                 ToggleDualPane();
+            }
 
-            var rightPanePath = !string.IsNullOrWhiteSpace(session.RightPanePath)
-                && _fileSystemService.DirectoryExists(session.RightPanePath)
-                ? session.RightPanePath
-                : ActiveTab.CurrentPath;
-            _rightPaneTab?.NavigateTo(rightPanePath);
-        }
-        else if (IsDualPaneMode)
-        {
-            ToggleDualPane();
-        }
+            if (setCurrentSession)
+                CurrentNamedSessionName = session.Name;
 
-        if (setCurrentSession)
-            CurrentNamedSessionName = session.Name;
-
-        RefreshCurrentPaneState();
-        SaveSettings();
-        return true;
+            RefreshCurrentPaneState();
+            SaveSettings();
+            return true;
+        });
     }
 
     private void ApplyTabDefaults(TabViewModel tab)
@@ -610,11 +620,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
     }
 
-    private TabViewModel CreateTab(string path, TabItem? tabState, bool activate)
+    private TabViewModel CreateTab(string path, TabItem? tabState, bool activate, int? insertIndex = null)
     {
         var tab = new TabViewModel(_fileSystemService, _clipboardService, _fileOperationQueueService, _dialogService);
         AttachTab(tab);
-        Tabs.Add(tab);
+        var targetIndex = insertIndex.HasValue
+            ? Math.Clamp(insertIndex.Value, 0, Tabs.Count)
+            : Tabs.Count;
+        Tabs.Insert(targetIndex, tab);
         ApplyTabDefaults(tab);
         tab.ApplyPersistedState(tabState);
         if (activate)
@@ -1445,8 +1458,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (tab == null) return;
         var index = Tabs.IndexOf(tab);
-        DetachTab(tab);
-        Tabs.Remove(tab);
+        RemoveTab(tab, trackForUndo: true);
 
         if (Tabs.Count == 0)
         {
@@ -1624,6 +1636,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             StatusText = $"Run as administrator failed: {ex.Message}";
         }
+    }
+
+    private bool CanUndoCloseTab() => HasRecentlyClosedTabs;
+
+    [RelayCommand(CanExecute = nameof(CanUndoCloseTab))]
+    private void UndoCloseTab()
+    {
+        if (_recentlyClosedTabs.Count == 0)
+            return;
+
+        var state = _recentlyClosedTabs[^1];
+        _recentlyClosedTabs.RemoveAt(_recentlyClosedTabs.Count - 1);
+        RaiseRecentlyClosedTabsChanged();
+
+        if (!_fileSystemService.DirectoryExists(state.Tab.Path))
+        {
+            StatusText = $"Undo close tab skipped: {state.Tab.Path} is no longer available.";
+            return;
+        }
+
+        var restoredTab = CreateTab(state.Tab.Path, CloneTabItem(state.Tab), activate: true, insertIndex: state.Index);
+        ActiveTab = restoredTab;
+        StatusText = $"Restored tab: {restoredTab.Title}";
     }
 
     [RelayCommand]
@@ -2186,8 +2221,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var activeTabWasClosed = ActiveTab != null && tabsToClose.Contains(ActiveTab);
         foreach (var tab in tabsToClose)
         {
-            DetachTab(tab);
-            Tabs.Remove(tab);
+            RemoveTab(tab, trackForUndo: true);
         }
 
         if (Tabs.Count == 0)
@@ -2926,6 +2960,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _suppressRecentlyClosedTabTracking = true;
         _fileOperationQueueService.PropertyChanged -= OnFileOperationQueuePropertyChanged;
 
         if (_settingsService != null)
@@ -2948,7 +2983,62 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void RemoveTab(TabViewModel tab, bool trackForUndo)
+    {
+        var index = Tabs.IndexOf(tab);
+        if (index < 0)
+            return;
+
+        if (trackForUndo)
+            TrackClosedTab(tab, index);
+
+        DetachTab(tab);
+        Tabs.RemoveAt(index);
+    }
+
+    private void TrackClosedTab(TabViewModel tab, int index)
+    {
+        if (_suppressRecentlyClosedTabTracking || string.IsNullOrWhiteSpace(tab.CurrentPath))
+            return;
+
+        _recentlyClosedTabs.Add(new ClosedTabState(index, CloneTabItem(tab.ToPersistedItem())));
+        if (_recentlyClosedTabs.Count > MaxRecentlyClosedTabs)
+            _recentlyClosedTabs.RemoveAt(0);
+
+        RaiseRecentlyClosedTabsChanged();
+    }
+
+    private void RaiseRecentlyClosedTabsChanged()
+    {
+        OnPropertyChanged(nameof(HasRecentlyClosedTabs));
+        UndoCloseTabCommand.NotifyCanExecuteChanged();
+    }
+
+    private T SuppressRecentlyClosedTabTracking<T>(Func<T> action)
+    {
+        var previous = _suppressRecentlyClosedTabTracking;
+        _suppressRecentlyClosedTabTracking = true;
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            _suppressRecentlyClosedTabTracking = previous;
+        }
+    }
+
+    private void SuppressRecentlyClosedTabTracking(Action action)
+    {
+        SuppressRecentlyClosedTabTracking(() =>
+        {
+            action();
+            return true;
+        });
+    }
+
     private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
+    private sealed record ClosedTabState(int Index, TabItem Tab);
     private sealed class SavedSearchRecord
     {
         public string Name { get; set; } = string.Empty;

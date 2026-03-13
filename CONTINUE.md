@@ -1,9 +1,9 @@
 # Continuation Instructions for Next Session
 
-> Last updated: 2026-03-12
+> Last updated: 2026-03-13
 > Branch: `master`
-> HEAD: current local `master` after active-pane search race fix
-> Status: All numbered specs currently present in `specs/` are implemented and verified.
+> HEAD: current local `master` after spec 021 undo-close-tab completion
+> Status: Spec `021-undo-close-tab` is complete in this checkout; `022-wpf-interaction-smoke-tests` is the next queued roadmap slice.
 
 Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
@@ -26,9 +26,17 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 - Spec `020-bookmark-drop-target-visibility` is now complete in this checkout.
 - Spec `020-code-review-fixes` is now complete in this checkout.
 - The remaining post-spec roadmap item, improved queue-history error reporting, is also complete in this checkout.
+- Spec `021-undo-close-tab` is now complete in this checkout.
+- Spec `022-wpf-interaction-smoke-tests` remains incomplete.
 - Remaining untracked paths are mostly local Ralph/tooling folders and user-local design scratch files.
 
 ## Latest Completed
+
+- **Spec 021: Undo Close Tab** (New in this session)
+  - Added a bounded recently-closed-tab stack in `MainViewModel` that captures tab path, title, lock state, locked root path, tab color, and original index.
+  - Added `Undo Close Tab` to the File menu, tab context menu, and `Ctrl+Shift+T`, with command enablement tied to whether the stack has entries.
+  - Restore now reopens the latest closed tab near its original position, reactivates it, preserves lock/color metadata, and suppresses tracking during session rehydration and shutdown teardown.
+  - Added smoke coverage for single-tab restore, reverse-order multi-close restore, and metadata restoration behavior.
 
 - **Regression fix: active-pane search routing race** (New in this session)
   - Fixed a stale async directory-load race that could mutate a pane file list while pane-scoped search results were being shown.
@@ -155,8 +163,9 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Next Steps
 
-- No incomplete numbered specs remain in this checkout.
-- Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and any newly added specs before starting new roadmap work.
+- Prioritize `022-wpf-interaction-smoke-tests` as the next roadmap slice.
+- Focus that work on dispatcher-level drag/drop, hit-testing, mouse capture, and other interaction regressions that the current viewmodel-heavy smoke suite cannot catch.
+- Re-check `IMPLEMENTATION_PLAN.md`, `CONTINUE.md`, and the remaining incomplete spec before starting implementation.
 
 ## Key Files
 
@@ -193,19 +202,19 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 Tracked worktree state:
 
 - Active-pane search routing regression is fixed and the smoke suite is green again on this checkout.
-- All numbered specs currently present in `specs/` are complete in this checkout.
+- Spec `021` is complete and spec `022` remains intentionally incomplete.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
 
-Verification run on the updated checkout on 2026-03-12:
+Verification run on the updated checkout on 2026-03-13:
 
 - `dotnet build CubicAIExplorer.sln -v minimal`
   - passed
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including nested bookmark drop-target coverage, hover-expand wiring checks, advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, sanitized env override coverage, JSON Id round-trips, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including undo-close-tab restore coverage, nested bookmark drop-target coverage, hover-expand wiring checks, advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, sanitized env override coverage, JSON Id round-trips, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

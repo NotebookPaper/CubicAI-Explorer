@@ -39,6 +39,9 @@ internal static class Program
             Run("close tabs to left", failures, () => TestCloseTabsToLeft(tempRoot));
             Run("close tabs to right", failures, () => TestCloseTabsToRight(tempRoot));
             Run("close other tabs", failures, () => TestCloseOtherTabs(tempRoot));
+            Run("undo close tab restores latest tab", failures, () => TestUndoCloseTabRestoresLatestTab(tempRoot));
+            Run("undo close tab restores metadata", failures, () => TestUndoCloseTabRestoresMetadata(tempRoot));
+            Run("undo close tab reverses multi-close order", failures, () => TestUndoCloseTabReversesMultiCloseOrder(tempRoot));
             Run("locked tab opens new tab for outside navigation", failures, () => TestLockedTabOpensNewTabForOutsideNavigation(tempRoot));
             Run("tab lock and color persistence", failures, () => TestTabLockAndColorPersistence(tempRoot));
             Run("selection size status", failures, () => TestSelectionSizeStatus(tempRoot));
@@ -1341,6 +1344,98 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
         }
+    }
+
+    private static void TestUndoCloseTabRestoresLatestTab(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var first = CreateCleanSubdir(root, "undo_close_first");
+        var second = CreateCleanSubdir(root, "undo_close_second");
+
+        var vm = new MainViewModel(fs, clipboard);
+        Assert(!vm.UndoCloseTabCommand.CanExecute(null), "Undo close tab should be disabled before any tab is closed.");
+
+        vm.NavigateToPath(first);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(second);
+
+        var closedTab = vm.ActiveTab!;
+        vm.CloseTabCommand.Execute(closedTab);
+
+        Assert(vm.Tabs.Count == 1, "Closing the active tab should remove it from the tab collection.");
+        Assert(vm.UndoCloseTabCommand.CanExecute(null), "Undo close tab should enable after a tab is closed.");
+
+        vm.UndoCloseTabCommand.Execute(null);
+
+        Assert(vm.Tabs.Count == 2, "Undo close tab should restore the closed tab.");
+        Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == second,
+            "Undo close tab should reactivate the restored tab.");
+        Assert(vm.Tabs[1].CurrentPath == second, "Undo close tab should restore the tab near its original index.");
+    }
+
+    private static void TestUndoCloseTabRestoresMetadata(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var locked = CreateCleanSubdir(root, "undo_close_locked");
+        var outside = CreateCleanSubdir(root, "undo_close_outside");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(locked);
+        var tab = vm.ActiveTab!;
+        vm.ToggleTabLock(tab);
+        vm.SetTabColor(tab, "#5A9C51");
+        vm.NavigateCurrentPaneToPath(outside);
+
+        vm.CloseTabCommand.Execute(tab);
+        vm.UndoCloseTabCommand.Execute(null);
+
+        Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == locked,
+            "Undo close tab should restore the original locked tab path.");
+        Assert(vm.ActiveTab.IsLocked, "Undo close tab should restore the locked state.");
+        Assert(vm.ActiveTab.LockedRootPath == locked, "Undo close tab should restore the locked root path.");
+        Assert(vm.ActiveTab.TabColor == "#5A9C51", "Undo close tab should restore the tab color.");
+    }
+
+    private static void TestUndoCloseTabReversesMultiCloseOrder(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var first = CreateCleanSubdir(root, "undo_multi_first");
+        var second = CreateCleanSubdir(root, "undo_multi_second");
+        var third = CreateCleanSubdir(root, "undo_multi_third");
+        var fourth = CreateCleanSubdir(root, "undo_multi_fourth");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NavigateToPath(first);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(second);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(third);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(fourth);
+
+        var keepTab = vm.Tabs[1];
+        vm.CloseTabsToRight(keepTab);
+
+        Assert(vm.Tabs.Count == 2, "Close tabs to right should leave the keep tab and tabs on the left.");
+        Assert(vm.UndoCloseTabCommand.CanExecute(null), "Undo close tab should enable after multi-close operations.");
+
+        vm.UndoCloseTabCommand.Execute(null);
+        Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == fourth,
+            "Undo close tab should restore the most recently closed tab first.");
+
+        vm.UndoCloseTabCommand.Execute(null);
+        Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == third,
+            "Repeated undo close tab should restore tabs in reverse close order.");
+
+        vm.CloseOtherTabs(vm.Tabs[0]);
+        Assert(vm.UndoCloseTabCommand.CanExecute(null), "Undo close tab should continue tracking close-other operations.");
+
+        vm.UndoCloseTabCommand.Execute(null);
+        Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == fourth,
+            "Close other tabs should contribute to the restore stack in a predictable last-closed-first order.");
     }
 
     private static void TestCloseTabsToLeft(string root)
@@ -3397,6 +3492,8 @@ internal static class Program
         Assert(main.Contains("EditNewMenuItem_SubmenuOpened"), "Edit New menu should repopulate dynamically.");
         Assert(main.Contains("PaneNewMenuItem_SubmenuOpened"), "Pane New menu should repopulate dynamically.");
         Assert(main.Contains("DuplicateTab_Click"), "Tab duplicate handler should be wired.");
+        Assert(main.Contains("UndoCloseTabCommand"), "Undo close tab command should be wired into the main window.");
+        Assert(main.Contains("Ctrl+Shift+T"), "Undo close tab should advertise its keyboard shortcut.");
         Assert(main.Contains("ToggleTabLock_Click"), "Tab lock handler should be wired.");
         Assert(main.Contains("Header=\"Tab Color\""), "Tab color submenu should exist.");
         Assert(main.Contains("SetTabColor_Click"), "Tab color handler should be wired.");

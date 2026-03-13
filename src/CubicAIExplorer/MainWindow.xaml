@@ -13,6 +13,7 @@
 
     <Window.InputBindings>
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding NewTabCommand}" />
+        <KeyBinding Key="T" Modifiers="Ctrl+Shift" Command="{Binding UndoCloseTabCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
         <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding NavigateToAddressCommand}" />
         <KeyBinding Key="B" Modifiers="Ctrl" Command="{Binding AddBookmarkCommand}" />
@@ -45,6 +46,7 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Tab" InputGestureText="Ctrl+T" Command="{Binding NewTabCommand}" />
+                <MenuItem Header="_Undo Close Tab" InputGestureText="Ctrl+Shift+T" Command="{Binding UndoCloseTabCommand}" />
                 <MenuItem Header="_Close Tab" InputGestureText="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding ActiveTab}" />
                 <Separator />
                 <MenuItem Header="_Sessions" SubmenuOpened="SessionsMenu_SubmenuOpened">
@@ -424,6 +426,9 @@
                                 <ContextMenu>
                                     <MenuItem Header="Duplicate Tab" Click="DuplicateTab_Click"
                                               Tag="{Binding}" />
+                                    <MenuItem Header="Undo Close Tab"
+                                              Command="{Binding DataContext.UndoCloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    <Separator />
                                     <MenuItem Header="Lock Tab"
                                               IsCheckable="True"
                                               IsChecked="{Binding IsLocked, Mode=OneWay}"
