@@ -38,3 +38,4 @@
 - 2026-03-12: Completed spec 020 bookmark drop target visibility with precise into/after targeting, hover expansion for nested folders, and smoke coverage for nested bookmark drops.
 - 2026-03-12: Fixed an active-pane search race by canceling stale directory loads before pane-scoped searches, restoring full smoke-suite pass status.
 - 2026-03-13: Completed spec 021 undo close tab with a bounded recently-closed-tab stack, File/tab-menu plus `Ctrl+Shift+T` restore surface, and smoke coverage for restore ordering and metadata preservation.
+- 2026-03-13: Completed spec 022 WPF interaction smoke tests with dispatcher-driven `MainWindow` helpers, real bookmark-tree drag hit-testing coverage, and tab-strip overflow interaction coverage.

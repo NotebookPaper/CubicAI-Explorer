@@ -1,9 +1,12 @@
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using CubicAIExplorer;
 using CubicAIExplorer.Converters;
 using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
@@ -149,6 +152,8 @@ internal static class Program
             Run("manage layouts dialog loads", failures, TestManageLayoutsDialogLoads);
             Run("preferences window external tools loads", failures, TestPreferencesWindowExternalToolsLoads);
             Run("main window file list shows startup items", failures, () => TestMainWindowFileListShowsStartupItems(tempRoot));
+            Run("bookmark tree interaction hit testing", failures, () => TestBookmarkTreeInteractionHitTesting(tempRoot));
+            Run("tab overflow interaction", failures, () => TestTabOverflowInteraction(tempRoot));
             Run("app icon configuration", failures, TestAppIconConfiguration);
             Run("tab overflow wiring", failures, TestTabOverflowWiring);
             Run("xaml wiring checks", failures, TestXamlWiring);
@@ -4338,6 +4343,169 @@ internal static class Program
             "Run as Administrator should report a success status.");
     }
 
+    private static void TestBookmarkTreeInteractionHitTesting(string root)
+    {
+        var workspace = CreateCleanSubdir(root, "bookmark_tree_interaction");
+        RunOnDispatcher(() =>
+        {
+            var viewModel = new MainViewModel(new FileSystemService(), new FakeClipboardService());
+            var sourcePath = CreateCleanSubdir(workspace, "source");
+            var targetPath = CreateCleanSubdir(workspace, "target");
+            var childPath = CreateCleanSubdir(targetPath, "child");
+
+            var source = new BookmarkItem { Name = "Source", Path = sourcePath };
+            var targetFolder = new BookmarkItem
+            {
+                Name = "Target Folder",
+                Path = targetPath,
+                IsFolder = true
+            };
+            var child = new BookmarkItem
+            {
+                Name = "Child",
+                Path = childPath
+            };
+            targetFolder.Children.Add(child);
+
+            viewModel.Bookmarks.Clear();
+            viewModel.Bookmarks.Add(source);
+            viewModel.Bookmarks.Add(targetFolder);
+            viewModel.IsBookmarksVisible = true;
+
+            var window = CreateSmokeMainWindow(viewModel, width: 1200, height: 900);
+            try
+            {
+                var bookmarkTree = GetNamedElement<TreeView>(window, "BookmarkTree");
+
+                targetFolder.IsExpanded = true;
+                PumpDispatcher();
+
+                var targetContainer = GetTreeViewItem(bookmarkTree, targetFolder)
+                    ?? throw new InvalidOperationException("Bookmark target folder container should exist.");
+                var childContainer = GetTreeViewItem(bookmarkTree, child)
+                    ?? throw new InvalidOperationException("Bookmark child container should exist.");
+
+                var targetBounds = GetElementBoundsRelativeTo(targetContainer, bookmarkTree);
+                var childBounds = GetElementBoundsRelativeTo(childContainer, bookmarkTree);
+                var intoPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + (targetBounds.Height / 2));
+                var afterPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + 2);
+
+                bookmarkTree.CaptureMouse();
+                try
+                {
+                    var intoTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
+                        window,
+                        "ResolveBookmarkDropTarget",
+                        intoPoint);
+
+                    Assert(ReferenceEquals(intoTarget.Target, targetFolder), "Bookmark drag over row center should resolve the hovered folder.");
+                    Assert(intoTarget.Placement == BookmarkDropPlacement.Into, "Bookmark drag over row center should classify as an into drop.");
+                    Assert(ReferenceEquals(intoTarget.Container, targetContainer), "Bookmark drag hit-testing should still return the row container while the tree holds mouse capture.");
+                }
+                finally
+                {
+                    bookmarkTree.ReleaseMouseCapture();
+                }
+
+                var afterTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
+                    window,
+                    "ResolveBookmarkDropTarget",
+                    afterPoint);
+
+                Assert(ReferenceEquals(afterTarget.Target, targetFolder), "Bookmark drag over the row edge should still resolve the hovered folder.");
+                Assert(afterTarget.Placement == BookmarkDropPlacement.After, "Bookmark drag over the row edge should classify as an after drop.");
+
+                var rootPoint = new Point(
+                    Math.Max(12, childBounds.Left + 12),
+                    Math.Min(bookmarkTree.ActualHeight - 4, childBounds.Bottom + 24));
+                var rootTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
+                    window,
+                    "ResolveBookmarkDropTarget",
+                    rootPoint);
+
+                Assert(rootTarget.Target == null, "Bookmark drag over empty tree space should not resolve a bookmark item.");
+                Assert(rootTarget.Placement == BookmarkDropPlacement.Root, "Bookmark drag over empty tree space should classify as a root drop.");
+
+                targetFolder.IsExpanded = false;
+                PumpDispatcher();
+                var collapsedBounds = GetElementBoundsRelativeTo(targetContainer, bookmarkTree);
+                var collapsedIntoPoint = new Point(
+                    collapsedBounds.Left + (collapsedBounds.Width / 2),
+                    collapsedBounds.Top + (collapsedBounds.Height / 2));
+
+                var collapsedTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
+                    window,
+                    "ResolveBookmarkDropTarget",
+                    collapsedIntoPoint);
+                InvokePrivate<object?>(window, "UpdateBookmarkHoverExpand", collapsedTarget);
+                InvokePrivate<object?>(window, "BookmarkHoverExpandTimer_Tick", null, EventArgs.Empty);
+
+                Assert(targetFolder.IsExpanded, "Collapsed bookmark folders should expand after a hover during drag.");
+            }
+            finally
+            {
+                window.Close();
+                PumpDispatcher();
+            }
+        });
+    }
+
+    private static void TestTabOverflowInteraction(string root)
+    {
+        var workspace = CreateCleanSubdir(root, "tab_overflow_interaction");
+        RunOnDispatcher(() =>
+        {
+            var startupFolder = CreateCleanSubdir(workspace, "startup");
+            var viewModel = new MainViewModel(
+                new FileSystemService(),
+                new FakeClipboardService(),
+                userSettings: new UserSettings { StartupFolder = startupFolder });
+
+            for (var i = 0; i < 12; i++)
+            {
+                var tabPath = CreateCleanSubdir(workspace, $"tab_{i:D2}");
+                viewModel.NewTabCommand.Execute(null);
+                viewModel.NavigateCurrentPaneToPath(tabPath);
+            }
+
+            var window = CreateSmokeMainWindow(viewModel, width: 720, height: 700);
+            try
+            {
+                InvokePrivate<object?>(window, "EnsureTabStripParts");
+                InvokePrivate<object?>(window, "UpdateTabStripAffordances");
+
+                var overflowButton = GetPrivateField<Button>(window, "_tabOverflowButton")
+                    ?? throw new InvalidOperationException("Tab overflow button should exist after template application.");
+                var overflowMenu = GetPrivateField<ContextMenu>(window, "_tabOverflowMenu")
+                    ?? throw new InvalidOperationException("Tab overflow menu should exist after template application.");
+                var scrollViewer = GetPrivateField<ScrollViewer>(window, "_tabHeaderScrollViewer")
+                    ?? throw new InvalidOperationException("Tab header scroll viewer should exist after template application.");
+
+                Assert(scrollViewer.ScrollableWidth > 1, "A narrow window with many tabs should produce tab-strip overflow.");
+                Assert(overflowButton.Visibility == Visibility.Visible, "Tab overflow button should become visible when the tab strip overflows.");
+
+                overflowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                PumpDispatcher();
+
+                Assert(overflowMenu.IsOpen, "Clicking the tab overflow button should open the overflow menu.");
+                Assert(overflowMenu.Items.Count == viewModel.Tabs.Count, "Tab overflow menu should list every open tab.");
+
+                var targetItem = overflowMenu.Items.OfType<MenuItem>().Last();
+                var expectedTab = (TabViewModel)targetItem.Tag;
+                targetItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                PumpDispatcher();
+
+                Assert(ReferenceEquals(viewModel.ActiveTab, expectedTab), "Selecting a tab from the overflow menu should activate that tab.");
+                Assert(overflowMenu.Items.OfType<MenuItem>().Count(item => item.IsChecked) == 1, "Tab overflow menu should keep a single checked active tab item.");
+            }
+            finally
+            {
+                window.Close();
+                PumpDispatcher();
+            }
+        });
+    }
+
     private static string CreateCleanSubdir(string root, string name)
     {
         var path = Path.Combine(root, name);
@@ -4368,6 +4536,12 @@ internal static class Program
             throw new InvalidOperationException(message);
     }
 
+    private static void RunOnDispatcher(Action action)
+    {
+        EnsureSmokeApplication();
+        Application.Current!.Dispatcher.Invoke(action, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
     private static void EnsureSmokeApplication()
     {
         if (Application.Current == null)
@@ -4390,6 +4564,85 @@ internal static class Program
     private static void DoEvents()
     {
         Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private static void PumpDispatcher()
+    {
+        DoEvents();
+        Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        DoEvents();
+    }
+
+    private static MainWindow CreateSmokeMainWindow(MainViewModel viewModel, double width, double height)
+    {
+        var window = new MainWindow
+        {
+            DataContext = viewModel,
+            Width = width,
+            Height = height,
+            Left = -10000,
+            Top = -10000,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            WindowStartupLocation = WindowStartupLocation.Manual
+        };
+
+        window.Show();
+        PumpDispatcher();
+        window.UpdateLayout();
+        PumpDispatcher();
+        return window;
+    }
+
+    private static T GetNamedElement<T>(FrameworkElement root, string name)
+        where T : FrameworkElement
+    {
+        return root.FindName(name) as T
+            ?? throw new InvalidOperationException($"Expected named element '{name}' of type {typeof(T).Name}.");
+    }
+
+    private static TreeViewItem? GetTreeViewItem(ItemsControl parent, object item)
+    {
+        parent.UpdateLayout();
+        var container = parent.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+        if (container != null)
+            return container;
+
+        foreach (var child in parent.Items)
+        {
+            var childContainer = parent.ItemContainerGenerator.ContainerFromItem(child) as TreeViewItem;
+            if (childContainer == null)
+                continue;
+
+            childContainer.UpdateLayout();
+            var result = GetTreeViewItem(childContainer, item);
+            if (result != null)
+                return result;
+        }
+
+        return null;
+    }
+
+    private static Rect GetElementBoundsRelativeTo(FrameworkElement element, Visual relativeTo)
+    {
+        return element.TransformToAncestor(relativeTo)
+            .TransformBounds(new Rect(new Point(), element.RenderSize));
+    }
+
+    private static T InvokePrivate<T>(object instance, string methodName, params object?[]? args)
+    {
+        var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Expected private method '{methodName}'.");
+        var result = method.Invoke(instance, args);
+        return result is T typed ? typed : default!;
+    }
+
+    private static T? GetPrivateField<T>(object instance, string fieldName)
+        where T : class
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Expected private field '{fieldName}'.");
+        return field.GetValue(instance) as T;
     }
 
     private sealed class FakeClipboardService : IClipboardService

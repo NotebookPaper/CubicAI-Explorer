@@ -255,10 +255,10 @@ Scope:
 - rationale: restore flow is now present with menu/context-menu/shortcut access and smoke coverage for single-close, multi-close, and metadata restore cases
 
 ### 8. Interaction-level smoke hardening
-Status: IN PROGRESS
+Status: COMPLETE
 Scope:
-- next: `022-wpf-interaction-smoke-tests`
-- rationale: the current smoke suite is strong at viewmodel/persistence coverage but still misses real WPF hit-testing and mouse-capture regressions
+- completed: `022-wpf-interaction-smoke-tests`
+- rationale: the smoke suite now includes dispatcher-driven `MainWindow` interaction coverage for real bookmark hit-testing/mouse-capture behavior and tab-strip layout interactions
 
 ### 6. Final Polished Parity (Cubic Conclusion)
 Status: COMPLETE

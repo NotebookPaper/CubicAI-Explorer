@@ -770,7 +770,9 @@ public partial class MainWindow : Window
 
     private (BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container) ResolveBookmarkDropTarget(Point position)
     {
-        var hit = BookmarkTree.InputHitTest(position) as DependencyObject;
+        // Mouse capture during internal bookmark drags can cause InputHitTest to
+        // resolve the TreeView itself instead of the row under the pointer.
+        var hit = VisualTreeHelper.HitTest(BookmarkTree, position)?.VisualHit;
         var targetItem = hit != null ? FindVisualParent<TreeViewItem>(hit) : null;
         var target = targetItem?.DataContext as BookmarkItem;
         if (targetItem == null || target == null)
