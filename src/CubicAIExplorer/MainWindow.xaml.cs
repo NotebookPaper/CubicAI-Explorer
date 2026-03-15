@@ -52,7 +52,7 @@ public partial class MainWindow : Window
     private Point _dragStartPoint;
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
-    private bool _isEditModeActive;
+    private bool _isEditModeActive { get => ViewModel.IsAddressBarEditMode; set => ViewModel.IsAddressBarEditMode = value; }
     private bool _suppressRightPaneAutoComplete;
     private bool _isApplyingDetailsLayout;
     private readonly System.Windows.Threading.DispatcherTimer _bookmarkHoverExpandTimer;
@@ -95,6 +95,8 @@ public partial class MainWindow : Window
         EnsureTabStripParts();
         QueueTabStripUpdate(scrollActiveIntoView: true);
         QueueFilePaneVisibilityCheck();
+        if (ViewModel.IsAddressBarEditMode)
+            SwitchToEditMode();
     }
 
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -669,6 +671,78 @@ public partial class MainWindow : Window
         return false;
     }
 
+    // --- Middle-click support ---
+
+    private void BookmarkTree_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle) return;
+        var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (treeItem?.DataContext is BookmarkItem bookmark && !string.IsNullOrWhiteSpace(bookmark.Path))
+        {
+            ViewModel.OpenBookmarkInNewTabCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    private void BookmarkBar_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Middle &&
+            sender is Button { DataContext: BookmarkItem bookmark } &&
+            !string.IsNullOrWhiteSpace(bookmark.Path))
+        {
+            ViewModel.OpenBookmarkInNewTabCommand.Execute(bookmark);
+            e.Handled = true;
+        }
+    }
+
+    // --- Bookmark tree keyboard shortcuts ---
+
+    private void BookmarkTree_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete && ViewModel.SelectedBookmark != null)
+        {
+            ViewModel.RemoveBookmarkCommand.Execute(ViewModel.SelectedBookmark);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F2 && ViewModel.SelectedBookmark != null)
+        {
+            ViewModel.RenameBookmarkCommand.Execute(ViewModel.SelectedBookmark);
+            e.Handled = true;
+        }
+    }
+
+    // --- Bookmarks bar drag reorder ---
+
+    private Point _bookmarkBarDragStart;
+    private BookmarkItem? _bookmarkBarDragItem;
+
+    private void BookmarkBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Button { DataContext: BookmarkItem bookmark })
+        {
+            _bookmarkBarDragStart = e.GetPosition(BookmarksBarDropZone);
+            _bookmarkBarDragItem = bookmark;
+        }
+    }
+
+    private void BookmarkBar_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _bookmarkBarDragItem == null)
+            return;
+
+        var pos = e.GetPosition(BookmarksBarDropZone);
+        var delta = pos - _bookmarkBarDragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        var data = new DataObject();
+        data.SetData("BookmarkBarItem", _bookmarkBarDragItem);
+        var dragItem = _bookmarkBarDragItem;
+        _bookmarkBarDragItem = null;
+        DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+    }
+
     private void BookmarkTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _bookmarkDragStart = e.GetPosition(BookmarkTree);
@@ -823,12 +897,18 @@ public partial class MainWindow : Window
 
         if (target.IsFolder)
         {
-            var centerBandTop = targetItem.ActualHeight * 0.25;
-            var centerBandBottom = targetItem.ActualHeight * 0.75;
-            if (relativePosition.Y >= centerBandTop && relativePosition.Y <= centerBandBottom)
+            var topZone = targetItem.ActualHeight * 0.25;
+            var bottomZone = targetItem.ActualHeight * 0.75;
+            if (relativePosition.Y < topZone)
+                return (target, BookmarkDropPlacement.Before, targetItem);
+            if (relativePosition.Y <= bottomZone)
                 return (target, BookmarkDropPlacement.Into, targetItem);
+            return (target, BookmarkDropPlacement.After, targetItem);
         }
 
+        // Non-folder items: top half = before, bottom half = after
+        if (relativePosition.Y < targetItem.ActualHeight * 0.5)
+            return (target, BookmarkDropPlacement.Before, targetItem);
         return (target, BookmarkDropPlacement.After, targetItem);
     }
 
@@ -3084,6 +3164,7 @@ public partial class MainWindow : Window
     private void BookmarksBar_DragLeave(object sender, DragEventArgs e)
     {
         SetBookmarksBarDropHighlight(false);
+        ClearBookmarkBarDropIndicator();
     }
 
     private async void DropStackCopyTo_Click(object sender, RoutedEventArgs e)
@@ -3177,6 +3258,25 @@ public partial class MainWindow : Window
 
     private void BookmarksBar_Drop(object sender, DragEventArgs e)
     {
+        // Handle bookmark bar reorder
+        if (e.Data.GetDataPresent("BookmarkBarItem") && e.Data.GetData("BookmarkBarItem") is BookmarkItem draggedItem)
+        {
+            var dropIndex = GetBookmarkBarDropIndex(e.GetPosition(BookmarksBarItemsControl));
+            var currentIndex = ViewModel.Bookmarks.IndexOf(draggedItem);
+            if (currentIndex >= 0 && dropIndex != currentIndex && dropIndex != currentIndex + 1)
+            {
+                ViewModel.Bookmarks.Remove(draggedItem);
+                if (dropIndex > currentIndex) dropIndex--;
+                if (dropIndex < 0 || dropIndex > ViewModel.Bookmarks.Count) dropIndex = ViewModel.Bookmarks.Count;
+                ViewModel.Bookmarks.Insert(dropIndex, draggedItem);
+                ViewModel.SaveBookmarksPublic();
+            }
+            ClearBookmarkBarDropIndicator();
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
         var droppedDirectories = GetDroppedDirectories(e).ToList();
         foreach (var path in droppedDirectories)
             ViewModel.AddBookmarkFromPath(path, null);
@@ -3188,9 +3288,97 @@ public partial class MainWindow : Window
 
     private void UpdateBookmarksBarDragState(DragEventArgs e)
     {
+        if (e.Data.GetDataPresent("BookmarkBarItem"))
+        {
+            e.Effects = DragDropEffects.Move;
+            UpdateBookmarkBarDropIndicator(e.GetPosition(BookmarksBarItemsControl));
+            return;
+        }
+
         var hasDroppedDirectories = GetDroppedDirectories(e).Any();
         e.Effects = hasDroppedDirectories ? DragDropEffects.Copy : DragDropEffects.None;
         SetBookmarksBarDropHighlight(hasDroppedDirectories);
+    }
+
+    private int GetBookmarkBarDropIndex(Point position)
+    {
+        var panel = FindVisualChild<StackPanel>(BookmarksBarItemsControl);
+        if (panel == null) return ViewModel.Bookmarks.Count;
+
+        double offset = 0;
+        for (int i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is FrameworkElement child)
+            {
+                var midPoint = offset + child.ActualWidth / 2;
+                if (position.X < midPoint)
+                    return i;
+                offset += child.ActualWidth;
+            }
+        }
+        return ViewModel.Bookmarks.Count;
+    }
+
+    private void UpdateBookmarkBarDropIndicator(Point position)
+    {
+        var panel = FindVisualChild<StackPanel>(BookmarksBarItemsControl);
+        if (panel == null) return;
+
+        double offset = 0;
+        int dropIndex = panel.Children.Count;
+        for (int i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is FrameworkElement child)
+            {
+                var midPoint = offset + child.ActualWidth / 2;
+                if (position.X < midPoint)
+                {
+                    dropIndex = i;
+                    break;
+                }
+                offset += child.ActualWidth;
+            }
+        }
+
+        // Highlight the button borders to show insertion point
+        for (int i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is ContentPresenter cp)
+            {
+                var btn = FindVisualChild<Button>(cp);
+                if (btn != null)
+                    btn.BorderThickness = new Thickness(
+                        i == dropIndex ? 2 : 0, 0,
+                        i == dropIndex - 1 && dropIndex == panel.Children.Count ? 0 : 0, 0);
+            }
+        }
+    }
+
+    private void ClearBookmarkBarDropIndicator()
+    {
+        var panel = FindVisualChild<StackPanel>(BookmarksBarItemsControl);
+        if (panel == null) return;
+        for (int i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is ContentPresenter cp)
+            {
+                var btn = FindVisualChild<Button>(cp);
+                if (btn != null)
+                    btn.BorderThickness = new Thickness(0);
+            }
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            var result = FindVisualChild<T>(child);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private void UpdateDropStackDragState(DragEventArgs e)

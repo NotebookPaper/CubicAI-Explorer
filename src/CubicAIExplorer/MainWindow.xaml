@@ -655,6 +655,9 @@
                                     Padding="8,4"
                                     MinHeight="28"
                                     Click="BookmarkBarButton_Click"
+                                    PreviewMouseUp="BookmarkBar_PreviewMouseUp"
+                                    PreviewMouseLeftButtonDown="BookmarkBar_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="BookmarkBar_PreviewMouseMove"
                                     Cursor="Hand"
                                     ToolTip="{Binding Path}">
                                 <Button.ContextMenu>
@@ -795,22 +798,8 @@
                                 Padding="2,2"
                                 Margin="2,0,0,0" />
                     </UniformGrid>
-                    <TextBlock Margin="6,0,6,4"
-                               Text="{Binding BookmarkDragFeedbackText}"
-                               Visibility="{Binding HasBookmarkDragFeedback, Converter={StaticResource BoolToVisibility}}"
-                               TextWrapping="Wrap">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="#4A5F77" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsBookmarkDragFeedbackInvalid}" Value="True">
-                                        <Setter Property="Foreground" Value="#A12727" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <Border Margin="4,0,4,4">
+                    <Grid Margin="4,0,4,4">
+                    <Border>
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource ClassicPaneSurfaceStyle}">
                                 <Style.Triggers>
@@ -828,6 +817,8 @@
                                   PreviewMouseLeftButtonDown="BookmarkTree_PreviewMouseLeftButtonDown"
                                   PreviewMouseMove="BookmarkTree_PreviewMouseMove"
                                   PreviewMouseLeftButtonUp="BookmarkTree_PreviewMouseLeftButtonUp"
+                                  PreviewMouseUp="BookmarkTree_PreviewMouseUp"
+                                  KeyDown="BookmarkTree_KeyDown"
                                   MouseLeave="BookmarkTree_MouseLeave"
                                   DragOver="BookmarkTree_DragOver"
                                   DragLeave="BookmarkTree_DragLeave"
@@ -877,6 +868,10 @@
                                         <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                             <Setter Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsDropIntoTarget}" Value="True">
+                                            <Setter Property="Background" Value="#0078D7" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TreeView.ItemContainerStyle>
@@ -891,9 +886,13 @@
                                             <Style TargetType="Border">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsDropIntoTarget}" Value="True">
-                                                        <Setter Property="Background" Value="#CCE4F7" />
-                                                        <Setter Property="BorderBrush" Value="#0078D7" />
+                                                        <Setter Property="Background" Value="#0078D7" />
+                                                        <Setter Property="BorderBrush" Value="#005A9E" />
                                                         <Setter Property="BorderThickness" Value="1" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsDropBeforeTarget}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#0078D7" />
+                                                        <Setter Property="BorderThickness" Value="0,2,0,0" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsDropAfterTarget}" Value="True">
                                                         <Setter Property="BorderBrush" Value="#0078D7" />
@@ -905,13 +904,35 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Image Source="{Binding Converter={StaticResource ShellIconConverter}}"
                                                    Width="16" Height="16" Margin="0,0,6,0" />
-                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
                                         </StackPanel>
                                     </Border>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
                     </Border>
+                    <TextBlock Margin="6,4,6,4"
+                               Text="{Binding BookmarkDragFeedbackText}"
+                               Visibility="{Binding HasBookmarkDragFeedback, Converter={StaticResource BoolToVisibility}}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Bottom"
+                               HorizontalAlignment="Left"
+                               Padding="4,2"
+                               Background="#EEEEF2"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#4A5F77" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBookmarkDragFeedbackInvalid}" Value="True">
+                                        <Setter Property="Foreground" Value="#A12727" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    </Grid>
                 </DockPanel>
                 <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#96B3D8"
                               Visibility="{Binding IsBookmarksVisible, Converter={StaticResource BoolToVisibility}}" />

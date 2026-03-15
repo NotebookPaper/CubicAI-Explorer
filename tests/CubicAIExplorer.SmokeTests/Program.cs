@@ -76,6 +76,9 @@ internal static class Program
             Run("bookmarks bar behavior", failures, () => TestBookmarksBarBehavior(tempRoot));
             Run("bookmark watcher reloads after external replace", failures, () => TestBookmarkWatcherReloadsAfterExternalReplace(tempRoot));
             Run("bookmark drag feedback", failures, () => TestBookmarkDragFeedback(tempRoot));
+            Run("bookmark before placement", failures, () => TestBookmarkBeforePlacement(tempRoot));
+            Run("bookmark bar reorder", failures, () => TestBookmarkBarReorder(tempRoot));
+            Run("bookmark delete and rename commands", failures, () => TestBookmarkDeleteAndRename(tempRoot));
             Run("drop stack collection", failures, () => TestDropStackCollection(tempRoot));
             Run("drop stack transfer", failures, () => TestDropStackTransfer(tempRoot));
             Run("redo copy", failures, () => TestRedoCopy(tempRoot));
@@ -4096,6 +4099,144 @@ internal static class Program
         }
     }
 
+    private static void TestBookmarkBeforePlacement(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var bookmarkFile = Path.Combine(root, "bookmark_before_placement.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
+
+        try
+        {
+            using var bookmarkService = new BookmarkService();
+            var vm = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService);
+            vm.Bookmarks.Clear();
+
+            var a = new BookmarkItem { Name = "A", Path = @"C:\A" };
+            var b = new BookmarkItem { Name = "B", Path = @"C:\B" };
+            var c = new BookmarkItem { Name = "C", Path = @"C:\C" };
+            vm.Bookmarks.Add(a);
+            vm.Bookmarks.Add(b);
+            vm.Bookmarks.Add(c);
+
+            // Test Before placement feedback
+            vm.UpdateBookmarkDragFeedback(c, a, BookmarkDropPlacement.Before);
+            Assert(a.IsDropBeforeTarget, "Before placement should set IsDropBeforeTarget.");
+            Assert(!a.IsDropAfterTarget, "Before placement should not set IsDropAfterTarget.");
+            Assert(vm.BookmarkDragFeedbackText.Contains("before", StringComparison.OrdinalIgnoreCase),
+                "Before drag feedback should mention 'before'.");
+
+            // Test Before move
+            vm.ClearBookmarkDragFeedback();
+            vm.MoveBookmark(c, a, BookmarkDropPlacement.Before);
+            Assert(vm.Bookmarks[0].Name == "C", "MoveBookmark Before should insert before the target.");
+            Assert(vm.Bookmarks[1].Name == "A", "Original item should shift after the moved item.");
+            Assert(vm.Bookmarks[2].Name == "B", "Remaining items should keep their relative order.");
+
+            // Test After move
+            vm.MoveBookmark(c, b, BookmarkDropPlacement.After);
+            Assert(vm.Bookmarks[0].Name == "A", "After move: A should be first.");
+            Assert(vm.Bookmarks[1].Name == "B", "After move: B should be second.");
+            Assert(vm.Bookmarks[2].Name == "C", "After move: C should be after B.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestBookmarkBarReorder(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var bookmarkFile = Path.Combine(root, "bookmark_bar_reorder.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
+
+        try
+        {
+            using var bookmarkService = new BookmarkService();
+            var vm = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService);
+            vm.Bookmarks.Clear();
+
+            var x = new BookmarkItem { Name = "X", Path = @"C:\X" };
+            var y = new BookmarkItem { Name = "Y", Path = @"C:\Y" };
+            var z = new BookmarkItem { Name = "Z", Path = @"C:\Z" };
+            vm.Bookmarks.Add(x);
+            vm.Bookmarks.Add(y);
+            vm.Bookmarks.Add(z);
+
+            // Simulate bar reorder: move Z before X (index 0)
+            vm.Bookmarks.Remove(z);
+            vm.Bookmarks.Insert(0, z);
+            vm.SaveBookmarksPublic();
+
+            Assert(vm.Bookmarks[0].Name == "Z", "Bar reorder: Z should now be first.");
+            Assert(vm.Bookmarks[1].Name == "X", "Bar reorder: X should now be second.");
+            Assert(vm.Bookmarks[2].Name == "Y", "Bar reorder: Y should now be third.");
+
+            // Simulate bar reorder: move X to end
+            vm.Bookmarks.Remove(x);
+            vm.Bookmarks.Add(x);
+            vm.SaveBookmarksPublic();
+
+            Assert(vm.Bookmarks[0].Name == "Z", "After second reorder: Z stays first.");
+            Assert(vm.Bookmarks[1].Name == "Y", "After second reorder: Y moves to second.");
+            Assert(vm.Bookmarks[2].Name == "X", "After second reorder: X moves to last.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
+    private static void TestBookmarkDeleteAndRename(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var bookmarkFile = Path.Combine(root, "bookmark_delete_rename.json");
+        Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", bookmarkFile);
+        TryDelete(bookmarkFile);
+
+        try
+        {
+            using var bookmarkService = new BookmarkService();
+            var vm = new MainViewModel(fs, clipboard, bookmarkService: bookmarkService);
+            vm.Bookmarks.Clear();
+
+            var a = new BookmarkItem { Name = "Alpha", Path = @"C:\Alpha" };
+            var b = new BookmarkItem { Name = "Beta", Path = @"C:\Beta" };
+            var folder = new BookmarkItem { Name = "Folder", IsFolder = true };
+            var nested = new BookmarkItem { Name = "Nested", Path = @"C:\Nested" };
+            folder.Children.Add(nested);
+            vm.Bookmarks.Add(a);
+            vm.Bookmarks.Add(b);
+            vm.Bookmarks.Add(folder);
+
+            // Test remove root-level bookmark
+            vm.SelectedBookmark = a;
+            vm.RemoveBookmarkCommand.Execute(a);
+            Assert(!vm.Bookmarks.Contains(a), "RemoveBookmark should remove the selected bookmark.");
+            Assert(vm.Bookmarks.Count == 2, "After removal, only 2 root bookmarks should remain.");
+
+            // Test remove nested bookmark
+            vm.RemoveBookmarkCommand.Execute(nested);
+            Assert(!folder.Children.Contains(nested), "RemoveBookmark should remove nested bookmarks.");
+            Assert(folder.Children.Count == 0, "Folder should be empty after removing its child.");
+
+            // Verify CanDropBookmark with Before placement
+            Assert(vm.CanDropBookmark(b, folder, BookmarkDropPlacement.Before),
+                "Should be able to drop before a different item.");
+            Assert(!vm.CanDropBookmark(b, b, BookmarkDropPlacement.Before),
+                "Should not be able to drop before self.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH", null);
+        }
+    }
+
     private static void TestDropStackCollection(string root)
     {
         var fs = new FileSystemService();
@@ -4388,7 +4529,7 @@ internal static class Program
                 var targetBounds = GetElementBoundsRelativeTo(targetContainer, bookmarkTree);
                 var childBounds = GetElementBoundsRelativeTo(childContainer, bookmarkTree);
                 var intoPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + (targetBounds.Height / 2));
-                var afterPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + 2);
+                var beforePoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + 2);
 
                 bookmarkTree.CaptureMouse();
                 try
@@ -4407,13 +4548,13 @@ internal static class Program
                     bookmarkTree.ReleaseMouseCapture();
                 }
 
-                var afterTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
+                var beforeTarget = InvokePrivate<(BookmarkItem? Target, BookmarkDropPlacement Placement, TreeViewItem? Container)>(
                     window,
                     "ResolveBookmarkDropTarget",
-                    afterPoint);
+                    beforePoint);
 
-                Assert(ReferenceEquals(afterTarget.Target, targetFolder), "Bookmark drag over the row edge should still resolve the hovered folder.");
-                Assert(afterTarget.Placement == BookmarkDropPlacement.After, "Bookmark drag over the row edge should classify as an after drop.");
+                Assert(ReferenceEquals(beforeTarget.Target, targetFolder), "Bookmark drag over the row top edge should still resolve the hovered folder.");
+                Assert(beforeTarget.Placement == BookmarkDropPlacement.Before, "Bookmark drag over the row top edge should classify as a before drop.");
 
                 var rootPoint = new Point(
                     Math.Max(12, childBounds.Left + 12),

@@ -26,6 +26,9 @@ public partial class BookmarkItem : ObservableObject
     private bool _isDropIntoTarget;
 
     [ObservableProperty]
+    private bool _isDropBeforeTarget;
+
+    [ObservableProperty]
     private bool _isDropAfterTarget;
 
     public ObservableCollection<BookmarkItem> Children { get; } = [];

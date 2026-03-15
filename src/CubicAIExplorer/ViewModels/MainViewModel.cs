@@ -125,6 +125,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _isAddressBarVisible = true;
 
     [ObservableProperty]
+    private bool _isAddressBarEditMode;
+
+    [ObservableProperty]
     private bool _isStatusBarVisible = true;
 
     [ObservableProperty]
@@ -250,6 +253,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Initialize UI visibility from settings
         _isToolbarVisible = _userSettings.ShowToolbar;
         _isAddressBarVisible = _userSettings.ShowAddressBar;
+        _isAddressBarEditMode = _userSettings.AddressBarEditMode;
         _isStatusBarVisible = _userSettings.ShowStatusBar;
         _isDrivesVisible = _userSettings.ShowDrives;
         _isTabsVisible = _userSettings.ShowTabs;
@@ -2537,6 +2541,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             BookmarkDropPlacement.Root => true,
             BookmarkDropPlacement.Into => target is { IsFolder: true } && target != source && !IsBookmarkDescendant(source, target),
+            BookmarkDropPlacement.Before => target != null && target != source && !IsBookmarkDescendant(source, target),
             BookmarkDropPlacement.After => target != null && target != source && !IsBookmarkDescendant(source, target),
             _ => false
         };
@@ -2564,6 +2569,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             target.IsDropTarget = canDrop;
             target.IsDropIntoTarget = canDrop && placement == BookmarkDropPlacement.Into;
+            target.IsDropBeforeTarget = canDrop && placement == BookmarkDropPlacement.Before;
             target.IsDropAfterTarget = canDrop && placement == BookmarkDropPlacement.After;
         }
 
@@ -2606,19 +2612,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
             target.Children.Add(source);
             target.IsExpanded = true;
         }
-        else if (placement == BookmarkDropPlacement.After && target != null)
+        else if ((placement == BookmarkDropPlacement.Before || placement == BookmarkDropPlacement.After) && target != null)
         {
+            var offset = placement == BookmarkDropPlacement.Before ? 0 : 1;
             var parent = FindParent(Bookmarks, target);
             if (parent != null)
             {
                 var index = parent.Children.IndexOf(target);
-                parent.Children.Insert(index + 1, source);
+                parent.Children.Insert(index + offset, source);
             }
             else
             {
                 var index = Bookmarks.IndexOf(target);
                 if (index >= 0)
-                    Bookmarks.Insert(index + 1, source);
+                    Bookmarks.Insert(index + offset, source);
                 else
                     Bookmarks.Add(source);
             }
@@ -2644,6 +2651,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             bookmark.IsDropTarget = false;
             bookmark.IsDropIntoTarget = false;
+            bookmark.IsDropBeforeTarget = false;
             bookmark.IsDropAfterTarget = false;
         }
     }
@@ -2677,9 +2685,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (placement == BookmarkDropPlacement.Root || target == null)
             return "Release to move the bookmark to the top level.";
 
-        return placement == BookmarkDropPlacement.Into
-            ? $"Release to move into '{target.Name}'."
-            : $"Release to move after '{target.Name}'.";
+        return placement switch
+        {
+            BookmarkDropPlacement.Into => $"Release to move into '{target.Name}'.",
+            BookmarkDropPlacement.Before => $"Release to move before '{target.Name}'.",
+            _ => $"Release to move after '{target.Name}'."
+        };
     }
 
     [RelayCommand]
@@ -2957,6 +2968,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_bookmarkService != null)
             _ = _bookmarkService.SaveAsync(Bookmarks);
     }
+
+    public void SaveBookmarksPublic() => SaveBookmarks();
 
     public void Dispose()
     {
@@ -4432,6 +4445,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnIsToolbarVisibleChanged(bool value) { _userSettings.ShowToolbar = value; SaveSettings(); }
     partial void OnIsAddressBarVisibleChanged(bool value) { _userSettings.ShowAddressBar = value; SaveSettings(); }
+    partial void OnIsAddressBarEditModeChanged(bool value) { _userSettings.AddressBarEditMode = value; SaveSettings(); }
     partial void OnIsStatusBarVisibleChanged(bool value) { _userSettings.ShowStatusBar = value; SaveSettings(); }
     partial void OnIsDrivesVisibleChanged(bool value) { _userSettings.ShowDrives = value; SaveSettings(); }
     partial void OnIsTabsVisibleChanged(bool value) { _userSettings.ShowTabs = value; SaveSettings(); }

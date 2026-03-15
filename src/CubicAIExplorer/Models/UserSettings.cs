@@ -42,6 +42,8 @@ public sealed class UserSettings
     public List<string> FilterHistory { get; set; } = [];
     public List<ManualSortFolderOrder> ManualSortFolders { get; set; } = [];
 
+    public bool AddressBarEditMode { get; set; }
+
     // Window State
     public double SidebarWidth { get; set; } = 250;
     public double PreviewWidth { get; set; } = 300;
