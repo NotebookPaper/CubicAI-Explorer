@@ -10,9 +10,23 @@
     <AssemblyTitle>CubicAI Explorer</AssemblyTitle>
     <Product>CubicAI Explorer</Product>
     <Company />
-    <Version>0.1.0</Version>
+    <VersionPrefix>0.2</VersionPrefix>
     <Description>A modern Windows file manager inspired by CubicExplorer</Description>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <Target Name="SetGitVersion" BeforeTargets="GetAssemblyVersion;GenerateNuspec;Build">
+    <Exec Command="git rev-list --count HEAD" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitCount" />
+    </Exec>
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitShortSha" />
+    </Exec>
+    <PropertyGroup>
+      <Version>$(VersionPrefix).$(GitCommitCount)</Version>
+      <InformationalVersion>$(VersionPrefix).$(GitCommitCount)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />

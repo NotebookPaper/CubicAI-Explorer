@@ -329,6 +329,7 @@
                                      KeyDown="AddressBar_KeyDown"
                                      GotFocus="AddressBar_GotFocus"
                                      LostKeyboardFocus="AddressBar_LostFocus"
+                                     PreviewMouseDown="AddressBar_PreviewMouseDown"
                                      TextChanged="AddressBar_TextChanged"
                                      VerticalContentAlignment="Center" Padding="2,0"
                                      BorderThickness="0" Background="Transparent"

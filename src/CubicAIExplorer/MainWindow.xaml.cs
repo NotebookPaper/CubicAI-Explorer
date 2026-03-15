@@ -1,6 +1,7 @@
 using System.IO;
 using System.ComponentModel;
 using System.Collections.Specialized;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
     private Point _dragStartPoint;
     private Point _rightPaneDragStartPoint;
     private bool _suppressAutoComplete;
+    private bool _isEditModeActive;
     private bool _suppressRightPaneAutoComplete;
     private bool _isApplyingDetailsLayout;
     private readonly System.Windows.Threading.DispatcherTimer _bookmarkHoverExpandTimer;
@@ -73,6 +75,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var infoVersion = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        Title = $"CubicAI Explorer v{infoVersion ?? "0.0.0"}";
         _bookmarkHoverExpandTimer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(650)
@@ -274,6 +279,17 @@ public partial class MainWindow : Window
     {
         if (AddressAutoCompletePopup.IsMouseOver) return;
         AddressAutoCompletePopup.IsOpen = false;
+        if (_isEditModeActive)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_isEditModeActive)
+                {
+                    AddressBar.Focus();
+                }
+            }, System.Windows.Threading.DispatcherPriority.Input);
+            return;
+        }
         SwitchToBreadcrumbMode();
     }
 
@@ -286,6 +302,18 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton != MouseButton.Left)
             return;
+
+        // Triple-click anywhere on the breadcrumb bar (even on a segment button)
+        // switches to edit mode with the full path selected for easy copying.
+        if (e.ClickCount >= 3)
+        {
+            SwitchToEditMode();
+            // Defer SelectAll so it runs after the TextBox processes the click event
+            Dispatcher.BeginInvoke(() => AddressBar.SelectAll(),
+                System.Windows.Threading.DispatcherPriority.Input);
+            e.Handled = true;
+            return;
+        }
 
         // Any click in the breadcrumb chrome that is not on an actual button should
         // switch to editable path mode so the full path can be copied/pasted quickly.
@@ -339,8 +367,18 @@ public partial class MainWindow : Window
         AddressBar.SelectAll();
     }
 
+    private void AddressBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount >= 3 && e.ChangedButton == MouseButton.Left)
+        {
+            AddressBar.SelectAll();
+            e.Handled = true;
+        }
+    }
+
     private void SwitchToEditMode()
     {
+        _isEditModeActive = true;
         BreadcrumbBar.Visibility = Visibility.Collapsed;
         AddressBarPanel.Visibility = Visibility.Visible;
         AddressBar.Focus();
@@ -349,6 +387,7 @@ public partial class MainWindow : Window
 
     private void SwitchToBreadcrumbMode()
     {
+        _isEditModeActive = false;
         AddressBarPanel.Visibility = Visibility.Collapsed;
         BreadcrumbBar.Visibility = Visibility.Visible;
     }
