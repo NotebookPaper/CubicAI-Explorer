@@ -1244,8 +1244,8 @@
                             Visibility="{Binding CurrentPaneFileList.IsAdvancedSearchVisible, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel Orientation="Horizontal">
                             <TextBlock Text="Attributes:" VerticalAlignment="Center" Margin="4,0,6,0" />
-                            <CheckBox Content="Hidden" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchIncludeHidden}" VerticalAlignment="Center" ToolTip="Only show hidden items" />
-                            <CheckBox Content="System" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchIncludeSystem}" VerticalAlignment="Center" ToolTip="Only show system items" />
+                            <CheckBox Content="Hidden" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchIncludeHidden}" VerticalAlignment="Center" ToolTip="Include hidden items" />
+                            <CheckBox Content="System" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchIncludeSystem}" VerticalAlignment="Center" ToolTip="Include system items" />
                             <CheckBox Content="Read-only" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchReadOnlyOnly}" VerticalAlignment="Center" />
                             <CheckBox Content="Archive" Margin="0,2,8,2" IsChecked="{Binding CurrentPaneFileList.SearchArchiveOnly}" VerticalAlignment="Center" />
                             

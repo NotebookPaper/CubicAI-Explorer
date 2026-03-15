@@ -1,8 +1,8 @@
+using System.Windows;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CubicAIExplorer.Services;
-using System.Windows;
-using System.Windows.Media;
 
 namespace CubicAIExplorer.ViewModels;
 
@@ -62,6 +62,12 @@ public partial class TabViewModel : ObservableObject, IDisposable
     public void NavigateTo(string path)
     {
         _navigation.NavigateTo(path);
+    }
+
+    public async Task NavigateToAsync(string path)
+    {
+        _navigation.NavigateTo(path);
+        await FileList.CurrentLoadTask.ConfigureAwait(true);
     }
 
     public string? PeekBackPath() => _navigation.BackPath;
@@ -135,9 +141,14 @@ public partial class TabViewModel : ObservableObject, IDisposable
             LockedRootPath = path.TrimEnd('\\');
 
         if (Application.Current == null)
+        {
             FileList.LoadDirectory(path);
+        }
         else
-            _ = FileList.LoadDirectoryAsync(path);
+        {
+            ObserveNavigationLoad(FileList.LoadDirectoryAsync(path));
+        }
+
         CanGoBack = _navigation.CanGoBack;
         CanGoForward = _navigation.CanGoForward;
     }
@@ -152,6 +163,18 @@ public partial class TabViewModel : ObservableObject, IDisposable
     private void OnFileListNavigateRequested(object? sender, string path) => NavigateRequested?.Invoke(this, path);
 
     private void OnNavigationServiceNavigated(object? sender, string path) => OnNavigated(path);
+
+    private async void ObserveNavigationLoad(Task loadTask)
+    {
+        try
+        {
+            await loadTask.ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            FileList.StatusText = $"Load failed: {ex.Message}";
+        }
+    }
 
     partial void OnTabColorChanged(string value)
     {

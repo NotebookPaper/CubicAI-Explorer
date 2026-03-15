@@ -32,6 +32,11 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 ## Latest Completed
 
+- **Spec 023: Code Review Fixes v2** (New in this session)
+  - Fixed advanced-search hidden/system inclusion semantics, the saved-search replay navigation race, and folder-tree sync overlap/path-prefix bugs.
+  - Hardened single-instance IPC payload handling, zip extraction directory checks, bookmark-properties path sanitization, shell-context-menu static state, and external-tool argument quoting.
+  - Replaced the flagged async-over-sync wrappers with true synchronous implementations where needed, cleaned up CTS disposal/lifetime handling, and added targeted smoke regressions for the reviewed issues.
+
 - **Spec 022: WPF Interaction Smoke Tests** (New in this session)
   - Added dispatcher-based smoke helpers that create hidden `MainWindow` instances and interact with real WPF controls deterministically.
   - Added bookmark-tree interaction coverage for actual `TreeViewItem` hit-testing, `into`/`after`/root targeting, hover-expand behavior, and mouse-capture resilience.
@@ -205,20 +210,19 @@ Continue in `C:\dev\CubicAI_rewrite` on `CubicAIExplorer.sln`.
 
 Tracked worktree state:
 
-- Active-pane search routing regression is fixed and the smoke suite is green again on this checkout.
-- Specs `021` and `022` are complete in this checkout.
+- Specs `021`, `022`, and `023` are complete in this checkout.
 - planning/history docs were refreshed to keep roadmap state aligned with the current implementation.
 
 ## Verification
 
-Verification run on the updated checkout on 2026-03-13:
+Verification run on the updated checkout on 2026-03-15:
 
 - `dotnet build CubicAIExplorer.sln -v minimal`
   - passed
 - `dotnet build tests/CubicAIExplorer.SmokeTests/CubicAIExplorer.SmokeTests.csproj -v minimal`
   - passed
 - `tests\CubicAIExplorer.SmokeTests\bin\Debug\net8.0-windows\CubicAIExplorer.SmokeTests.exe`
-  - passed (all smoke tests pass, including undo-close-tab restore coverage, nested bookmark drop-target coverage, dispatcher-level bookmark hit-testing under mouse capture, tab-strip overflow interaction coverage, advanced attribute/date search coverage, advanced saved-search replay, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, external-tool launch coverage, drop-stack collection/transfer coverage, tab-lock fork navigation, bookmarks-bar visibility/drop persistence coverage, content-only search, breadcrumb dropdown coverage, sanitized env override coverage, JSON Id round-trips, and the forced symbolic-link failure regression)
+  - passed (all smoke tests pass, including saved-search replay after navigation, hidden-item inclusion semantics, oversized single-instance payload rejection, sibling-prefix zip-slip rejection, external-tool trailing-backslash quoting, bookmark-properties sanitization, undo-close-tab restore coverage, nested bookmark drop-target coverage, dispatcher-level bookmark hit-testing under mouse capture, tab-strip overflow interaction coverage, layout save/apply/delete coverage, split/join round-trips, checksum comparison coverage, drop-stack collection/transfer coverage, and the forced symbolic-link failure regression)
 
 ## Gotchas
 

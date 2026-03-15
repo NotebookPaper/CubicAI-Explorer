@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CubicAIExplorer.Models;
 using CubicAIExplorer.Services;
 
 namespace CubicAIExplorer.ViewModels;
@@ -39,7 +40,25 @@ public partial class FolderTreeNodeViewModel : ObservableObject
     }
 
     public void LoadChildren()
-        => LoadChildrenAsync().GetAwaiter().GetResult();
+    {
+        if (_hasLoadedChildren || _isLoadingChildren)
+            return;
+
+        _hasLoadedChildren = true;
+        _isLoadingChildren = true;
+        Children.Clear();
+        Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
+
+        try
+        {
+            var subdirs = _fileSystemService.GetSubDirectories(FullPath);
+            PopulateChildren(subdirs);
+        }
+        finally
+        {
+            _isLoadingChildren = false;
+        }
+    }
 
     public async Task LoadChildrenAsync()
     {
@@ -54,18 +73,7 @@ public partial class FolderTreeNodeViewModel : ObservableObject
         try
         {
             var subdirs = await Task.Run(() => _fileSystemService.GetSubDirectories(FullPath));
-            Children.Clear();
-
-            foreach (var dir in subdirs)
-            {
-                var child = new FolderTreeNodeViewModel(_fileSystemService)
-                {
-                    Name = dir.Name,
-                    FullPath = dir.FullPath
-                };
-                child.Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
-                Children.Add(child);
-            }
+            PopulateChildren(subdirs);
         }
         finally
         {
@@ -80,8 +88,23 @@ public partial class FolderTreeNodeViewModel : ObservableObject
             Name = name,
             FullPath = path
         };
-        // Dummy child for expander
         node.Children.Add(new FolderTreeNodeViewModel(fs) { Name = "Loading..." });
         return node;
+    }
+
+    private void PopulateChildren(IReadOnlyList<FileSystemItem> subdirs)
+    {
+        Children.Clear();
+
+        foreach (var dir in subdirs)
+        {
+            var child = new FolderTreeNodeViewModel(_fileSystemService)
+            {
+                Name = dir.Name,
+                FullPath = dir.FullPath
+            };
+            child.Children.Add(new FolderTreeNodeViewModel(_fileSystemService) { Name = "Loading..." });
+            Children.Add(child);
+        }
     }
 }

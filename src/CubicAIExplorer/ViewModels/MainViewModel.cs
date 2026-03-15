@@ -1222,7 +1222,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public event EventHandler<FolderTreeNodeViewModel>? ScrollToSelectedRequested;
     public event EventHandler<BookmarkItem>? ScrollToSelectedBookmarkRequested;
 
-    private bool _isSyncingTree;
+    private int _folderTreeSyncVersion;
 
     public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
     {
@@ -1260,31 +1260,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void SyncFolderTreeToPath(string path)
     {
-        if (_isSyncingTree || string.IsNullOrEmpty(path)) return;
-        _isSyncingTree = true;
+        if (string.IsNullOrEmpty(path))
+            return;
 
-        try
-        {
-            // 1. Deselect all nodes first to avoid multiple selections
-            foreach (var rootNode in FolderTreeRoots)
-            {
-                DeselectRecursive(rootNode);
-            }
-
-            // 2. Find root drive
-            var root = Path.GetPathRoot(path);
-            if (string.IsNullOrEmpty(root)) return;
-
-            var driveNode = FolderTreeRoots.FirstOrDefault(n => string.Equals(n.FullPath, root, StringComparison.OrdinalIgnoreCase));
-            if (driveNode == null) return;
-
-            // 3. Start recursive expansion
-            ExpandToPathAsync(driveNode, path);
-        }
-        finally
-        {
-            _isSyncingTree = false;
-        }
+        var syncVersion = Interlocked.Increment(ref _folderTreeSyncVersion);
+        _ = SyncFolderTreeToPathAsync(path, syncVersion);
     }
 
     private void DeselectRecursive(FolderTreeNodeViewModel node)
@@ -1296,49 +1276,65 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async void ExpandToPathAsync(FolderTreeNodeViewModel node, string targetPath)
+    private async Task SyncFolderTreeToPathAsync(string path, int syncVersion)
     {
+        try
+        {
+            foreach (var rootNode in FolderTreeRoots)
+            {
+                DeselectRecursive(rootNode);
+            }
+
+            var root = Path.GetPathRoot(path);
+            if (string.IsNullOrEmpty(root))
+                return;
+
+            var driveNode = FolderTreeRoots.FirstOrDefault(n => string.Equals(n.FullPath, root, StringComparison.OrdinalIgnoreCase));
+            if (driveNode == null)
+                return;
+
+            await ExpandToPathAsync(driveNode, path, syncVersion).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Folder-tree sync is best effort and should never crash navigation.
+        }
+    }
+
+    private async Task ExpandToPathAsync(FolderTreeNodeViewModel node, string targetPath, int syncVersion)
+    {
+        if (syncVersion != _folderTreeSyncVersion)
+            return;
+
         if (string.Equals(node.FullPath.TrimEnd('\\'), targetPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
         {
             node.IsSelected = true;
-            node.IsExpanded = true; // Ensure the target itself is visible if it has children
+            node.IsExpanded = true;
             ScrollToSelectedRequested?.Invoke(this, node);
             return;
         }
 
-        if (!targetPath.StartsWith(node.FullPath, StringComparison.OrdinalIgnoreCase))
+        if (!IsSameOrChildPath(node.FullPath, targetPath))
             return;
 
         if (!node.IsExpanded)
-        {
             node.IsExpanded = true;
-            // Give WPF a moment to generate child nodes in the background
-            await Task.Delay(50);
-        }
+
+        await node.LoadChildrenAsync().ConfigureAwait(true);
+        if (syncVersion != _folderTreeSyncVersion)
+            return;
 
         var nextPart = targetPath[node.FullPath.Length..].TrimStart('\\');
         var slashIndex = nextPart.IndexOf('\\');
         var currentPart = slashIndex == -1 ? nextPart : nextPart[..slashIndex];
         var nextPath = Path.Combine(node.FullPath, currentPart);
 
-        // Try to find the child. If not found, maybe it's not loaded yet?
         var child = node.Children
             .ToList()
             .FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-        
-        if (child == null)
-        {
-            // If we just expanded, it should be there. If not, wait a bit more or retry.
-            await Task.Delay(50);
-            child = node.Children
-                .ToList()
-                .FirstOrDefault(c => string.Equals(c.FullPath.TrimEnd('\\'), nextPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-        }
 
         if (child != null)
-        {
-            ExpandToPathAsync(child, targetPath);
-        }
+            await ExpandToPathAsync(child, targetPath, syncVersion).ConfigureAwait(true);
     }
 
     private static string GetAppDataPath(string filename)
@@ -1348,15 +1344,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private string GetDisplayName(string path) => _fileSystemService.GetDisplayName(path);
-
-    private static string GetBookmarksPath()
-    {
-        var overridePath = Environment.GetEnvironmentVariable("CUBICAI_BOOKMARKS_PATH");
-        if (!string.IsNullOrWhiteSpace(overridePath))
-            return overridePath;
-
-        return GetAppDataPath("bookmarks.json");
-    }
 
     private void OnExternalBookmarksChanged(object? sender, List<BookmarkItem> bookmarks)
     {
@@ -2013,7 +2000,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void RunSavedSearch(SavedSearchItem? savedSearch)
+    private async Task RunSavedSearch(SavedSearchItem? savedSearch)
     {
         if (savedSearch == null || string.IsNullOrWhiteSpace(savedSearch.SearchPath))
             return;
@@ -2033,7 +2020,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (!_fileSystemService.DirectoryExists(savedSearch.SearchPath))
             return;
 
-        NavigateCurrentPaneToPath(savedSearch.SearchPath);
+        await NavigateCurrentPaneToPathAsync(savedSearch.SearchPath).ConfigureAwait(true);
         CurrentPaneFileList?.ApplySavedSearch(
             savedSearch.SearchPath,
             savedSearch.SearchTerm,
@@ -2264,6 +2251,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
             NavigateTabToPath(CurrentPaneTab, resolvedPath);
     }
 
+    public async Task NavigateCurrentPaneToPathAsync(string path)
+    {
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return;
+
+        if (CurrentPaneTab == null && ActiveTab == null)
+            NewTab();
+
+        if (CurrentPaneTab != null)
+            await NavigateTabToPathAsync(CurrentPaneTab, resolvedPath).ConfigureAwait(true);
+    }
+
     public void ToggleTabLock(TabViewModel? tab)
     {
         if (tab == null)
@@ -2308,6 +2308,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         tab.NavigateTo(resolvedPath);
+    }
+
+    private async Task NavigateTabToPathAsync(TabViewModel tab, string path)
+    {
+        var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return;
+
+        if (TryOpenLockedNavigationInNewTab(tab, resolvedPath))
+            return;
+
+        await tab.NavigateToAsync(resolvedPath).ConfigureAwait(true);
     }
 
     private bool TryOpenLockedNavigationInNewTab(TabViewModel tab, string destinationPath)
@@ -2756,31 +2768,44 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ShowBookmarkProperties(BookmarkItem? bookmark)
     {
-        if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
-        var isDirectory = _fileSystemService.DirectoryExists(bookmark.Path);
-        var isFile = File.Exists(bookmark.Path);
-        if (!isDirectory && !isFile) return;
+        if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path))
+            return;
 
-        var itemType = isDirectory ? FileSystemItemType.Directory : FileSystemItemType.File;
+        var sanitizedPath = PathSecurityHelper.SanitizePath(bookmark.Path);
+        if (sanitizedPath == null)
+            return;
 
-        var item = new FileSystemItem
+        try
         {
-            Name = bookmark.Name,
-            FullPath = bookmark.Path,
-            ItemType = itemType,
-            Extension = Path.GetExtension(bookmark.Path),
-            DateModified = isFile
-                ? File.GetLastWriteTime(bookmark.Path)
-                : Directory.GetLastWriteTime(bookmark.Path),
-            DateCreated = isFile
-                ? File.GetCreationTime(bookmark.Path)
-                : Directory.GetCreationTime(bookmark.Path),
-            Size = isFile ? new FileInfo(bookmark.Path).Length : 0,
-            Attributes = File.GetAttributes(bookmark.Path),
-            ShellTypeName = ShellFileInfoHelper.TryGetTypeName(bookmark.Path, itemType) ?? string.Empty
-        };
+            var isDirectory = _fileSystemService.DirectoryExists(sanitizedPath);
+            var isFile = File.Exists(sanitizedPath);
+            if (!isDirectory && !isFile)
+                return;
 
-        BookmarkPropertiesRequested?.Invoke(this, item);
+            var itemType = isDirectory ? FileSystemItemType.Directory : FileSystemItemType.File;
+            var item = new FileSystemItem
+            {
+                Name = bookmark.Name,
+                FullPath = sanitizedPath,
+                ItemType = itemType,
+                Extension = Path.GetExtension(sanitizedPath),
+                DateModified = isFile
+                    ? File.GetLastWriteTime(sanitizedPath)
+                    : Directory.GetLastWriteTime(sanitizedPath),
+                DateCreated = isFile
+                    ? File.GetCreationTime(sanitizedPath)
+                    : Directory.GetCreationTime(sanitizedPath),
+                Size = isFile ? new FileInfo(sanitizedPath).Length : 0,
+                Attributes = File.GetAttributes(sanitizedPath),
+                ShellTypeName = ShellFileInfoHelper.TryGetTypeName(sanitizedPath, itemType) ?? string.Empty
+            };
+
+            BookmarkPropertiesRequested?.Invoke(this, item);
+        }
+        catch
+        {
+            // Ignore transient filesystem races for bookmark metadata.
+        }
     }
 
     [RelayCommand]
@@ -3327,7 +3352,53 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrEmpty(value))
             return "\"\"";
 
-        return "\"" + value.Replace("\"", "\\\"") + "\"";
+        var builder = new StringBuilder(value.Length + 2);
+        builder.Append('"');
+        var backslashCount = 0;
+
+        foreach (var ch in value)
+        {
+            if (ch == '\\')
+            {
+                backslashCount++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                builder.Append('\\', backslashCount * 2 + 1);
+                builder.Append('"');
+                backslashCount = 0;
+                continue;
+            }
+
+            if (backslashCount > 0)
+            {
+                builder.Append('\\', backslashCount);
+                backslashCount = 0;
+            }
+
+            builder.Append(ch);
+        }
+
+        if (backslashCount > 0)
+            builder.Append('\\', backslashCount * 2);
+
+        builder.Append('"');
+        return builder.ToString();
+    }
+
+    private static bool IsSameOrChildPath(string basePath, string candidatePath)
+    {
+        var normalizedBase = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedCandidate = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(normalizedBase, normalizedCandidate, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return normalizedCandidate.StartsWith(
+            normalizedBase + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private int _previewGeneration;

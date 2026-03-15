@@ -17,6 +17,7 @@ public static class ShellContextMenuHelper
     private const uint WM_MEASUREITEM = 0x002C;
     private const uint WM_MENUCHAR = 0x0120;
     private const uint WM_MENUSELECT = 0x011F;
+    private static readonly object SyncRoot = new();
 
     private static IContextMenu? _currentContextMenu;
     private static IContextMenu2? _currentContextMenu2;
@@ -50,15 +51,17 @@ public static class ShellContextMenuHelper
     {
         if (string.IsNullOrEmpty(folderPath)) return false;
 
-        IShellFolder? desktop = null;
-        IShellFolder? folder = null;
-        IntPtr pidlFolder = IntPtr.Zero;
-        IContextMenu? contextMenu = null;
-        IntPtr hMenu = IntPtr.Zero;
-
-        try
+        lock (SyncRoot)
         {
-            if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
+            IShellFolder? desktop = null;
+            IShellFolder? folder = null;
+            IntPtr pidlFolder = IntPtr.Zero;
+            IContextMenu? contextMenu = null;
+            IntPtr hMenu = IntPtr.Zero;
+
+            try
+            {
+                if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
 
             uint pchEaten = 0;
             uint pdwAttributes = 0;
@@ -112,23 +115,25 @@ public static class ShellContextMenuHelper
                 contextMenu.InvokeCommand(ref invoke);
             }
 
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            _currentContextMenu = null;
-            _currentContextMenu2 = null;
-            _currentContextMenu3 = null;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                RestoreWindowProc(hWnd);
+                _currentContextMenu = null;
+                _currentContextMenu2 = null;
+                _currentContextMenu3 = null;
 
-            if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
-            if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
-            if (pidlFolder != IntPtr.Zero) Marshal.FreeCoTaskMem(pidlFolder);
-            if (folder != null && folder != desktop) Marshal.ReleaseComObject(folder);
-            if (desktop != null) Marshal.ReleaseComObject(desktop);
+                if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
+                if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
+                if (pidlFolder != IntPtr.Zero) Marshal.FreeCoTaskMem(pidlFolder);
+                if (folder != null && folder != desktop) Marshal.ReleaseComObject(folder);
+                if (desktop != null) Marshal.ReleaseComObject(desktop);
+            }
         }
     }
 
@@ -136,16 +141,18 @@ public static class ShellContextMenuHelper
     {
         if (paths.Count == 0) return false;
 
-        IShellFolder? desktop = null;
-        IShellFolder? parentFolder = null;
-        IntPtr pidlParent = IntPtr.Zero;
-        IntPtr[]? pidls = null;
-        IContextMenu? contextMenu = null;
-        IntPtr hMenu = IntPtr.Zero;
-
-        try
+        lock (SyncRoot)
         {
-            if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
+            IShellFolder? desktop = null;
+            IShellFolder? parentFolder = null;
+            IntPtr pidlParent = IntPtr.Zero;
+            IntPtr[]? pidls = null;
+            IContextMenu? contextMenu = null;
+            IntPtr hMenu = IntPtr.Zero;
+
+            try
+            {
+                if (SHGetDesktopFolder(out desktop) != 0 || desktop == null) return false;
 
             string firstPath = paths[0];
             string? parentPath = Path.GetDirectoryName(firstPath);
@@ -221,28 +228,40 @@ public static class ShellContextMenuHelper
                 contextMenu.InvokeCommand(ref invoke);
             }
 
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            _currentContextMenu = null;
-            _currentContextMenu2 = null;
-            _currentContextMenu3 = null;
-
-            if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
-            if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
-            if (pidls != null)
-            {
-                foreach (var pidl in pidls) if (pidl != IntPtr.Zero) Marshal.FreeCoTaskMem(pidl);
+                return true;
             }
-            if (pidlParent != IntPtr.Zero) Marshal.FreeCoTaskMem(pidlParent);
-            if (parentFolder != null && parentFolder != desktop) Marshal.ReleaseComObject(parentFolder);
-            if (desktop != null) Marshal.ReleaseComObject(desktop);
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                RestoreWindowProc(hWnd);
+                _currentContextMenu = null;
+                _currentContextMenu2 = null;
+                _currentContextMenu3 = null;
+
+                if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
+                if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
+                if (pidls != null)
+                {
+                    foreach (var pidl in pidls) if (pidl != IntPtr.Zero) Marshal.FreeCoTaskMem(pidl);
+                }
+                if (pidlParent != IntPtr.Zero) Marshal.FreeCoTaskMem(pidlParent);
+                if (parentFolder != null && parentFolder != desktop) Marshal.ReleaseComObject(parentFolder);
+                if (desktop != null) Marshal.ReleaseComObject(desktop);
+            }
         }
+    }
+
+    private static void RestoreWindowProc(IntPtr hWnd)
+    {
+        if (_oldWndProc == IntPtr.Zero)
+            return;
+
+        SetWindowLongPtr(hWnd, GWLP_WNDPROC, _oldWndProc);
+        _oldWndProc = IntPtr.Zero;
+        _wndProcDelegate = null;
     }
 
     private static IntPtr HookWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)

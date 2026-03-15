@@ -39,14 +39,33 @@ public sealed class SettingsService : IDisposable
     }
 
     public UserSettings Load()
-        => LoadAsync().GetAwaiter().GetResult();
-
-    public async Task<UserSettings> LoadAsync()
     {
         var path = GetSettingsPath();
-        if (!File.Exists(path)) return new UserSettings();
+        return LoadCore(path);
+    }
 
-        for (int i = 0; i < 3; i++) // Retry a few times if file is busy (syncing)
+    public Task<UserSettings> LoadAsync()
+    {
+        var path = GetSettingsPath();
+        return LoadCoreAsync(path);
+    }
+
+    public void Save(UserSettings settings)
+    {
+        SaveCore(settings);
+    }
+
+    public Task SaveAsync(UserSettings settings)
+    {
+        return SaveCoreAsync(settings);
+    }
+
+    private static UserSettings LoadCore(string path)
+    {
+        if (!File.Exists(path))
+            return new UserSettings();
+
+        for (var i = 0; i < 3; i++)
         {
             try
             {
@@ -55,7 +74,34 @@ public sealed class SettingsService : IDisposable
                 var json = reader.ReadToEnd();
                 return JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
             }
-            catch (IOException)
+            catch (IOException) when (i < 2)
+            {
+                Thread.Sleep(100);
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        return new UserSettings();
+    }
+
+    private static async Task<UserSettings> LoadCoreAsync(string path)
+    {
+        if (!File.Exists(path))
+            return new UserSettings();
+
+        for (var i = 0; i < 3; i++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync().ConfigureAwait(false);
+                return JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+            }
+            catch (IOException) when (i < 2)
             {
                 await Task.Delay(100).ConfigureAwait(false);
             }
@@ -64,13 +110,11 @@ public sealed class SettingsService : IDisposable
                 break;
             }
         }
+
         return new UserSettings();
     }
 
-    public void Save(UserSettings settings)
-        => SaveAsync(settings).GetAwaiter().GetResult();
-
-    public async Task SaveAsync(UserSettings settings)
+    private void SaveCore(UserSettings settings)
     {
         try
         {
@@ -82,22 +126,58 @@ public sealed class SettingsService : IDisposable
             using var suppression = _watcher?.SuppressNotifications();
 
             var json = JsonSerializer.Serialize(settings, JsonOptions);
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 try
                 {
                     using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
                     using var writer = new StreamWriter(stream);
                     writer.Write(json);
-                    break;
+                    return;
                 }
-                catch (IOException)
+                catch (IOException) when (i < 2)
+                {
+                    Thread.Sleep(100);
+                }
+            }
+        }
+        catch
+        {
+            // Non-critical.
+        }
+    }
+
+    private async Task SaveCoreAsync(UserSettings settings)
+    {
+        try
+        {
+            var path = GetSettingsPath();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            using var suppression = _watcher?.SuppressNotifications();
+
+            var json = JsonSerializer.Serialize(settings, JsonOptions);
+            for (var i = 0; i < 3; i++)
+            {
+                try
+                {
+                    using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+                    using var writer = new StreamWriter(stream);
+                    await writer.WriteAsync(json).ConfigureAwait(false);
+                    return;
+                }
+                catch (IOException) when (i < 2)
                 {
                     await Task.Delay(100).ConfigureAwait(false);
                 }
             }
         }
-        catch { /* Non-critical */ }
+        catch
+        {
+            // Non-critical.
+        }
     }
 
     public void Dispose()

@@ -34,6 +34,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
     private readonly string _undoStagingPath;
     private CancellationTokenSource? _loadDirectoryCts;
     private int _loadDirectoryVersion;
+    private Task _currentLoadTask = Task.CompletedTask;
 
     [ObservableProperty]
     private string _currentPath = string.Empty;
@@ -149,6 +150,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
     public Func<IReadOnlyList<FileSystemItem>, IReadOnlyList<string>, IReadOnlyList<BatchRenamePreviewItem>?>? BatchRenameDialogFactory { get; set; }
     public Func<string, IReadOnlyList<string>>? LoadManualSortOrder { get; set; }
     public Action<string, IReadOnlyList<string>>? SaveManualSortOrder { get; set; }
+    public Task CurrentLoadTask => _currentLoadTask;
 
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? SelectAllRequested;
@@ -371,25 +373,41 @@ public partial class FileListViewModel : ObservableObject, IDisposable
     }
 
     public void LoadDirectory(string path)
-        => LoadDirectoryAsync(path).GetAwaiter().GetResult();
+    {
+        _currentLoadTask = Task.CompletedTask;
+        LoadDirectoryCore(path);
+    }
 
     public async Task LoadDirectoryAsync(string path)
     {
-        if (!_fileSystemService.DirectoryExists(path)) return;
+        var loadTask = LoadDirectoryCoreAsync(path);
+        _currentLoadTask = loadTask;
+        await loadTask.ConfigureAwait(true);
+    }
 
-        var pathChanged = !string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase);
-        if (pathChanged && ClearFilterOnFolderChange && !string.IsNullOrWhiteSpace(FilterText))
-            FilterText = string.Empty;
+    private void LoadDirectoryCore(string path)
+    {
+        if (!PrepareDirectoryLoad(path, out var cancellationToken, out var loadVersion))
+            return;
 
-        var loadVersion = Interlocked.Increment(ref _loadDirectoryVersion);
-        _loadDirectoryCts?.Cancel();
-        _loadDirectoryCts = new CancellationTokenSource();
-        var cancellationToken = _loadDirectoryCts.Token;
+        try
+        {
+            var items = _fileSystemService.GetDirectoryContents(path, ShowHiddenFiles);
+            if (cancellationToken.IsCancellationRequested || loadVersion != _loadDirectoryVersion)
+                return;
 
-        CurrentPath = path;
-        Items.Clear();
-        ItemCount = 0;
-        UpdateSelectionStatus();
+            _allItems = items.ToList();
+            ApplyFilter();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadDirectoryCoreAsync(string path)
+    {
+        if (!PrepareDirectoryLoad(path, out var cancellationToken, out var loadVersion))
+            return;
 
         try
         {
@@ -405,11 +423,40 @@ public partial class FileListViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool PrepareDirectoryLoad(string path, out CancellationToken cancellationToken, out int loadVersion)
+    {
+        cancellationToken = CancellationToken.None;
+        loadVersion = 0;
+
+        if (!_fileSystemService.DirectoryExists(path))
+            return false;
+
+        var pathChanged = !string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase);
+        if (pathChanged && ClearFilterOnFolderChange && !string.IsNullOrWhiteSpace(FilterText))
+            FilterText = string.Empty;
+
+        loadVersion = Interlocked.Increment(ref _loadDirectoryVersion);
+        var oldCts = _loadDirectoryCts;
+        oldCts?.Cancel();
+        _loadDirectoryCts = new CancellationTokenSource();
+        oldCts?.Dispose();
+        cancellationToken = _loadDirectoryCts.Token;
+
+        CurrentPath = path;
+        Items.Clear();
+        ItemCount = 0;
+        UpdateSelectionStatus();
+        return true;
+    }
+
     private void CancelPendingDirectoryLoad()
     {
         Interlocked.Increment(ref _loadDirectoryVersion);
-        _loadDirectoryCts?.Cancel();
+        var oldCts = _loadDirectoryCts;
+        oldCts?.Cancel();
+        oldCts?.Dispose();
         _loadDirectoryCts = null;
+        _currentLoadTask = Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -996,9 +1043,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
                 foreach (var file in dirInfo.EnumerateFiles())
                 {
                     if (!effectiveIncludeHidden && file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
-                    if (criteria.SearchIncludeHidden && !file.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (!criteria.SearchIncludeSystem && file.Attributes.HasFlag(FileAttributes.System)) continue;
-                    if (criteria.SearchIncludeSystem && !file.Attributes.HasFlag(FileAttributes.System)) continue;
                     if (criteria.ReadOnlyOnly && !file.Attributes.HasFlag(FileAttributes.ReadOnly)) continue;
                     if (criteria.ArchiveOnly && !file.Attributes.HasFlag(FileAttributes.Archive)) continue;
 
@@ -1029,9 +1074,7 @@ public partial class FileListViewModel : ObservableObject, IDisposable
                 foreach (var dir in dirInfo.EnumerateDirectories())
                 {
                     if (!effectiveIncludeHidden && dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
-                    if (criteria.SearchIncludeHidden && !dir.Attributes.HasFlag(FileAttributes.Hidden)) continue;
                     if (!criteria.SearchIncludeSystem && dir.Attributes.HasFlag(FileAttributes.System)) continue;
-                    if (criteria.SearchIncludeSystem && !dir.Attributes.HasFlag(FileAttributes.System)) continue;
                     if (criteria.ReadOnlyOnly && !dir.Attributes.HasFlag(FileAttributes.ReadOnly)) continue;
                     if (criteria.ArchiveOnly && !dir.Attributes.HasFlag(FileAttributes.Archive)) continue;
 

@@ -248,6 +248,13 @@ Smoke coverage explicitly includes:
 
 The next concrete roadmap slices are now:
 
+### 9. Code review fixes v2
+Status: COMPLETE
+Scope:
+- completed: `023-code-review-fixes-v2`
+- rationale: second full codebase review (2026-03-15) found inverted search filter logic, async race conditions, zip-slip prefix gap, IPC DoS vector, CTS resource leaks, and several path-sanitization bypasses
+- result: fixed the search/tree/navigation races, hardened IPC/zip/bookmark/shell quoting paths, cleaned up CTS lifetime handling, and added targeted smoke regressions
+
 ### 7. Tab-management parity follow-up
 Status: COMPLETE
 Scope:

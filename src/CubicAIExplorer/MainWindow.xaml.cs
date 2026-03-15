@@ -61,8 +61,8 @@ public partial class MainWindow : Window
 
     private const string InternalDragFormat = "CubicAIExplorer_InternalDrag";
     private const string InternalManualReorderFormat = "CubicAIExplorer_ManualReorder";
-    private static readonly Brush ActivePaneBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA));
-    private static readonly Brush InactivePaneBrush = new SolidColorBrush(Color.FromRgb(0x9F, 0xB7, 0xD6));
+    private static readonly Brush ActivePaneBrush = CreateFrozenBrush(new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xAA)));
+    private static readonly Brush InactivePaneBrush = CreateFrozenBrush(new SolidColorBrush(Color.FromRgb(0x9F, 0xB7, 0xD6)));
     private static readonly Brush ActiveHeaderGradient = CreateFrozenBrush(
         new LinearGradientBrush(Color.FromRgb(0xF0, 0xF6, 0xFF), Color.FromRgb(0xCF, 0xE0, 0xF8), 90));
 

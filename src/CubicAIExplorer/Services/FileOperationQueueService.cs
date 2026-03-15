@@ -118,9 +118,10 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
             PendingCount -= 1;
         }
 
+        CancellationTokenSource? cancellationTokenSource = null;
         try
         {
-            using var cancellationTokenSource = new CancellationTokenSource();
+            cancellationTokenSource = new CancellationTokenSource();
             SetBusyState(description, cancellationTokenSource, isBusy: true);
             var context = new FileOperationContext(this, cancellationTokenSource.Token);
             var result = await Task.Run(() => operation(context), cancellationTokenSource.Token).ConfigureAwait(false);
@@ -152,6 +153,7 @@ public sealed partial class FileOperationQueueService : ObservableObject, IFileO
         finally
         {
             SetBusyState(string.Empty, cancellationTokenSource: null, isBusy: false);
+            cancellationTokenSource?.Dispose();
             _semaphore.Release();
         }
     }

@@ -39,14 +39,33 @@ public sealed class BookmarkService : IDisposable
     }
 
     public List<BookmarkItem> Load()
-        => LoadAsync().GetAwaiter().GetResult();
-
-    public async Task<List<BookmarkItem>> LoadAsync()
     {
         var path = GetBookmarksPath();
-        if (!File.Exists(path)) return [];
+        return LoadCore(path);
+    }
 
-        for (int i = 0; i < 3; i++)
+    public Task<List<BookmarkItem>> LoadAsync()
+    {
+        var path = GetBookmarksPath();
+        return LoadCoreAsync(path);
+    }
+
+    public void Save(IEnumerable<BookmarkItem> bookmarks)
+    {
+        SaveCore(bookmarks);
+    }
+
+    public Task SaveAsync(IEnumerable<BookmarkItem> bookmarks)
+    {
+        return SaveCoreAsync(bookmarks);
+    }
+
+    private static List<BookmarkItem> LoadCore(string path)
+    {
+        if (!File.Exists(path))
+            return [];
+
+        for (var i = 0; i < 3; i++)
         {
             try
             {
@@ -56,7 +75,35 @@ public sealed class BookmarkService : IDisposable
                 var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
                 return records?.Select(MapRecordToBookmark).ToList() ?? [];
             }
-            catch (IOException)
+            catch (IOException) when (i < 2)
+            {
+                Thread.Sleep(100);
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        return [];
+    }
+
+    private static async Task<List<BookmarkItem>> LoadCoreAsync(string path)
+    {
+        if (!File.Exists(path))
+            return [];
+
+        for (var i = 0; i < 3; i++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync().ConfigureAwait(false);
+                var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
+                return records?.Select(MapRecordToBookmark).ToList() ?? [];
+            }
+            catch (IOException) when (i < 2)
             {
                 await Task.Delay(100).ConfigureAwait(false);
             }
@@ -65,13 +112,11 @@ public sealed class BookmarkService : IDisposable
                 break;
             }
         }
+
         return [];
     }
 
-    public void Save(IEnumerable<BookmarkItem> bookmarks)
-        => SaveAsync(bookmarks).GetAwaiter().GetResult();
-
-    public async Task SaveAsync(IEnumerable<BookmarkItem> bookmarks)
+    private void SaveCore(IEnumerable<BookmarkItem> bookmarks)
     {
         try
         {
@@ -85,25 +130,63 @@ public sealed class BookmarkService : IDisposable
             var records = bookmarks.Select(MapBookmarkToRecord).ToList();
             var json = JsonSerializer.Serialize(records, JsonOptions);
 
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 try
                 {
                     using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
                     using var writer = new StreamWriter(stream);
                     writer.Write(json);
-                    break;
+                    return;
                 }
-                catch (IOException)
+                catch (IOException) when (i < 2)
+                {
+                    Thread.Sleep(100);
+                }
+            }
+        }
+        catch
+        {
+            // Non-critical.
+        }
+    }
+
+    private async Task SaveCoreAsync(IEnumerable<BookmarkItem> bookmarks)
+    {
+        try
+        {
+            var path = GetBookmarksPath();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            using var suppression = _watcher?.SuppressNotifications();
+
+            var records = bookmarks.Select(MapBookmarkToRecord).ToList();
+            var json = JsonSerializer.Serialize(records, JsonOptions);
+
+            for (var i = 0; i < 3; i++)
+            {
+                try
+                {
+                    using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+                    using var writer = new StreamWriter(stream);
+                    await writer.WriteAsync(json).ConfigureAwait(false);
+                    return;
+                }
+                catch (IOException) when (i < 2)
                 {
                     await Task.Delay(100).ConfigureAwait(false);
                 }
             }
         }
-        catch { /* Non-critical */ }
+        catch
+        {
+            // Non-critical.
+        }
     }
 
-    private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
+    private static BookmarkItem MapRecordToBookmark(BookmarkRecord record)
     {
         var item = new BookmarkItem
         {
@@ -118,10 +201,11 @@ public sealed class BookmarkService : IDisposable
                 item.Children.Add(MapRecordToBookmark(childRecord));
             }
         }
+
         return item;
     }
 
-    private BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
+    private static BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
     {
         var record = new BookmarkRecord
         {
@@ -132,6 +216,7 @@ public sealed class BookmarkService : IDisposable
         {
             record.Children = item.Children.Select(MapBookmarkToRecord).ToList();
         }
+
         return record;
     }
 

@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Text;
 
 namespace CubicAIExplorer.Services;
 
@@ -11,6 +12,7 @@ public sealed class SingleInstanceService : IDisposable
 {
     private const string MutexName = "CubicAIExplorer_SingleInstance_Mutex";
     private const string PipeName = "CubicAIExplorer_SingleInstance_Pipe";
+    private const int MaxPipeMessageBytes = 4096;
 
     private Mutex? _mutex;
     private CancellationTokenSource? _pipeCts;
@@ -65,8 +67,7 @@ public sealed class SingleInstanceService : IDisposable
                         PipeTransmissionMode.Byte,
                         PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                     await server.WaitForConnectionAsync(ct);
-                    using var reader = new StreamReader(server);
-                    var line = await reader.ReadLineAsync(ct);
+                    var line = await ReadPipeMessageAsync(server, ct);
                     if (!string.IsNullOrEmpty(line))
                     {
                         var args = line.Split('|', StringSplitOptions.RemoveEmptyEntries);
@@ -77,6 +78,34 @@ public sealed class SingleInstanceService : IDisposable
                 catch { /* pipe error, retry */ }
             }
         }, ct);
+    }
+
+    private static async Task<string?> ReadPipeMessageAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[256];
+        using var payload = new MemoryStream();
+
+        while (true)
+        {
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+            if (bytesRead == 0)
+                break;
+
+            var newlineIndex = Array.IndexOf(buffer, (byte)'\n', 0, bytesRead);
+            var bytesToWrite = newlineIndex >= 0 ? newlineIndex : bytesRead;
+            payload.Write(buffer, 0, bytesToWrite);
+
+            if (payload.Length > MaxPipeMessageBytes)
+                return null;
+
+            if (newlineIndex >= 0)
+                break;
+        }
+
+        if (payload.Length == 0)
+            return null;
+
+        return Encoding.UTF8.GetString(payload.ToArray()).TrimStart('\uFEFF').TrimEnd('\r');
     }
 
     public void Dispose()

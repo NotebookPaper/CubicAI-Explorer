@@ -832,12 +832,12 @@ public sealed class FileSystemService : IFileSystemService
             operationContext?.CancellationToken.ThrowIfCancellationRequested();
             var entry = archive.Entries[i];
             var targetPath = SanitizePath(Path.Combine(sanitizedDestination, entry.FullName));
-            if (targetPath == null || !targetPath.StartsWith(sanitizedDestination, StringComparison.OrdinalIgnoreCase))
+            if (!IsPathWithinDirectory(targetPath, sanitizedDestination))
                 continue;
 
             if (string.IsNullOrEmpty(entry.Name))
             {
-                Directory.CreateDirectory(targetPath);
+                Directory.CreateDirectory(targetPath!);
                 continue;
             }
 
@@ -845,7 +845,7 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            entry.ExtractToFile(targetPath, overwrite: false);
+            entry.ExtractToFile(targetPath!, overwrite: false);
             operationContext?.ReportProgress(i + 1, archive.Entries.Count, entry.FullName);
         }
     }
@@ -886,12 +886,12 @@ public sealed class FileSystemService : IFileSystemService
             operationContext?.CancellationToken.ThrowIfCancellationRequested();
             var entry = matchingEntries[i];
             var targetPath = SanitizePath(Path.Combine(sanitizedDestination, entry.FullName));
-            if (targetPath == null || !targetPath.StartsWith(sanitizedDestination, StringComparison.OrdinalIgnoreCase))
+            if (!IsPathWithinDirectory(targetPath, sanitizedDestination))
                 continue;
 
             if (string.IsNullOrEmpty(entry.Name))
             {
-                Directory.CreateDirectory(targetPath);
+                Directory.CreateDirectory(targetPath!);
                 continue;
             }
 
@@ -899,7 +899,7 @@ public sealed class FileSystemService : IFileSystemService
             if (!string.IsNullOrWhiteSpace(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            entry.ExtractToFile(targetPath, overwrite: false);
+            entry.ExtractToFile(targetPath!, overwrite: false);
             operationContext?.ReportProgress(i + 1, matchingEntries.Count, entry.FullName);
         }
     }
@@ -909,6 +909,22 @@ public sealed class FileSystemService : IFileSystemService
     /// Returns null if the path is invalid or suspicious.
     /// </summary>
     private static string? SanitizePath(string path) => PathSecurityHelper.SanitizePath(path);
+
+    private static bool IsPathWithinDirectory(string? candidatePath, string directoryPath)
+    {
+        if (candidatePath == null)
+            return false;
+
+        var normalizedDirectory = directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedCandidate = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(normalizedDirectory, normalizedCandidate, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return normalizedCandidate.StartsWith(
+            normalizedDirectory + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
+    }
 
     private static FileSystemItem CreateItem(DirectoryInfo dir) => new()
     {

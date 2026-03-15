@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -66,7 +67,9 @@ internal static class Program
             Run("queue recent status", failures, TestQueueRecentStatus);
             Run("queue failed history", failures, TestQueueFailedHistory);
             Run("queue cancel + progress", failures, TestQueueCancelAndProgress);
+            Run("queue cancel after completion is safe", failures, TestQueueCancelAfterCompletionIsSafe);
             Run("zip archive service", failures, () => TestZipArchiveService(tempRoot));
+            Run("zip extraction rejects sibling prefix", failures, () => TestZipExtractionRejectsSiblingPrefix(tempRoot));
             Run("extract archive command", failures, () => TestExtractArchiveCommand(tempRoot));
             Run("extract archive custom destination", failures, () => TestExtractArchiveCustomDestination(tempRoot));
             Run("browse archive request", failures, () => TestBrowseArchiveRequest(tempRoot));
@@ -97,6 +100,7 @@ internal static class Program
             Run("search content limits", failures, () => TestSearchContentLimits(tempRoot));
             Run("search close and clear", failures, () => TestSearchCloseAndClear(tempRoot));
             Run("saved searches", failures, () => TestSavedSearches(tempRoot));
+            Run("saved search replay survives navigation load", failures, () => TestSavedSearchReplaySurvivesNavigationLoad(tempRoot));
             Run("advanced search filters", failures, () => TestAdvancedSearchFilters(tempRoot));
             Run("advanced saved search criteria", failures, () => TestAdvancedSavedSearchCriteria(tempRoot));
             Run("saved search match mode", failures, () => TestSavedSearchMatchMode(tempRoot));
@@ -119,6 +123,7 @@ internal static class Program
             Run("address suggestions", failures, () => TestAddressSuggestions(tempRoot));
             Run("address suggestions ui-thread safe", failures, () => TestAddressSuggestionsUiThreadSafety(tempRoot));
             Run("env override paths sanitize to full paths", failures, () => TestEnvironmentOverridePathsAreSanitized(tempRoot));
+            Run("single instance rejects oversized pipe payload", failures, TestSingleInstanceRejectsOversizedPipePayload);
             Run("tab item id json round-trip", failures, TestTabItemIdJsonRoundTrip);
             Run("bookmark item id json round-trip", failures, TestBookmarkItemIdJsonRoundTrip);
             Run("saved search id json round-trip", failures, TestSavedSearchIdJsonRoundTrip);
@@ -143,6 +148,7 @@ internal static class Program
             Run("checksum generation and compare", failures, () => TestChecksumGenerationAndCompare(tempRoot));
             Run("file utility tool commands", failures, () => TestFileUtilityToolCommands(tempRoot));
             Run("external tools launch selected file", failures, () => TestExternalToolsLaunchSelectedFile(tempRoot));
+            Run("external tool quoting escapes trailing slash", failures, TestExternalToolQuotingEscapesTrailingSlash);
             Run("empty recycle bin command", failures, TestEmptyRecycleBinCommand);
             Run("open in new window command", failures, () => TestOpenInNewWindowCommand(tempRoot));
             Run("run as administrator command", failures, () => TestRunAsAdministratorCommand(tempRoot));
@@ -162,6 +168,7 @@ internal static class Program
             Run("xaml wiring checks", failures, TestXamlWiring);
             Run("duplicate tab", failures, () => TestDuplicateTab(tempRoot));
             Run("properties command", failures, () => TestPropertiesCommand(tempRoot));
+            Run("bookmark properties sanitize invalid paths", failures, TestBookmarkPropertiesSanitizeInvalidPaths);
             Run("shell properties retrieval", failures, () => TestShellProperties(tempRoot));
         }
         finally
@@ -745,6 +752,17 @@ internal static class Program
         Assert(!queue.CanCancel, "Queue should clear cancel state after cancellation.");
     }
 
+    private static void TestQueueCancelAfterCompletionIsSafe()
+    {
+        var queue = new FileOperationQueueService();
+        queue.EnqueueAsync("Quick op", () => 123).GetAwaiter().GetResult();
+
+        WaitFor(() => queue.HasRecentActivity && !queue.IsBusy);
+        queue.CancelCurrent();
+
+        Assert(!queue.CanCancel, "Completed queue work should clear cancel state before later cancel requests.");
+    }
+
     private static void TestZipArchiveService(string root)
     {
         var fs = new FileSystemService();
@@ -767,6 +785,34 @@ internal static class Program
         Directory.CreateDirectory(extractDir);
         fs.ExtractArchive(archive, extractDir);
         Assert(File.Exists(Path.Combine(extractDir, "docs", "readme.txt")), "Archive extraction should materialize files.");
+    }
+
+    private static void TestZipExtractionRejectsSiblingPrefix(string root)
+    {
+        var fs = new FileSystemService();
+        var folder = CreateCleanSubdir(root, "zip_sibling_prefix");
+        var archive = Path.Combine(folder, "sample.zip");
+        var extractDir = Path.Combine(folder, "out");
+        var siblingDir = Path.Combine(folder, "outboard");
+
+        using (var archiveStream = new FileStream(archive, FileMode.Create, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            using (var writer = new StreamWriter(zip.CreateEntry("safe.txt").Open()))
+            {
+                writer.Write("safe");
+            }
+
+            using (var writer = new StreamWriter(zip.CreateEntry("../outboard/evil.txt").Open()))
+            {
+                writer.Write("evil");
+            }
+        }
+
+        fs.ExtractArchive(archive, extractDir);
+
+        Assert(File.Exists(Path.Combine(extractDir, "safe.txt")), "Archive extraction should still extract in-bounds entries.");
+        Assert(!File.Exists(Path.Combine(siblingDir, "evil.txt")), "Archive extraction should reject sibling-prefix traversal entries.");
     }
 
     private static void TestExtractArchiveCommand(string root)
@@ -1186,6 +1232,21 @@ internal static class Program
         Assert(requested!.Name == "test.txt", "Properties should be for selected item.");
     }
 
+    private static void TestBookmarkPropertiesSanitizeInvalidPaths()
+    {
+        var vm = new MainViewModel(new FileSystemService(), new FakeClipboardService());
+        var eventRaised = false;
+        vm.BookmarkPropertiesRequested += (_, _) => eventRaised = true;
+
+        vm.ShowBookmarkPropertiesCommand.Execute(new BookmarkItem
+        {
+            Name = "Bad",
+            Path = "C:\\invalid\0path"
+        });
+
+        Assert(!eventRaised, "Bookmark properties should ignore invalid unsanitized paths.");
+    }
+
     private static void TestShellProperties(string root)
     {
         var fs = new FileSystemService();
@@ -1401,7 +1462,7 @@ internal static class Program
 
         Assert(vm.ActiveTab != null && vm.ActiveTab.CurrentPath == locked,
             "Undo close tab should restore the original locked tab path.");
-        Assert(vm.ActiveTab.IsLocked, "Undo close tab should restore the locked state.");
+        Assert(vm.ActiveTab!.IsLocked, "Undo close tab should restore the locked state.");
         Assert(vm.ActiveTab.LockedRootPath == locked, "Undo close tab should restore the locked root path.");
         Assert(vm.ActiveTab.TabColor == "#5A9C51", "Undo close tab should restore the tab color.");
     }
@@ -1788,6 +1849,7 @@ internal static class Program
             var saved = reloaded.SavedSearches[0];
             reloaded.NavigateToPath(folder);
             reloaded.RunSavedSearchCommand.Execute(saved);
+            WaitFor(() => reloaded.CurrentPaneFileList!.IsShowingSearchResults);
 
             Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved search should show search results.");
             Assert(reloaded.CurrentPaneFileList.Items.Any(i => i.Name == "needle-folder"), "Running a saved search should reproduce results.");
@@ -1796,6 +1858,37 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("CUBICAI_SAVED_SEARCHES_PATH", null);
         }
+    }
+
+    private static void TestSavedSearchReplaySurvivesNavigationLoad(string root)
+    {
+        var fs = new FileSystemService();
+        var clipboard = new FakeClipboardService();
+        var folder = CreateCleanSubdir(root, "saved_search_replay");
+        CreateCleanSubdir(folder, "needle-folder");
+        CreateCleanSubdir(folder, "other-folder");
+
+        var vm = new MainViewModel(fs, clipboard);
+        vm.NewTabCommand.Execute(null);
+        vm.NavigateToPath(folder);
+        vm.SearchInFolderCommand.Execute(null);
+        vm.CurrentPaneFileList!.SearchText = "needle";
+        vm.CurrentPaneFileList.ExecuteSearchSync();
+
+        var saved = new SavedSearchItem
+        {
+            Name = "Needle",
+            SearchPath = folder,
+            SearchTerm = "needle",
+            MatchMode = NameMatchMode.Contains
+        };
+
+        vm.NavigateToPath(Path.GetPathRoot(folder)!);
+        vm.RunSavedSearchCommand.Execute(saved);
+        WaitFor(() => vm.CurrentPaneFileList!.IsShowingSearchResults);
+
+        Assert(vm.CurrentPaneFileList.Items.Count == 1, "Saved-search replay should preserve the filtered result set after navigation.");
+        Assert(vm.CurrentPaneFileList.Items[0].Name == "needle-folder", "Saved-search replay should not be overwritten by the plain directory listing.");
     }
 
     private static void TestKnownFolderAliasNavigation(string root)
@@ -2522,6 +2615,18 @@ internal static class Program
         }
     }
 
+    private static void TestSingleInstanceRejectsOversizedPipePayload()
+    {
+        var method = typeof(SingleInstanceService).GetMethod("ReadPipeMessageAsync", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert(method != null, "Single-instance service should expose an internal bounded pipe reader.");
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(new string('a', 5000) + "\n"));
+        var task = (Task<string?>)method!.Invoke(null, [stream, CancellationToken.None])!;
+        var result = task.GetAwaiter().GetResult();
+
+        Assert(result == null, "Oversized pipe payloads should be rejected instead of being buffered without limit.");
+    }
+
     private static void TestTabItemIdJsonRoundTrip()
     {
         var item = new CubicAIExplorer.Models.TabItem
@@ -2733,6 +2838,7 @@ internal static class Program
 
             reloaded.NavigateToPath(folder);
             reloaded.RunSavedSearchCommand.Execute(saved);
+            WaitFor(() => reloaded.CurrentPaneFileList!.IsShowingSearchResults);
 
             Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running a saved content search should show search results.");
             Assert(reloaded.CurrentPaneFileList.Items.Count == 1 && reloaded.CurrentPaneFileList.Items[0].Name == "beta.txt",
@@ -3343,7 +3449,8 @@ internal static class Program
         vm.SearchInFolderCommand.Execute(null);
         vm.SearchIncludeHidden = true;
         vm.ExecuteSearchSync();
-        Assert(vm.Items.Count == 1 && vm.Items[0].Name == "hidden.txt", "Hidden filter should only return hidden items.");
+        Assert(vm.Items.Any(item => item.Name == "hidden.txt"), "Hidden search should include hidden items when requested.");
+        Assert(vm.Items.Any(item => item.Name == "recent.txt"), "Hidden search should still include normal items when requested.");
         Assert(vm.SearchResultsText.Contains("hidden", StringComparison.OrdinalIgnoreCase), "Search results should mention the hidden filter.");
 
         vm.SearchIncludeHidden = false;
@@ -3438,6 +3545,7 @@ internal static class Program
 
             reloaded.NavigateToPath(folder);
             reloaded.RunSavedSearchCommand.Execute(saved);
+            WaitFor(() => reloaded.CurrentPaneFileList!.IsShowingSearchResults);
 
             Assert(reloaded.CurrentPaneFileList!.IsShowingSearchResults, "Running an advanced saved search should show search results.");
             Assert(reloaded.CurrentPaneFileList.Items.Count == 1 && reloaded.CurrentPaneFileList.Items[0].Name == "readonly-report.txt",
@@ -4420,6 +4528,16 @@ internal static class Program
 
         Assert(fs.LastExternalToolArguments == $"--wait \"{selectedFile}\"", "External tools should append the selected file path when %p is omitted.");
         Assert(vm.StatusText.Contains("Launched", StringComparison.OrdinalIgnoreCase), "External tool execution should update the status text.");
+    }
+
+    private static void TestExternalToolQuotingEscapesTrailingSlash()
+    {
+        var vm = new MainViewModel(new RecordingFileSystemService(new FileSystemService()), new FakeClipboardService());
+        var arguments = vm.BuildExternalToolArguments(
+            new ExternalTool { Name = "Quoted", ToolPath = @"C:\Tools\runner.exe", Arguments = "%p" },
+            @"C:\temp\folder\");
+
+        Assert(arguments == "\"C:\\temp\\folder\\\\\"", "Quoted external-tool paths should double trailing backslashes before the closing quote.");
     }
 
     private static void TestEmptyRecycleBinCommand()

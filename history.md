@@ -39,3 +39,4 @@
 - 2026-03-12: Fixed an active-pane search race by canceling stale directory loads before pane-scoped searches, restoring full smoke-suite pass status.
 - 2026-03-13: Completed spec 021 undo close tab with a bounded recently-closed-tab stack, File/tab-menu plus `Ctrl+Shift+T` restore surface, and smoke coverage for restore ordering and metadata preservation.
 - 2026-03-13: Completed spec 022 WPF interaction smoke tests with dispatcher-driven `MainWindow` helpers, real bookmark-tree drag hit-testing coverage, and tab-strip overflow interaction coverage.
+- 2026-03-15: Completed spec 023 code review fixes v2 with search/tree/IPC/zip/path-safety hardening, synchronous-wrapper deadlock cleanup, and targeted smoke regressions.
