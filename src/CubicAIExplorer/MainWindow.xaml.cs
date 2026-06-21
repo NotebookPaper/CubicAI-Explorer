@@ -2009,6 +2009,7 @@ public partial class MainWindow : Window
             _boundViewModel.SplitFileRequested -= ViewModel_SplitFileRequested;
             _boundViewModel.JoinFileRequested -= ViewModel_JoinFileRequested;
             _boundViewModel.ChecksumRequested -= ViewModel_ChecksumRequested;
+            _boundViewModel.RothIraCalculatorRequested -= ViewModel_RothIraCalculatorRequested;
             _boundViewModel.ScrollToSelectedRequested -= MainWindow_ScrollToSelectedRequested;
             _boundViewModel.ScrollToSelectedBookmarkRequested -= MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested -= ViewModel_BookmarkPropertiesRequested;
@@ -2025,6 +2026,7 @@ public partial class MainWindow : Window
             _boundViewModel.SplitFileRequested += ViewModel_SplitFileRequested;
             _boundViewModel.JoinFileRequested += ViewModel_JoinFileRequested;
             _boundViewModel.ChecksumRequested += ViewModel_ChecksumRequested;
+            _boundViewModel.RothIraCalculatorRequested += ViewModel_RothIraCalculatorRequested;
             _boundViewModel.ScrollToSelectedRequested += MainWindow_ScrollToSelectedRequested;
             _boundViewModel.ScrollToSelectedBookmarkRequested += MainWindow_ScrollToSelectedBookmarkRequested;
             _boundViewModel.BookmarkPropertiesRequested += ViewModel_BookmarkPropertiesRequested;
@@ -3039,6 +3041,12 @@ public partial class MainWindow : Window
     private void ViewModel_ChecksumRequested(object? sender, string? initialPath)
     {
         var dialog = new ChecksumDialog(initialPath, ViewModel.ComputeChecksumsAsync) { Owner = this };
+        dialog.ShowDialog();
+    }
+
+    private void ViewModel_RothIraCalculatorRequested(object? sender, EventArgs e)
+    {
+        var dialog = new RothIraCalculatorDialog { Owner = this };
         dialog.ShowDialog();
     }
 

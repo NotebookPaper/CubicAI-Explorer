@@ -225,6 +225,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public event EventHandler<string?>? SplitFileRequested;
     public event EventHandler<string?>? JoinFileRequested;
     public event EventHandler<string?>? ChecksumRequested;
+    public event EventHandler? RothIraCalculatorRequested;
     public event EventHandler<FileSystemItem>? BookmarkPropertiesRequested;
 
     public Models.UserSettings CurrentSettings => _userSettings;
@@ -3152,6 +3153,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void OpenChecksumTool()
     {
         ChecksumRequested?.Invoke(this, GetSingleSelectedFilePath());
+    }
+
+    [RelayCommand]
+    private void OpenRothIraCalculator()
+    {
+        RothIraCalculatorRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]
