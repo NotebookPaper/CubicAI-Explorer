@@ -214,6 +214,13 @@ function css(rgb) { return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; }
 
 // 2x2 Bayer matrix for ordered dithering — the heart of the VGA look.
 const BAYER = [[0.25, 0.75], [1.0, 0.5]];
+// 4x4 Bayer matrix (normalized 0..1) for the smoother fish shading ramp.
+const BAYER4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5],
+].map(row => row.map(v => (v + 0.5) / 16));
 
 // ---------------------------------------------------------------------
 // Genome: every visible trait of a fish is a gene. Breeding does a
@@ -271,11 +278,19 @@ function fishName() { return pick(SYL_A) + pick(SYL_B); }
 // ---------------------------------------------------------------------
 const N_FRAMES = 8;
 
-// Body half-height profile along t in [0,1] (0=tail joint, 1=nose).
-function bodyProfile(t, shapeGene) {
-  const sleek = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.92 + 0.04)), 0.75);
-  const round = Math.sqrt(Math.max(0, 1 - Math.pow(2 * t - 1, 2)));
-  return sleek * (1 - shapeGene) + round * shapeGene;
+// Body silhouette along t in [0,1] (0=tail joint, 1=nose). Dorsal and
+// ventral profiles differ: the back arches, the belly is rounder, both
+// pinch into a caudal peduncle at the tail and taper at the snout.
+function topProfile(t, shapeGene) {
+  const arc  = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.9 + 0.08)), 0.95 - shapeGene * 0.4);
+  const ped  = 0.24 + 0.76 * Math.min(1, t * 3.2);      // peduncle pinch
+  const nose = t > 0.92 ? 1 - (t - 0.92) * 4 : 1;       // snout taper
+  return Math.max(0.08, arc * ped * Math.max(0.55, nose));
+}
+function botProfile(t, shapeGene) {
+  const arc = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.95 + 0.05)), 0.68 - shapeGene * 0.22);
+  const ped = 0.22 + 0.78 * Math.min(1, t * 3.0);
+  return Math.max(0.08, arc * ped * 0.92);
 }
 
 // Sprites render at 2x the genome's nominal pixel size for the 640x480 mode;
@@ -284,19 +299,26 @@ const SPRITE_SCALE = 2;
 
 function renderFishFrames(g) {
   const bodyLen = g.bodyLen * SPRITE_SCALE;
-  const maxH = Math.max(4, Math.round(bodyLen * g.bodyHeight / 2)); // half height
-  const tailLen = Math.max(4, Math.round(bodyLen * 0.35 * g.tailSize));
-  const dorsalH = Math.round(maxH * g.dorsalSize);
-  const W = tailLen + bodyLen + 4;
-  const H = (maxH + Math.max(dorsalH, 2) + 3) * 2;
+  const maxH = Math.max(5, Math.round(bodyLen * g.bodyHeight / 2)); // dorsal half-height
+  const tailLen = Math.max(6, Math.round(bodyLen * 0.36 * g.tailSize));
+  const dorsalH = Math.max(2, Math.round(maxH * g.dorsalSize));
+  const ventH   = Math.max(2, Math.round(maxH * 0.55 * g.finSize)); // anal/pelvic fins
+  const rootH   = Math.max(2, Math.round(maxH * 0.26));             // peduncle half-height
+  const tailReach = rootH + Math.ceil(tailLen * 1.3);
+  const W = tailLen + bodyLen + 6;
+  const H = (Math.max(maxH + Math.max(dorsalH, ventH), tailReach) + 4) * 2;
   const cy = Math.floor(H / 2);
 
   const base   = FISH_COLORS[g.baseColor];
   const accent = FISH_COLORS[g.accentColor];
   const finC   = FISH_COLORS[g.finColor];
-  const baseHi = shade(base, 1.35), baseLo = shade(base, 0.62);
-  const accHi  = shade(accent, 1.30), accLo = shade(accent, 0.60);
-  const finLo  = shade(finC, 0.70);
+  // 5-step ramps (deep shadow .. specular) quantized with BAYER4
+  const rampOf = c => [shade(c, 0.45), shade(c, 0.72), c, shade(c, 1.28), shade(c, 1.58)];
+  const baseRamp = rampOf(base), accRamp = rampOf(accent);
+  const outC   = shade(base, 0.28);                   // body outline
+  const gillC  = shade(base, 0.58);
+  const finHi  = shade(finC, 1.35), finLo = shade(finC, 0.58), finOut = shade(finC, 0.32);
+  const irisC  = g.eyeSize > 2 ? [232, 186, 72] : [180, 60, 40]; // gold or red iris
 
   const frames = [];
   for (let f = 0; f < N_FRAMES; f++) {
@@ -306,94 +328,184 @@ function renderFishFrames(g) {
     const ctx = cv.getContext("2d");
     const px = (x, y, rgb) => { ctx.fillStyle = css(rgb); ctx.fillRect(x, y, 1, 1); };
 
-    const sway = Math.sin(phase);              // -1..1 tail sweep
-    const tailShear = sway * 0.45;
+    const sway = Math.sin(phase);                      // -1..1 tail sweep
+    const flut = Math.sin(phase * 2) * 0.5 + 0.5;      // fin flutter
+    // body undulation: strongest at the tail, nearly still at the nose
+    const undAt = t => Math.round(sway * ((1 - t) * 2.4 + t * 0.2));
 
-    // --- tail (drawn left of body root at x = tailLen) ---------------
-    const rootH = Math.max(2, Math.round(maxH * bodyProfile(0.06, g.shape)));
+    // ==== tail (behind body, rooted at x = tailLen) ====================
+    const veil = g.tailType === 3;
     for (let i = 0; i < tailLen; i++) {
-      const x = tailLen - 1 - i;                    // i: distance from body
+      const x = tailLen - 1 - i;                       // i: distance from body
       const spread = i / tailLen;
       let hh;
       switch (g.tailType) {
-        case 0: hh = rootH + spread * tailLen * 0.8; break;          // fan
-        case 1: hh = rootH + spread * tailLen * 0.9; break;          // forked
-        case 2: hh = rootH * (1 - spread * 0.8) + 1; break;          // spade
-        default: hh = rootH + Math.sin(spread * Math.PI) * tailLen * 0.7; // veil
+        case 0: hh = rootH + Math.pow(spread, 0.8) * tailLen * 0.7; break;   // fan
+        case 1: hh = rootH + Math.pow(spread, 1.1) * tailLen * 0.9; break;   // forked
+        case 2: hh = rootH * (1 - spread) + Math.sin(spread * Math.PI) * tailLen * 0.35; break; // spade
+        default: hh = rootH + Math.pow(Math.sin(spread * Math.PI * 0.85), 1.2) * tailLen * 0.8; // veil
       }
       hh = Math.max(1, Math.round(hh));
-      const yOff = Math.round(i * tailShear * (g.tailType === 3 ? 1.6 : 1));
+      const yOff = Math.round(i * sway * 0.45 * (veil ? 1.4 : 1)) + undAt(0);
+      const notch = g.tailType === 1 ? hh * 0.5 * Math.pow(spread, 1.2) : -1;
       for (let dy = -hh; dy <= hh; dy++) {
-        if (g.tailType === 1 && Math.abs(dy) < hh * 0.45 * spread) continue; // fork notch
+        if (Math.abs(dy) < notch) continue;            // fork notch
         const y = cy + dy + yOff;
-        const rayDark = ((dy + 99) % 3 === 0);
-        px(x, y, rayDark ? finLo : finC);
+        const d4 = BAYER4[x & 3][y & 3];
+        // dithered translucent trailing edge (long and soft on veil tails)
+        const fade = (spread - (veil ? 0.55 : 0.72)) * (veil ? 2.2 : 3.5);
+        if (fade > 0 && d4 < fade) continue;
+        if (Math.abs(dy) === hh || (notch > 0 && Math.abs(dy) === Math.ceil(notch))) {
+          px(x, y, finOut);                            // fin edge
+          continue;
+        }
+        // radial fin rays fanning out from the peduncle joint
+        const rayI = Math.floor(((dy / (hh + 1)) + 1) * 3.5);
+        const c = dy < 0 ? (rayI % 2 ? finHi : finC) : (rayI % 2 ? finC : finLo);
+        px(x, y, c);
       }
     }
 
-    // --- body ---------------------------------------------------------
-    const noseWiggle = Math.round(sway * 0.6);
+    // ==== dorsal fin (sail with raked rays, behind body) ===============
+    const dStart = Math.round(bodyLen * 0.28), dEnd = Math.round(bodyLen * 0.66);
+    for (let bx = dStart; bx < dEnd; bx++) {
+      const tt = (bx - dStart) / Math.max(1, dEnd - dStart);
+      const t = bx / (bodyLen - 1);
+      const h = Math.round(dorsalH * (0.3 + 0.7 * Math.pow(Math.sin(Math.PI * Math.min(1, tt * 0.62 + 0.08)), 0.9)));
+      const topBody = cy + undAt(t) - Math.round(maxH * topProfile(t, g.shape));
+      const finSway = Math.round(sway * 1.6 * tt);
+      const x = tailLen + bx + finSway;
+      for (let dy = 1; dy <= h; dy++) {
+        const d4 = BAYER4[x & 3][dy & 3];
+        if (dy > h * 0.6 && d4 < 0.3) continue;        // translucent upper edge
+        if (dy === h) { px(x, topBody - dy, finOut); continue; }
+        const raked = ((bx + (dy >> 1)) % 3 === 0);    // backward-raked rays
+        px(x, topBody - dy, raked ? finLo : (dy > h * 0.5 ? finHi : finC));
+      }
+    }
+
+    // ==== anal fin (smaller mirrored sail below) ========================
+    const aStart = Math.round(bodyLen * 0.26), aEnd = Math.round(bodyLen * 0.48);
+    for (let bx = aStart; bx < aEnd; bx++) {
+      const tt = (bx - aStart) / Math.max(1, aEnd - aStart);
+      const t = bx / (bodyLen - 1);
+      const h = Math.round(ventH * (0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, tt * 0.7 + 0.1))));
+      const botBody = cy + undAt(t) + Math.round(maxH * botProfile(t, g.shape));
+      const x = tailLen + bx + Math.round(sway * 1.2 * tt);
+      for (let dy = 1; dy <= h; dy++) {
+        if (dy === h) { px(x, botBody + dy, finOut); continue; }
+        px(x, botBody + dy, ((bx + (dy >> 1)) % 3 === 0) ? finLo : finC);
+      }
+    }
+
+    // ==== body ==========================================================
     for (let bx = 0; bx < bodyLen; bx++) {
       const t = bx / (bodyLen - 1);
-      const hh = Math.max(1, Math.round(maxH * bodyProfile(t, g.shape)));
-      // slight body undulation, strongest near the tail
-      const und = Math.round(sway * (1 - t) * 1.2 * SPRITE_SCALE) + Math.round(noseWiggle * t * 0.3);
+      const topH = Math.max(1, Math.round(maxH * topProfile(t, g.shape)));
+      const botH = Math.max(1, Math.round(maxH * botProfile(t, g.shape)));
+      const und = undAt(t);
       const x = tailLen + bx;
-      for (let dy = -hh; dy <= hh; dy++) {
+      for (let dy = -topH; dy <= botH; dy++) {
         const y = cy + dy + und;
-        const yRel = (dy + hh) / (hh * 2 || 1);   // 0 top .. 1 bottom
+        // dark outline along the silhouette
+        if (dy === -topH || dy === botH) { px(x, y, outC); continue; }
+        const yRel = (dy + topH) / (topH + botH);      // 0 back .. 1 belly
+        const d4 = BAYER4[x & 3][y & 3];
 
-        // pattern selects base vs accent
-        let rgb = base, hi = baseHi, lo = baseLo;
-        switch (g.pattern) {
-          case 1: if (Math.floor(t * g.patternFreq) % 2 === 1) { rgb = accent; hi = accHi; lo = accLo; } break;
-          case 2: if (Math.floor(yRel * g.patternFreq) % 2 === 1) { rgb = accent; hi = accHi; lo = accLo; } break;
-          case 3: if (hash2(bx >> 2, (dy + 64) >> 2, g.seed) < 0.28) { rgb = accent; hi = accHi; lo = accLo; } break;
-          case 4: if (yRel < 0.45) { rgb = accent; hi = accHi; lo = accLo; } break;
+        // pattern picks base vs accent ramp (patterns fade out on the belly)
+        let ramp = baseRamp;
+        if (yRel < 0.88) switch (g.pattern) {
+          case 1: {                                    // banded: bowed vertical bars
+            const tt = t * g.patternFreq + Math.sin(yRel * Math.PI) * 0.3;
+            if (Math.floor(tt) % 2 === 1) ramp = accRamp; break;
+          }
+          case 2:                                      // striped: dither-edged horizontals
+            if (Math.floor(yRel * g.patternFreq + (d4 - 0.5) * 0.25) % 2 === 1) ramp = accRamp; break;
+          case 3: {                                    // spotted: round jittered blobs
+            const cs = 8;
+            const gy = dy + 128;
+            const cellX = Math.floor(bx / cs), cellY = Math.floor(gy / cs);
+            if (hash2(cellX * 3 + 1, cellY * 3 + 2, g.seed) < 0.6) {
+              const jx = cellX * cs + 2 + hash2(cellX, cellY, g.seed) * (cs - 4);
+              const jy = cellY * cs + 2 + hash2(cellX + 77, cellY + 41, g.seed) * (cs - 4);
+              const r = cs * (0.28 + hash2(cellX + 13, cellY + 7, g.seed) * 0.18);
+              if ((bx - jx) ** 2 + (gy - jy) ** 2 < r * r) ramp = accRamp;
+            }
+            break;
+          }
+          case 4:                                      // shaded: dithered dark back
+            if (yRel + (d4 - 0.5) * 0.18 < 0.42) ramp = accRamp; break;
         }
 
-        // dithered vertical shading: light on top, dark belly-shadow
-        const light = 1.15 - yRel * 0.9;          // >0.7 light, <0.3 dark
-        const d = BAYER[x & 1][y & 1];
-        let out = rgb;
-        if (light > 0.55 + d * 0.35) out = hi;
-        else if (light < d * 0.45)   out = lo;
-        px(x, y, out);
+        // top-lit shading with a specular band along the upper flank
+        let light = 1.28 - yRel * 1.05;
+        if (yRel > 0.06 && yRel < 0.26) light += 0.38;  // specular highlight
+        if (yRel > 0.9) light += 0.22;                  // reflected belly light
+        const idx = Math.max(0, Math.min(4, Math.floor(light * 2.8 + d4) - 1));
+        px(x, y, ramp[idx]);
       }
     }
 
-    // --- dorsal fin ----------------------------------------------------
-    const dStart = tailLen + Math.round(bodyLen * 0.30);
-    const dEnd   = tailLen + Math.round(bodyLen * 0.62);
-    for (let x = dStart; x < dEnd; x++) {
-      const t = (x - dStart) / Math.max(1, dEnd - dStart);
-      const h = Math.round(dorsalH * Math.sin(Math.PI * Math.min(1, t + 0.15)));
-      const topBody = cy - Math.round(maxH * bodyProfile((x - tailLen) / (bodyLen - 1), g.shape));
-      const finSway = Math.round(sway * 0.8 * t);
-      for (let dy = 1; dy <= h; dy++) {
-        px(x + finSway, topBody - dy, (dy % 2 === 0) ? finLo : finC);
+    // ==== gill cover line ==============================================
+    {
+      const t = 0.78;
+      const gx = tailLen + Math.round(bodyLen * t);
+      const und = undAt(t);
+      const th = Math.round(maxH * topProfile(t, g.shape) * 0.8);
+      const bh = Math.round(maxH * botProfile(t, g.shape) * 0.75);
+      for (let dy = -th; dy <= bh; dy++) {
+        const bow = Math.round((dy * dy) / Math.max(1, maxH * maxH) * bodyLen * 0.07);
+        px(gx + bow, cy + dy + und, gillC);
       }
     }
 
-    // --- pectoral fin (side, animated flutter) -------------------------
-    const pecX = tailLen + Math.round(bodyLen * 0.62);
-    const pecLen = Math.max(2, Math.round(maxH * g.finSize));
-    const flut = Math.sin(phase * 2) * 0.5 + 0.5;
-    for (let i = 0; i < pecLen; i++) {
-      const y = cy + 1 + Math.round(i * (0.5 + flut * 0.7));
-      px(pecX - i, y, i % 2 ? finLo : finC);
+    // ==== pectoral fin: fan of rays from the shoulder, fluttering ======
+    {
+      const t = 0.68;
+      const sx = tailLen + Math.round(bodyLen * t);
+      const sy = cy + undAt(t) + Math.round(maxH * 0.12);
+      const pecLen = Math.max(4, Math.round(maxH * 0.85 * g.finSize));
+      const nRays = 10;                                // dense enough to fill solid
+      const a0 = 0.30 + flut * 0.30, a1 = a0 + 0.75;
+      for (let k = 0; k < nRays; k++) {
+        const ang = a0 + (k / (nRays - 1)) * (a1 - a0);
+        const len = pecLen * (1 - 0.25 * Math.abs(k / (nRays - 1) - 0.35));
+        for (let l = 1; l <= len; l++) {
+          const x = sx - Math.round(Math.cos(ang) * l);
+          const y = sy + Math.round(Math.sin(ang) * l);
+          if (l > len - 2) { px(x, y, finOut); continue; }  // edged tip
+          px(x, y, (k % 3 === 2) ? finLo : finC);
+        }
+      }
     }
 
-    // --- eye + mouth ----------------------------------------------------
-    const eyeX = tailLen + bodyLen - Math.round(bodyLen * 0.18);
-    const eyeY = cy - Math.round(maxH * 0.25);
-    const es = g.eyeSize * SPRITE_SCALE;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(eyeX, eyeY, es, es);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(eyeX + Math.max(0, es - 2), eyeY + Math.floor((es - 2) / 2), 2, 2);
-    ctx.fillStyle = css(shade(base, 0.5));                // mouth
-    ctx.fillRect(tailLen + bodyLen - 2, cy + 1, 2, 2);
+    // ==== eye: outlined ball, colored iris, offset pupil, catch-light ==
+    {
+      const t = 0.84;
+      const er = 1 + g.eyeSize;                        // radius 2..4 px
+      const eyeX = tailLen + Math.round(bodyLen * t) + Math.round(bodyLen * 0.02);
+      const eyeY = cy + undAt(t) - Math.round(maxH * 0.28);
+      for (let dy = -er; dy <= er; dy++) {
+        for (let dx = -er; dx <= er; dx++) {
+          const r2 = dx * dx + dy * dy;
+          if (r2 > er * er) continue;
+          let c = [244, 240, 230];                     // sclera
+          if (r2 > (er - 1) * (er - 1)) c = [30, 24, 20];              // ring
+          else if ((dx - 1) ** 2 + dy ** 2 <= (er - 2) ** 2 + 1) c = irisC; // iris (looks forward)
+          if (dx === 1 && dy === 0) c = [10, 8, 8];                    // pupil
+          px(eyeX + dx, eyeY + dy, c);
+        }
+      }
+      px(eyeX - 1, eyeY - Math.max(1, er - 2), [255, 255, 255]);       // catch-light
+    }
+
+    // ==== mouth =========================================================
+    {
+      const und = undAt(1);
+      const my = cy + und + Math.round(maxH * botProfile(0.985, g.shape) * 0.35);
+      ctx.fillStyle = css(outC);
+      ctx.fillRect(tailLen + bodyLen - 3, my, 3, 1);
+    }
 
     frames.push(cv);
   }
