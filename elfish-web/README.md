@@ -21,6 +21,14 @@ no server — everything (game logic, sprite generation, UI) lives in the one fi
   small and grows up in the tank.
 - **Fishing** (*Go Fishing*) adds a brand-new random fish.
 - **Feeding** drops pellets the fish chase and eat.
+- **Critters** (*Add Critter* dropdown): optional bottom-dwelling companions,
+  each with natural behavior and randomized coloring. Snails creep across the
+  gravel at a true snail's pace and climb the glass walls; freshwater shrimp
+  (cherry or translucent ghost) forage with flickering legs, amble toward
+  sinking food, and dart backwards when a fish looms; clams sit half-buried,
+  slowly gaping and exhaling bubbles; crayfish patrol the floor, snap their
+  pincers, and escape with a backward tail-flip. Right-click a critter to
+  release it.
 - **Save/Load** persists the whole tank to `localStorage`.
 
 ## Note on graphics

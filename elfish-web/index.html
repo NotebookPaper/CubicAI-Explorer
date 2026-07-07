@@ -83,6 +83,17 @@
     border-bottom: 2px solid var(--bezel-hi);
   }
   button:disabled { color: #707070; cursor: default; }
+  select {
+    font: inherit;
+    padding: 5px 8px;
+    background: var(--bezel);
+    color: var(--ink);
+    border-top: 2px solid var(--bezel-lo);
+    border-left: 2px solid var(--bezel-lo);
+    border-right: 2px solid var(--bezel-hi);
+    border-bottom: 2px solid var(--bezel-hi);
+    cursor: pointer;
+  }
   #status {
     margin: 0 6px 6px 6px;
     padding: 4px 8px;
@@ -136,6 +147,13 @@
     <button id="btnNew" title="Go fishing: catch a brand new random fish">Go Fishing</button>
     <button id="btnBreed" title="Select two fish (click them), then breed" disabled>Breed Selected</button>
     <button id="btnFeed" title="Drop food into the tank">Feed</button>
+    <select id="critterSel" title="Choose a critter to add">
+      <option value="snail">Snail</option>
+      <option value="shrimp">Shrimp</option>
+      <option value="clam">Clam</option>
+      <option value="crayfish">Crayfish</option>
+    </select>
+    <button id="btnCritter" title="Add the chosen critter to the tank (right-click a critter to release it)">Add Critter</button>
     <button id="btnRelease" title="Release the selected fish back into the wild" disabled>Release</button>
     <button id="btnSave" title="Save tank to this browser">Save Tank</button>
     <button id="btnLoad" title="Load previously saved tank">Load Tank</button>
@@ -738,6 +756,506 @@ function updateFood(dt) {
 }
 
 // ---------------------------------------------------------------------
+// Critters: optional bottom-dwelling tank companions. Like the fish,
+// each critter pre-renders a strip of animation frames at creation.
+// ---------------------------------------------------------------------
+const FLOOR_Y = TANK_H - 26;             // where feet rest on the gravel
+
+const CRITTER_INFO = {
+  snail:    { label: "Snail",    names: ["Gary", "Sheldon", "Turbo", "Escar", "Doris", "Brian"],      flavor: "rasping algae" },
+  shrimp:   { label: "Shrimp",   names: ["Sakura", "Pinky", "Krill", "Paprika", "Momo", "Scampi"],    flavor: "picking at the gravel" },
+  clam:     { label: "Clam",     names: ["Pearl", "Chowder", "Clementine", "Shelly", "Grit"],         flavor: "filtering the water" },
+  crayfish: { label: "Crayfish", names: ["Pinchy", "Clawdia", "Rusty", "Cobalt", "Snips"],            flavor: "patrolling its patch" },
+};
+
+function makeCritterVariant(type) {
+  switch (type) {
+    case "snail":
+      return { shell: pick([[196, 132, 60], [222, 176, 88], [140, 96, 128], [172, 66, 50]]),
+               stripes: rand() < 0.5, size: randRange(1.1, 1.6), seed: randInt(1e9) };
+    case "shrimp":
+      return { ghost: rand() < 0.35, size: randRange(1.0, 1.4), seed: randInt(1e9) };
+    case "clam":
+      return { shell: pick([[158, 148, 158], [176, 156, 124], [126, 116, 138]]),
+               size: randRange(1.1, 1.6), seed: randInt(1e9) };
+    default: // crayfish
+      return { shell: rand() < 0.4 ? [74, 112, 214] : [158, 84, 48],
+               size: randRange(1.1, 1.5), seed: randInt(1e9) };
+  }
+}
+
+// --- snail: spiral shell, creeping foot, swaying eye stalks ------------
+function renderSnailFrames(v) {
+  const W = 28, H = 22, frames = [];
+  const ramp = [shade(v.shell, 0.5), shade(v.shell, 0.8), v.shell, shade(v.shell, 1.32)];
+  const foot = [198, 170, 134], footLo = shade(foot, 0.72), footOut = shade(foot, 0.4);
+  for (let f = 0; f < N_FRAMES; f++) {
+    const ph = (f / N_FRAMES) * Math.PI * 2;
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const c = cv.getContext("2d");
+    const px = (x, y, rgb) => { c.fillStyle = css(rgb); c.fillRect(x, y, 1, 1); };
+    // foot: long muscle hugging the ground, head lifted, creeping ripple
+    for (let x = 2; x <= 25; x++) {
+      const t = (x - 2) / 23;
+      const lift = x > 20 ? Math.round((x - 20) * 0.9) : 0;   // head rises
+      const top = H - 4 - Math.round(Math.sin(Math.PI * Math.min(1, t * 1.15)) * 1.5) - lift;
+      for (let y = top; y <= H - 2; y++) {
+        const edge = y === top || y === H - 2 || x === 2 || x === 25;
+        const ripple = Math.sin(ph * 2 + x * 0.85) > 0.35 && y === H - 3;
+        px(x, y, edge ? footOut : (ripple ? footLo : foot));
+      }
+    }
+    // eye stalks with beady tips, swaying gently out of phase
+    const hx = 23, hy = H - 8;
+    [[-1.15, 6, 0], [-0.6, 7, 1.7]].forEach(([baseAng, len, k]) => {
+      const ang = baseAng + Math.sin(ph + k) * 0.2;
+      for (let l = 1; l <= len; l++) {
+        const x = hx + Math.round(Math.cos(ang) * l * 0.9);
+        const y = hy + Math.round(Math.sin(ang) * l);
+        px(x, y, l === len ? [22, 16, 12] : footLo);
+      }
+    });
+    // shell: dithered ball with a spiral groove and optional stripes
+    const scx = 11, scy = H - 12, r = 7.6;
+    for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r * r) continue;
+      const x = scx + dx, y = scy + dy;
+      if (d2 > (r - 1) * (r - 1)) { px(x, y, shade(v.shell, 0.34)); continue; }
+      const angp = Math.atan2(dy, dx) / (Math.PI * 2) + 0.5;
+      const rad = Math.sqrt(d2) / r;
+      let col;
+      if (((angp * 2 + rad * 2.4) % 1) < 0.15) col = ramp[0];      // spiral groove
+      else {
+        const light = 1.2 - ((dy + 8) / 16) * 1.0 + (dx < 0 ? 0.1 : 0);
+        col = ramp[Math.max(0, Math.min(3, Math.floor(light * 2.2 + BAYER4[x & 3][y & 3]) - 1))];
+      }
+      if (v.stripes && (Math.floor(angp * 6) % 2 === 0) && rad > 0.35) col = shade(col, 0.74);
+      px(x, y, col);
+    }
+    frames.push(cv);
+  }
+  return { frames, w: W, h: H, anchorX: 13, anchorY: H - 1 };
+}
+
+// Stamp shapes into a silhouette mask, then shade columns and outline the
+// merged shape — gives critters one clean edge instead of overlapping blobs.
+function maskPainter(W, H) {
+  const mask = new Uint8Array(W * H);
+  return {
+    mask,
+    disc(cx, cy, r) {
+      const R = Math.ceil(r);
+      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const x = Math.round(cx + dx), y = Math.round(cy + dy);
+        if (x >= 0 && y >= 0 && x < W && y < H) mask[y * W + x] = 1;
+      }
+    },
+    ellipse(cx, cy, rx, ry) {
+      const RX = Math.ceil(rx), RY = Math.ceil(ry);
+      for (let dy = -RY; dy <= RY; dy++) for (let dx = -RX; dx <= RX; dx++) {
+        if ((dx / rx) ** 2 + (dy / ry) ** 2 > 1) continue;
+        const x = Math.round(cx + dx), y = Math.round(cy + dy);
+        if (x >= 0 && y >= 0 && x < W && y < H) mask[y * W + x] = 1;
+      }
+    },
+    set(x, y) { if (x >= 0 && y >= 0 && x < W && y < H) mask[y * W + x] = 1; },
+    // paint(x, y, edge, yRel) decides the pixel color; skip by returning null
+    render(px, paint) {
+      for (let x = 0; x < W; x++) {
+        let minY = -1, maxY = -1;
+        for (let y = 0; y < H; y++) if (mask[y * W + x]) { if (minY < 0) minY = y; maxY = y; }
+        if (minY < 0) continue;
+        for (let y = minY; y <= maxY; y++) {
+          if (!mask[y * W + x]) continue;
+          const edge = x === 0 || x === W - 1 || y === 0 || y === H - 1 ||
+            !mask[y * W + x - 1] || !mask[y * W + x + 1] || !mask[(y - 1) * W + x] || !mask[(y + 1) * W + x];
+          const col = paint(x, y, edge, (y - minY) / Math.max(1, maxY - minY));
+          if (col) px(x, y, col);
+        }
+      }
+    },
+  };
+}
+
+// --- shrimp: curled body, flickering legs and swimmerets, antennae -----
+function renderShrimpFrames(v) {
+  const W = 28, H = 18, frames = [];
+  const bodyC = v.ghost ? [178, 196, 192] : [216, 60, 48];
+  const ramp = [shade(bodyC, 0.55), shade(bodyC, 0.85), bodyC, shade(bodyC, 1.35)];
+  const outc = shade(bodyC, 0.32);
+  for (let f = 0; f < N_FRAMES; f++) {
+    const ph = (f / N_FRAMES) * Math.PI * 2;
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const c = cv.getContext("2d");
+    const px = (x, y, rgb) => { c.fillStyle = css(rgb); c.fillRect(x, y, 1, 1); };
+    // antennae sweeping back over the body (dashed = hair thin)
+    const swayA = Math.sin(ph) * 0.5;
+    for (let a = 0; a < 2; a++) {
+      for (let l = 1; l <= 14; l++) {
+        const x = 22 - l;
+        const y = 4 - Math.round(Math.sin(l * 0.2 + swayA + a * 0.6) * (1.5 + a));
+        if ((l & 1) === 0) px(x, y, shade(bodyC, 1.15));
+      }
+    }
+    // one silhouette: curled body discs + rostrum + tail fan
+    const mp = maskPainter(W, H);
+    const spine = [[21, 8, 3.2], [18, 7.4, 3.4], [15, 7.6, 3.1], [12, 8.6, 2.6], [9, 10, 2.2], [7, 11.6, 1.8], [5, 13, 1.4]];
+    for (const [sx, sy, r] of spine) mp.disc(sx, sy, r);
+    mp.set(24, 6); mp.set(25, 5); mp.set(24, 5);          // rostrum
+    for (let l = 0; l < 5; l++) {                          // tail fan
+      const x = 5 - l;
+      const half = Math.max(1, Math.round(l * 0.8));
+      for (let k = -half; k <= half; k++) mp.set(x, 13 + Math.round(l * 0.5) + k);
+    }
+    mp.render(px, (x, y, edge, yRel) => {
+      if (edge) return outc;
+      const d4 = BAYER4[x & 3][y & 3];
+      if (v.ghost && d4 < 0.38) return null;               // translucency
+      const light = 1.3 - yRel * 1.1;
+      let col = ramp[Math.max(0, Math.min(3, Math.floor(light * 2.3 + d4) - 1))];
+      if (!v.ghost && hash2(x >> 1, y >> 1, v.seed) < 0.14) col = ramp[3];  // mottling
+      if (v.ghost && hash2(x, y, v.seed) < 0.08) col = [92, 106, 102];      // speckles
+      return col;
+    });
+    // stalked eye on top
+    px(23, 6, [12, 12, 12]); px(23, 5, [46, 46, 50]);
+    // walking legs: fine, quick alternating kicks
+    for (let k = 0; k < 5; k++) {
+      const bx = 12 + k * 2;
+      const kick = Math.sin(ph * 2 + k * 1.4);
+      for (let l = 1; l <= 4; l++) px(bx + Math.round(kick * l * 0.35), 10 + l, ramp[1]);
+    }
+    // swimmerets fluttering under the abdomen
+    for (let k = 0; k < 3; k++) {
+      const bx = 7 + k * 2;
+      const flap = Math.sin(ph * 3 + k * 1.1);
+      px(bx + Math.round(flap * 1.2), 14, ramp[1]);
+      px(bx + Math.round(flap * 1.2), 15, ramp[0]);
+    }
+    frames.push(cv);
+  }
+  return { frames, w: W, h: H, anchorX: 14, anchorY: 16 };
+}
+
+// --- clam: half-buried, valves gape slowly, mantle peeking out ---------
+function renderClamFrames(v) {
+  const W = 24, H = 18, frames = [];
+  const ramp = [shade(v.shell, 0.5), shade(v.shell, 0.78), v.shell, shade(v.shell, 1.3)];
+  const outc = shade(v.shell, 0.34);
+  const mantle = [238, 188, 178], mantleLo = shade(mantle, 0.72);
+  for (let f = 0; f < N_FRAMES; f++) {
+    const ph = (f / N_FRAMES) * Math.PI * 2;
+    const open = Math.round(((1 - Math.cos(ph)) / 2) * 3);   // 0..3 px gape
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const c = cv.getContext("2d");
+    const px = (x, y, rgb) => { c.fillStyle = css(rgb); c.fillRect(x, y, 1, 1); };
+    const cx = 12, cyv = H - 7, rx = 9, ry = 5.5;
+    // mantle flesh showing in the gape
+    for (let g2 = 1; g2 <= open; g2++) {
+      const y = cyv - g2;
+      for (let x = cx - 5; x <= cx + rx - 2; x++) {
+        px(x, y, BAYER4[x & 3][y & 3] < 0.5 ? mantle : mantleLo);
+      }
+    }
+    // valves: bottom fixed, top tilted up by `open` px at the lip (right)
+    for (const topValve of [false, true]) {
+      for (let dx = -rx; dx <= rx; dx++) {
+        const w = Math.sqrt(Math.max(0, 1 - (dx / rx) ** 2));
+        const hh = Math.max(1, Math.round(ry * w));
+        for (let k = 1; k <= hh; k++) {
+          // top valve pivots at the hinge (left side), so lift scales with dx
+          const lift = topValve ? Math.round(open * (dx + rx) / (2 * rx)) : 0;
+          const x = cx + dx;
+          const y = topValve ? cyv - k - lift : cyv + k - 1;
+          const edge = k === hh;
+          // radial growth ridges fanning from the hinge
+          const ang = Math.atan2(topValve ? -k : k, dx + rx + 2);
+          const ridge = Math.floor((ang + 1.6) * 8) % 2 === 0;
+          const light = topValve ? 1.55 - (k / ry) * 0.85 : 0.68 - (k / ry) * 0.2;
+          let col = ramp[Math.max(0, Math.min(3, Math.floor(light * 2.2 + BAYER4[x & 3][y & 3]) - 1))];
+          if (ridge) col = shade(col, 0.7);
+          px(x, y, edge ? outc : col);
+        }
+      }
+    }
+    // dark lip seam where the valves meet when shut
+    if (open === 0) for (let dx = -4; dx <= rx - 1; dx++) px(cx + dx, cyv - 1, outc);
+    frames.push(cv);
+  }
+  return { frames, w: W, h: H, anchorX: 12, anchorY: H - 1 };
+}
+
+// --- crayfish: armored tail, big pincers, walking legs, antennae -------
+function renderCrayfishFrames(v) {
+  const W = 42, H = 24, frames = [];
+  const ramp = [shade(v.shell, 0.5), shade(v.shell, 0.8), v.shell, shade(v.shell, 1.3)];
+  const outc = shade(v.shell, 0.32);
+  for (let f = 0; f < N_FRAMES; f++) {
+    const ph = (f / N_FRAMES) * Math.PI * 2;
+    const bob = Math.round(Math.sin(ph * 2) * 0.6);          // walking bob
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const c = cv.getContext("2d");
+    const px = (x, y, rgb) => { c.fillStyle = css(rgb); c.fillRect(x, y, 1, 1); };
+    // long antennae sweeping back, swaying
+    const swayA = Math.sin(ph) * 0.4;
+    for (let a = 0; a < 2; a++) {
+      for (let l = 1; l <= 18; l++) {
+        const x = 29 - l;
+        const y = 6 - Math.round(Math.sin(l * 0.14 + swayA + a * 0.7) * (2 + a * 1.5));
+        if ((l & 1) === 0) px(x, y, ramp[1]);
+      }
+    }
+    // walking legs behind the body: 4 pairs, alternating stride
+    for (let k = 0; k < 4; k++) {
+      const bx = 17 + k * 2.4;
+      const kick = Math.sin(ph * 2 + k * 1.6);
+      for (let l = 1; l <= 6; l++) {
+        px(Math.round(bx + kick * l * 0.4), 14 + bob + l, l > 4 ? ramp[0] : ramp[1]);
+      }
+    }
+    // one silhouette: tail fan + abdomen + carapace + arm + claw
+    const snap = Math.round((1 + Math.sin(ph * 2)) * 1.1);
+    const mp = maskPainter(W, H);
+    for (let l = 0; l < 5; l++) {                          // tail fan
+      const x = 5 - l;
+      const half = Math.max(1, Math.round(l * 0.9));
+      for (let k = -half; k <= half; k++) mp.set(x, 13 + bob + k);
+    }
+    for (let s = 0; s < 4; s++) {                          // abdomen segments
+      mp.ellipse(7 + s * 3, 13 + bob, 2.2, 2.5 + s * 0.55);
+    }
+    mp.ellipse(22, 12 + bob, 6.8, 4.9);                    // carapace
+    mp.set(29, 10 + bob); mp.set(30, 10 + bob); mp.set(30, 11 + bob); // rostrum
+    for (let l = 0; l < 5; l++) {                          // claw arm reaching forward-down
+      mp.set(27 + l, 14 + bob + Math.round(l * 0.4));
+      mp.set(27 + l, 15 + bob + Math.round(l * 0.4));
+    }
+    mp.ellipse(34, 16 + bob, 3.4, 2.4);                    // claw hand
+    for (let l = 0; l < 3; l++) {                          // fingers, snapping
+      mp.set(37 + l, 15 + bob - (l > 0 ? snap : 0));
+      mp.set(37 + l, 17 + bob + (l > 0 ? snap : 0));
+    }
+    mp.render(px, (x, y, edge, yRel) => {
+      if (edge) return outc;
+      const d4 = BAYER4[x & 3][y & 3];
+      const light = 1.3 - yRel * 1.1;
+      let col = ramp[Math.max(0, Math.min(3, Math.floor(light * 2.2 + d4) - 1))];
+      // segment seams across the abdomen
+      if (x >= 5 && x <= 16 && ((x - 5) % 3 === 0)) col = shade(col, 0.72);
+      // shell texture speckles
+      if (hash2(x >> 1, y >> 1, v.seed) < 0.1) col = ramp[3];
+      return col;
+    });
+    // stalked eyes on top of the head
+    px(28, 8 + bob, [10, 10, 10]); px(27, 8 + bob, [48, 48, 52]);
+    px(28, 9 + bob, ramp[0]);
+    frames.push(cv);
+  }
+  return { frames, w: W, h: H, anchorX: 20, anchorY: 22 };
+}
+
+function renderCritterFrames(type, v) {
+  switch (type) {
+    case "snail":  return renderSnailFrames(v);
+    case "shrimp": return renderShrimpFrames(v);
+    case "clam":   return renderClamFrames(v);
+    default:       return renderCrayfishFrames(v);
+  }
+}
+
+let nextCritterId = 1;
+class Critter {
+  constructor(type, x, variant, name) {
+    this.id = nextCritterId++;
+    this.type = type;
+    this.variant = variant || makeCritterVariant(type);
+    this.name = name || pick(CRITTER_INFO[type].names);
+    this.sprite = renderCritterFrames(type, this.variant);
+    this.x = x !== undefined ? x : randRange(60, TANK_W - 60);
+    this.y = this.groundY();
+    this.dir = rand() < 0.5 ? 1 : -1;
+    this.animPhase = rand() * N_FRAMES;
+    this.state = "idle";
+    this.stateT = randRange(1, 4);
+    this.vx = 0; this.vy = 0;
+    this.cool = randRange(2, 6);            // startle cooldown
+    this.wall = null;                        // snail: null | "L" | "R"
+    this.wallPhase = "up"; this.wallTarget = 0;
+  }
+  groundY() { return FLOOR_Y + (this.type === "clam" ? 7 : 0) + (this.id % 5); }
+
+  update(dt) {
+    this.cool -= dt;
+    switch (this.type) {
+      case "snail": this.updateSnail(dt); break;
+      case "shrimp": this.updateShrimp(dt); break;
+      case "clam": this.updateClam(dt); break;
+      default: this.updateCrayfish(dt);
+    }
+  }
+
+  updateSnail(dt) {
+    this.animPhase += dt * 1.6;              // slow foot ripple & stalk sway
+    const v = 3.2;                           // a snail's pace
+    if (!this.wall) {
+      this.x += this.dir * v * dt;
+      if (rand() < dt * 0.015) this.dir *= -1;
+      if (this.x < 16) { this.wall = "L"; this.x = 13; this.startClimb(); }
+      else if (this.x > TANK_W - 16) { this.wall = "R"; this.x = TANK_W - 13; this.startClimb(); }
+    } else {
+      if (this.wallPhase === "up") {
+        this.y -= v * dt;
+        if (this.y <= this.wallTarget) { this.wallPhase = "rest"; this.stateT = randRange(3, 9); }
+      } else if (this.wallPhase === "rest") {
+        this.stateT -= dt;
+        if (this.stateT <= 0) this.wallPhase = "down";
+      } else {
+        this.y += v * dt;
+        if (this.y >= this.groundY()) {
+          this.y = this.groundY();
+          this.dir = this.wall === "L" ? 1 : -1;   // wander back into the tank
+          this.wall = null;
+        }
+      }
+    }
+  }
+  startClimb() {
+    this.wallPhase = "up";
+    this.wallTarget = randRange(TANK_H * 0.3, FLOOR_Y - 50);
+  }
+
+  updateShrimp(dt) {
+    this.animPhase += dt * (this.state === "dart" ? 16 : 8);
+    if (this.state === "dart") {
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vy += 150 * dt;                   // sink back down
+      this.vx *= Math.pow(0.12, dt);
+      if (this.y >= this.groundY()) { this.y = this.groundY(); this.state = "idle"; this.stateT = randRange(1, 3); }
+    } else {
+      if (this.y < this.groundY()) this.y = Math.min(this.groundY(), this.y + 26 * dt);
+      this.stateT -= dt;
+      if (this.state === "walk") {
+        this.x += this.dir * 7 * dt;         // dainty little steps
+        if (this.stateT <= 0) { this.state = "idle"; this.stateT = randRange(1.5, 5); }
+      } else if (this.stateT <= 0) {
+        this.state = "walk"; this.stateT = randRange(0.6, 2);
+        if (rand() < 0.4) this.dir *= -1;
+      }
+      // amble toward sinking food
+      let tgt = null, bd = 1e9;
+      for (const p of food) {
+        if (p.y > TANK_H - 100) { const d = Math.abs(p.x - this.x); if (d < bd) { bd = d; tgt = p; } }
+      }
+      if (tgt && bd < 130) {
+        this.state = "walk"; this.dir = tgt.x > this.x ? 1 : -1; this.stateT = 0.4;
+        if (bd < 8 && tgt.y > this.y - 16) tgt.eaten = true;
+      }
+      // startle: quick backwards tail-flick away from looming fish
+      if (this.cool <= 0) for (const fsh of fishes) {
+        const dx = fsh.x - this.x, dy = fsh.y - this.y;
+        if (dx * dx + dy * dy < 52 * 52) {
+          this.state = "dart";
+          this.vx = (dx > 0 ? -1 : 1) * randRange(120, 175);
+          this.vy = -randRange(60, 120);
+          this.dir = this.vx > 0 ? 1 : -1;
+          this.cool = randRange(4, 9);
+          break;
+        }
+      }
+    }
+    this.x = Math.max(22, Math.min(TANK_W - 22, this.x));
+    this.y = Math.min(this.y, this.groundY());
+  }
+
+  updateClam(dt) {
+    this.animPhase += dt * 0.75;             // one slow gape cycle ~11s
+    const fi = Math.floor(this.animPhase) % N_FRAMES;
+    if (fi >= 3 && fi <= 5 && rand() < dt * 0.5) {   // exhale a bubble while open
+      bubbles.push({ x: this.x + randRange(-2, 4), y: this.y - 16, r: 2, wob: rand() * 6 });
+    }
+  }
+
+  updateCrayfish(dt) {
+    this.animPhase += dt * (this.state === "dart" ? 14 : 5);
+    if (this.state === "dart") {             // backward escape tail-flip
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vy += 190 * dt;
+      this.vx *= Math.pow(0.1, dt);
+      if (this.y >= this.groundY()) { this.y = this.groundY(); this.state = "idle"; this.stateT = randRange(2, 5); }
+    } else {
+      this.stateT -= dt;
+      if (this.state === "walk") {
+        this.x += this.dir * 5.5 * dt;       // deliberate armored strut
+        if (this.stateT <= 0) { this.state = "idle"; this.stateT = randRange(2, 6); }
+      } else if (this.stateT <= 0) {
+        this.state = "walk"; this.stateT = randRange(1.5, 4);
+        if (rand() < 0.5) this.dir *= -1;
+      }
+      let tgt = null, bd = 1e9;
+      for (const p of food) {
+        if (p.y > TANK_H - 100) { const d = Math.abs(p.x - this.x); if (d < bd) { bd = d; tgt = p; } }
+      }
+      if (tgt && bd < 150) {
+        this.state = "walk"; this.dir = tgt.x > this.x ? 1 : -1; this.stateT = 0.4;
+        if (bd < 10 && tgt.y > this.y - 18) tgt.eaten = true;
+      }
+      if (this.cool <= 0) for (const fsh of fishes) {
+        const dx = fsh.x - this.x, dy = fsh.y - this.y;
+        if (dx * dx + dy * dy < 44 * 44) {
+          this.state = "dart";
+          this.vx = -this.dir * randRange(150, 210);  // crayfish flee backwards
+          this.vy = -randRange(40, 80);
+          this.cool = randRange(6, 12);
+          break;
+        }
+      }
+    }
+    this.x = Math.max(30, Math.min(TANK_W - 30, this.x));
+  }
+
+  draw(ctx) {
+    const s = this.sprite;
+    const fi = ((Math.floor(this.animPhase) % N_FRAMES) + N_FRAMES) % N_FRAMES;
+    const sc = this.variant.size;
+    ctx.save();
+    ctx.translate(Math.round(this.x), Math.round(this.y));
+    if (this.type === "snail" && this.wall) {
+      // rotate so the foot presses against the glass; flip to face travel
+      if (this.wall === "L") { ctx.rotate(Math.PI / 2); if (this.wallPhase !== "down") ctx.scale(-1, 1); }
+      else { ctx.rotate(-Math.PI / 2); if (this.wallPhase === "down") ctx.scale(-1, 1); }
+    } else if (this.dir === -1) ctx.scale(-1, 1);
+    ctx.drawImage(s.frames[fi], -Math.round(s.anchorX * sc), -Math.round(s.anchorY * sc),
+                  Math.round(s.w * sc), Math.round(s.h * sc));
+    ctx.restore();
+  }
+  hitTest(mx, my) {
+    const hw = (this.sprite.w * this.variant.size) / 2 + 3;
+    const hh = this.sprite.h * this.variant.size + 3;
+    return mx > this.x - hw && mx < this.x + hw && my > this.y - hh && my < this.y + 4;
+  }
+  serialize() {
+    return { type: this.type, variant: this.variant, name: this.name, x: this.x, y: this.y, dir: this.dir };
+  }
+  static deserialize(d) {
+    const cr = new Critter(d.type, d.x, d.variant, d.name);
+    cr.y = d.y; cr.dir = d.dir || 1;
+    return cr;
+  }
+}
+
+const critters = [];
+const MAX_CRITTERS = 12;
+function addCritter(type) {
+  if (!CRITTER_INFO[type]) return;
+  if (critters.length >= MAX_CRITTERS) { setStatus("The tank is crowded enough down there already."); return; }
+  const cr = new Critter(type);
+  critters.push(cr);
+  setStatus(`${cr.name} the ${CRITTER_INFO[type].label} settles in, ${CRITTER_INFO[type].flavor}.`);
+}
+
+// ---------------------------------------------------------------------
 // Game state + UI
 // ---------------------------------------------------------------------
 const fishes = [];
@@ -798,7 +1316,7 @@ function dropFood() {
 // --- save / load ------------------------------------------------------
 const SAVE_KEY = "elfish-web-tank";
 function saveTank() {
-  const data = { fishes: fishes.map(f => f.serialize()) };
+  const data = { fishes: fishes.map(f => f.serialize()), critters: critters.map(c => c.serialize()) };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     setStatus(`Tank saved (${fishes.length} fish).`);
@@ -812,9 +1330,10 @@ function loadTank() {
   if (!raw) { setStatus("No saved tank found in this browser."); return; }
   try {
     const data = JSON.parse(raw);
-    fishes.length = 0; selected.length = 0;
+    fishes.length = 0; selected.length = 0; critters.length = 0;
     for (const d of data.fishes) fishes.push(Fish.deserialize(d));
-    setStatus(`Tank loaded (${fishes.length} fish).`);
+    for (const d of data.critters || []) critters.push(Critter.deserialize(d));
+    setStatus(`Tank loaded (${fishes.length} fish, ${critters.length} critters).`);
     refreshUI();
   } catch (e) {
     setStatus("Saved tank was corrupt: " + e.message);
@@ -840,8 +1359,30 @@ canvas.addEventListener("pointerdown", (ev) => {
       return;
     }
   }
+  // critters: click for a hello, right-click (below) to release
+  for (let i = critters.length - 1; i >= 0; i--) {
+    if (critters[i].hitTest(mx, my)) {
+      const cr = critters[i];
+      setStatus(`${cr.name} the ${CRITTER_INFO[cr.type].label} — ${CRITTER_INFO[cr.type].flavor}. (Right-click to release.)`);
+      return;
+    }
+  }
   selected.length = 0;                            // click water to clear
   refreshUI();
+});
+
+canvas.addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (ev.clientX - rect.left) * (TANK_W / rect.width);
+  const my = (ev.clientY - rect.top) * (TANK_H / rect.height);
+  for (let i = critters.length - 1; i >= 0; i--) {
+    if (critters[i].hitTest(mx, my)) {
+      const cr = critters.splice(i, 1)[0];
+      setStatus(`${cr.name} the ${CRITTER_INFO[cr.type].label} is rehomed to a friend's tank.`);
+      return;
+    }
+  }
 });
 
 function portraitCanvas(fish, size) {
@@ -890,6 +1431,9 @@ function refreshUI() {
 document.getElementById("btnNew").addEventListener("click", addRandomFish);
 document.getElementById("btnBreed").addEventListener("click", breedSelected);
 document.getElementById("btnFeed").addEventListener("click", dropFood);
+document.getElementById("btnCritter").addEventListener("click", () => {
+  addCritter(document.getElementById("critterSel").value);
+});
 document.getElementById("btnRelease").addEventListener("click", releaseSelected);
 document.getElementById("btnSave").addEventListener("click", saveTank);
 document.getElementById("btnLoad").addEventListener("click", loadTank);
@@ -905,6 +1449,10 @@ function frame(now) {
   ctx.drawImage(bgCanvas, 0, 0);
   drawLightRays(time);
   drawPlants(time);
+
+  for (const cr of critters) cr.update(dt);
+  for (const cr of critters) cr.draw(ctx);
+
   updateFood(dt);
 
   for (const f of fishes) f.update(dt, food);
@@ -936,7 +1484,9 @@ function frame(now) {
 addRandomFish();
 addRandomFish();
 addRandomFish();
-setStatus("Welcome to El-Fish Web. Click two fish and press Breed Selected — or go fishing for more.");
+addCritter("snail");
+addCritter("shrimp");
+setStatus("Welcome to El-Fish Web. Click two fish and press Breed Selected — or go fishing for more.\nA snail and a shrimp came with the tank; add more critters from the dropdown.");
 requestAnimationFrame(frame);
 </script>
 </body>
