@@ -8,7 +8,8 @@ no server — everything (game logic, sprite generation, UI) lives in the one fi
 
 ## What it does
 
-- **320×200 VGA-style tank** rendered on a pixelated canvas: dithered water
+- **640×480 VGA-style tank** (the original's actual resolution) rendered on a
+  pixelated canvas: dithered water
   gradient, gravel bed, rocks, swaying plants, bubbles, drifting light rays.
 - **Procedurally generated fish.** Every fish has a genome (body shape/size,
   tail type, dorsal/pectoral fins, base/accent/fin colors, pattern, eye size,

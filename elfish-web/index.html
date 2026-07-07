@@ -130,7 +130,7 @@
     <span class="ver">an homage to El-Fish (1993)</span>
   </div>
 
-  <div id="tankwrap"><canvas id="tank" width="320" height="200"></canvas></div>
+  <div id="tankwrap"><canvas id="tank" width="640" height="480"></canvas></div>
 
   <div id="controls">
     <button id="btnNew" title="Go fishing: catch a brand new random fish">Go Fishing</button>
@@ -154,7 +154,7 @@
 /* =====================================================================
    EL-FISH WEB — an homage to the 1993 Maxis/AnimaTek "software toy".
    All graphics are procedurally generated pixel art in the spirit of
-   the original 320x200 VGA look. No original game assets are used.
+   the original 640x480 VGA look. No original game assets are used.
    ===================================================================== */
 
 // ---------------------------------------------------------------------
@@ -278,8 +278,12 @@ function bodyProfile(t, shapeGene) {
   return sleek * (1 - shapeGene) + round * shapeGene;
 }
 
+// Sprites render at 2x the genome's nominal pixel size for the 640x480 mode;
+// genome values keep their original meaning so saved tanks stay compatible.
+const SPRITE_SCALE = 2;
+
 function renderFishFrames(g) {
-  const bodyLen = g.bodyLen;
+  const bodyLen = g.bodyLen * SPRITE_SCALE;
   const maxH = Math.max(4, Math.round(bodyLen * g.bodyHeight / 2)); // half height
   const tailLen = Math.max(4, Math.round(bodyLen * 0.35 * g.tailSize));
   const dorsalH = Math.round(maxH * g.dorsalSize);
@@ -333,7 +337,7 @@ function renderFishFrames(g) {
       const t = bx / (bodyLen - 1);
       const hh = Math.max(1, Math.round(maxH * bodyProfile(t, g.shape)));
       // slight body undulation, strongest near the tail
-      const und = Math.round(sway * (1 - t) * 1.2) + Math.round(noseWiggle * t * 0.3);
+      const und = Math.round(sway * (1 - t) * 1.2 * SPRITE_SCALE) + Math.round(noseWiggle * t * 0.3);
       const x = tailLen + bx;
       for (let dy = -hh; dy <= hh; dy++) {
         const y = cy + dy + und;
@@ -344,7 +348,7 @@ function renderFishFrames(g) {
         switch (g.pattern) {
           case 1: if (Math.floor(t * g.patternFreq) % 2 === 1) { rgb = accent; hi = accHi; lo = accLo; } break;
           case 2: if (Math.floor(yRel * g.patternFreq) % 2 === 1) { rgb = accent; hi = accHi; lo = accLo; } break;
-          case 3: if (hash2(bx >> 1, (dy + 64) >> 1, g.seed) < 0.28) { rgb = accent; hi = accHi; lo = accLo; } break;
+          case 3: if (hash2(bx >> 2, (dy + 64) >> 2, g.seed) < 0.28) { rgb = accent; hi = accHi; lo = accLo; } break;
           case 4: if (yRel < 0.45) { rgb = accent; hi = accHi; lo = accLo; } break;
         }
 
@@ -383,12 +387,13 @@ function renderFishFrames(g) {
     // --- eye + mouth ----------------------------------------------------
     const eyeX = tailLen + bodyLen - Math.round(bodyLen * 0.18);
     const eyeY = cy - Math.round(maxH * 0.25);
-    const es = g.eyeSize;
+    const es = g.eyeSize * SPRITE_SCALE;
     ctx.fillStyle = "#fff";
     ctx.fillRect(eyeX, eyeY, es, es);
     ctx.fillStyle = "#000";
-    ctx.fillRect(eyeX + Math.max(0, es - 1), eyeY + Math.floor((es - 1) / 2), 1, 1);
-    px(tailLen + bodyLen - 1, cy + 1, shade(base, 0.5)); // mouth
+    ctx.fillRect(eyeX + Math.max(0, es - 2), eyeY + Math.floor((es - 2) / 2), 2, 2);
+    ctx.fillStyle = css(shade(base, 0.5));                // mouth
+    ctx.fillRect(tailLen + bodyLen - 2, cy + 1, 2, 2);
 
     frames.push(cv);
   }
@@ -406,8 +411,8 @@ class Fish {
     this.name = name || fishName();
     this.generation = generation || 1;
     this.sprite = renderFishFrames(genome);
-    this.x = x !== undefined ? x : randRange(40, TANK_W - 40);
-    this.y = y !== undefined ? y : randRange(30, TANK_H - 50);
+    this.x = x !== undefined ? x : randRange(80, TANK_W - 80);
+    this.y = y !== undefined ? y : randRange(60, TANK_H - 100);
     this.dir = rand() < 0.5 ? 1 : -1;          // 1 = facing right
     this.scale = generation > 1 ? 0.45 : 1;    // fry start small and grow
     this.age = 0;
@@ -417,8 +422,8 @@ class Fish {
     this.pickNewTarget();
   }
   pickNewTarget() {
-    this.targetX = randRange(30, TANK_W - 30);
-    this.targetY = randRange(24, TANK_H - 44);
+    this.targetX = randRange(60, TANK_W - 60);
+    this.targetY = randRange(48, TANK_H - 88);
   }
   update(dt, food) {
     this.age += dt;
@@ -432,22 +437,22 @@ class Fish {
         const d = (p.x - this.x) ** 2 + (p.y - this.y) ** 2;
         if (d < bd) { bd = d; best = p; }
       }
-      if (best && bd < 120 * 120) { tx = best.x; ty = best.y; chasing = true;
-        if (bd < 36) best.eaten = true; }
+      if (best && bd < 240 * 240) { tx = best.x; ty = best.y; chasing = true;
+        if (bd < 144) best.eaten = true; }
     }
 
     if (this.pauseT > 0 && !chasing) { this.pauseT -= dt; this.animPhase += dt * 3; return; }
 
     const dx = tx - this.x, dy = ty - this.y;
     const dist = Math.hypot(dx, dy);
-    if (dist < 6) {
+    if (dist < 12) {
       if (!chasing) {
         this.pickNewTarget();
         if (rand() < 0.35) this.pauseT = randRange(0.5, 2.5);
       }
       return;
     }
-    const sp = this.genome.speed * 18 * (chasing ? 1.8 : 1) * this.scale;
+    const sp = this.genome.speed * 36 * (chasing ? 1.8 : 1) * this.scale;
     this.x += (dx / dist) * sp * dt;
     this.y += (dy / dist) * sp * dt * 0.6;      // fish turn slower vertically
     if (Math.abs(dx) > 2) this.dir = dx > 0 ? 1 : -1;
@@ -483,7 +488,7 @@ class Fish {
 // Tank environment: pre-rendered background (water gradient, rocks,
 // gravel), swaying plants, rising bubbles, drifting light rays.
 // ---------------------------------------------------------------------
-const TANK_W = 320, TANK_H = 200;
+const TANK_W = 640, TANK_H = 480;
 const canvas = document.getElementById("tank");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -508,28 +513,28 @@ bgCanvas.width = TANK_W; bgCanvas.height = TANK_H;
       b.fillRect(x, y, 1, 1);
     }
   }
-  // gravel bed
+  // gravel bed (2px grains at this resolution)
   const gravelCols = [[96, 84, 64], [128, 112, 84], [72, 64, 52], [148, 132, 100], [60, 52, 44]];
-  for (let y = TANK_H - 18; y < TANK_H; y++) {
-    for (let x = 0; x < TANK_W; x++) {
-      const edge = TANK_H - 18 + Math.round(hash2(x >> 2, 7, seed) * 4);
+  for (let y = TANK_H - 36; y < TANK_H; y += 2) {
+    for (let x = 0; x < TANK_W; x += 2) {
+      const edge = TANK_H - 36 + Math.round(hash2(x >> 3, 7, seed) * 8);
       if (y >= edge) {
-        b.fillStyle = css(gravelCols[Math.floor(hash2(x, y, seed) * gravelCols.length)]);
-        b.fillRect(x, y, 1, 1);
+        b.fillStyle = css(gravelCols[Math.floor(hash2(x >> 1, y >> 1, seed) * gravelCols.length)]);
+        b.fillRect(x, y, 2, 2);
       }
     }
   }
   // a few rocks
   for (let r = 0; r < 4; r++) {
-    const rx = 30 + r * 85 + Math.round(hash2(r, 1, seed) * 30);
-    const rw = 14 + Math.round(hash2(r, 2, seed) * 18);
-    const rh = 6 + Math.round(hash2(r, 3, seed) * 8);
+    const rx = 60 + r * 170 + Math.round(hash2(r, 1, seed) * 60);
+    const rw = 28 + Math.round(hash2(r, 2, seed) * 36);
+    const rh = 12 + Math.round(hash2(r, 3, seed) * 16);
     for (let dy = 0; dy <= rh; dy++) {
       const hw = Math.round(rw * Math.sqrt(1 - (dy / rh) ** 2) / 2);
       for (let dx = -hw; dx <= hw; dx++) {
         const shadeF = 0.5 + (1 - dy / rh) * 0.5 + BAYER[(rx + dx) & 1][dy & 1] * 0.15;
         b.fillStyle = css(shade([110, 106, 112], shadeF));
-        b.fillRect(rx + dx, TANK_H - 14 - rh + dy, 1, 1);
+        b.fillRect(rx + dx, TANK_H - 28 - rh + dy, 1, 1);
       }
     }
   }
@@ -539,10 +544,10 @@ bgCanvas.width = TANK_W; bgCanvas.height = TANK_H;
 const plants = [];
 (function makePlants() {
   const greens = [[36, 120, 48], [52, 152, 60], [28, 96, 44], [80, 176, 72]];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 9; i++) {
     plants.push({
-      x: 18 + i * 55 + randInt(24),
-      h: 34 + randInt(60),
+      x: 24 + i * 72 + randInt(36),
+      h: 70 + randInt(130),
       col: pick(greens),
       phase: rand() * Math.PI * 2,
       leafEvery: 3 + randInt(3),
@@ -551,19 +556,19 @@ const plants = [];
 })();
 function drawPlants(time) {
   for (const p of plants) {
-    const segs = Math.floor(p.h / 4);
+    const segs = Math.floor(p.h / 5);
     let x = p.x;
     const colLo = shade(p.col, 0.6);
     for (let s = 0; s < segs; s++) {
-      const y = TANK_H - 12 - s * 4;
-      const swayAmt = (s / segs) ** 2 * 3;
+      const y = TANK_H - 24 - s * 5;
+      const swayAmt = (s / segs) ** 2 * 6;
       x = p.x + Math.sin(time * 0.9 + p.phase + s * 0.4) * swayAmt;
       ctx.fillStyle = css(s % 2 ? p.col : colLo);
-      ctx.fillRect(Math.round(x), y - 4, 2, 4);
+      ctx.fillRect(Math.round(x), y - 5, 3, 5);
       if (s % p.leafEvery === 1) {
         ctx.fillStyle = css(p.col);
-        const side = (s % (p.leafEvery * 2) === 1) ? 1 : -4;
-        ctx.fillRect(Math.round(x) + side, y - 3, 3, 2);
+        const side = (s % (p.leafEvery * 2) === 1) ? 2 : -6;
+        ctx.fillRect(Math.round(x) + side, y - 4, 5, 3);
       }
     }
   }
@@ -572,14 +577,14 @@ function drawPlants(time) {
 // Bubbles.
 const bubbles = [];
 function updateBubbles(dt, time) {
-  if (rand() < dt * 2.2) {
-    bubbles.push({ x: 44 + randInt(3) * 100 + randInt(10), y: TANK_H - 16, r: rand() < 0.3 ? 2 : 1, wob: rand() * 6 });
+  if (rand() < dt * 2.8) {
+    bubbles.push({ x: 88 + randInt(3) * 200 + randInt(20), y: TANK_H - 32, r: rand() < 0.3 ? 3 : 2, wob: rand() * 6 });
   }
   for (let i = bubbles.length - 1; i >= 0; i--) {
     const bu = bubbles[i];
-    bu.y -= dt * (18 + bu.r * 8);
+    bu.y -= dt * (36 + bu.r * 10);
     if (bu.y < 4) { bubbles.splice(i, 1); continue; }
-    const bx = Math.round(bu.x + Math.sin(time * 3 + bu.wob) * 1.5);
+    const bx = Math.round(bu.x + Math.sin(time * 3 + bu.wob) * 3);
     ctx.fillStyle = "rgba(190,230,250,0.85)";
     ctx.fillRect(bx, Math.round(bu.y), bu.r, bu.r);
     ctx.fillStyle = "rgba(255,255,255,0.9)";
@@ -592,14 +597,14 @@ function drawLightRays(time) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (let i = 0; i < 3; i++) {
-    const rx = ((time * 4 + i * 120) % (TANK_W + 120)) - 60;
-    const grad = ctx.createLinearGradient(rx, 0, rx + 50, TANK_H);
+    const rx = ((time * 8 + i * 240) % (TANK_W + 240)) - 120;
+    const grad = ctx.createLinearGradient(rx, 0, rx + 100, TANK_H);
     grad.addColorStop(0, "rgba(120,190,220,0.10)");
     grad.addColorStop(1, "rgba(120,190,220,0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(rx, 0); ctx.lineTo(rx + 26, 0);
-    ctx.lineTo(rx + 66, TANK_H); ctx.lineTo(rx + 10, TANK_H);
+    ctx.moveTo(rx, 0); ctx.lineTo(rx + 52, 0);
+    ctx.lineTo(rx + 132, TANK_H); ctx.lineTo(rx + 20, TANK_H);
     ctx.closePath(); ctx.fill();
   }
   ctx.restore();
@@ -610,13 +615,13 @@ const food = [];
 function updateFood(dt) {
   for (let i = food.length - 1; i >= 0; i--) {
     const p = food[i];
-    p.y += dt * 9;
-    p.x += Math.sin(p.y * 0.3) * 0.15;
-    if (p.eaten || p.y > TANK_H - 16) { food.splice(i, 1); continue; }
+    p.y += dt * 18;
+    p.x += Math.sin(p.y * 0.15) * 0.3;
+    if (p.eaten || p.y > TANK_H - 34) { food.splice(i, 1); continue; }
     ctx.fillStyle = "#c8903c";
-    ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), 3, 3);
     ctx.fillStyle = "#e8b860";
-    ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 1);
   }
 }
 
@@ -729,14 +734,14 @@ canvas.addEventListener("pointerdown", (ev) => {
 
 function portraitCanvas(fish, size) {
   const cv = document.createElement("canvas");
-  cv.width = 64; cv.height = 40;
+  cv.width = 128; cv.height = 80;
   cv.style.width = size + "px";
   const c = cv.getContext("2d");
   c.imageSmoothingEnabled = false;
   const s = fish.sprite;
-  const sc = Math.min(60 / s.w, 36 / s.h, 1.5);
+  const sc = Math.min(120 / s.w, 72 / s.h, 1.5);
   c.save();
-  c.translate(32, 20);
+  c.translate(64, 40);
   c.scale(-sc, sc);                               // portraits face left, like a mugshot
   c.drawImage(s.frames[0], -s.anchorX, -s.anchorY);
   c.restore();
@@ -763,7 +768,7 @@ function refreshUI() {
       `Body: ${COLOR_NAMES[g.baseColor]}, ${PATTERN_NAMES[g.pattern]}` +
       (g.pattern !== 0 ? ` (${COLOR_NAMES[g.accentColor]})` : "") + `<br>` +
       `Tail: ${TAIL_NAMES[g.tailType]}, Fins: ${COLOR_NAMES[g.finColor]}<br>` +
-      `Size: ${g.bodyLen}px &middot; Speed: ${g.speed.toFixed(1)} &middot; Age: ${Math.floor(fish.age)}s`;
+      `Size: ${g.bodyLen * SPRITE_SCALE}px &middot; Speed: ${g.speed.toFixed(1)} &middot; Age: ${Math.floor(fish.age)}s`;
     card.appendChild(info);
   }
   document.getElementById("btnBreed").disabled = selected.length !== 2;
@@ -801,8 +806,8 @@ function frame(now) {
   for (const id of selected) {
     const f = fishes.find(ff => ff.id === id);
     if (!f) continue;
-    const hw = (f.sprite.w * f.scale) / 2 + 2, hh = (f.sprite.h * f.scale) / 2 + 2;
-    const x = Math.round(f.x), y = Math.round(f.y), c = 5;
+    const hw = (f.sprite.w * f.scale) / 2 + 3, hh = (f.sprite.h * f.scale) / 2 + 3;
+    const x = Math.round(f.x), y = Math.round(f.y), c = 8;
     ctx.beginPath();
     ctx.moveTo(x - hw, y - hh + c); ctx.lineTo(x - hw, y - hh); ctx.lineTo(x - hw + c, y - hh);
     ctx.moveTo(x + hw - c, y - hh); ctx.lineTo(x + hw, y - hh); ctx.lineTo(x + hw, y - hh + c);
