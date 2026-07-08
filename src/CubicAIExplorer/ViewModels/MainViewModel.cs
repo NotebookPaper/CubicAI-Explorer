@@ -1224,33 +1224,60 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private int _folderTreeSyncVersion;
 
-    public void AddBookmarkFromPath(string path, BookmarkItem? targetParent)
+    public void AddBookmarkFromPath(string path, BookmarkItem? target,
+        BookmarkDropPlacement placement = BookmarkDropPlacement.Root)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
-        if (!_fileSystemService.DirectoryExists(path)) return;
-
-        var targetCollection = targetParent != null && targetParent.IsFolder
-            ? targetParent.Children
-            : Bookmarks;
-        if (targetCollection.Any(bookmark => string.Equals(bookmark.Path, path, StringComparison.OrdinalIgnoreCase)))
-            return;
+        var isDirectory = _fileSystemService.DirectoryExists(path);
+        var isFile = !isDirectory && _fileSystemService.FileExists(path);
+        if (!isDirectory && !isFile) return;
 
         var newItem = new BookmarkItem
         {
             Name = GetDisplayName(path),
             Path = path,
-            IsFolder = true,
-            IsExpanded = true
+            TargetIsFile = isFile
         };
 
-        if (targetParent != null && targetParent.IsFolder)
+        switch (placement)
         {
-            targetCollection.Add(newItem);
-            targetParent.IsExpanded = true;
-        }
-        else
-        {
-            targetCollection.Add(newItem);
+            case BookmarkDropPlacement.Into when target is { IsFolder: true }:
+                if (target.Children.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    return;
+                target.Children.Add(newItem);
+                target.IsExpanded = true;
+                break;
+
+            case BookmarkDropPlacement.Before when target != null:
+            case BookmarkDropPlacement.After when target != null:
+            {
+                var offset = placement == BookmarkDropPlacement.Before ? 0 : 1;
+                var parent = FindParent(Bookmarks, target);
+                if (parent != null)
+                {
+                    if (parent.Children.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase)))
+                        return;
+                    var index = parent.Children.IndexOf(target);
+                    parent.Children.Insert(index + offset, newItem);
+                }
+                else
+                {
+                    if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase)))
+                        return;
+                    var index = Bookmarks.IndexOf(target);
+                    if (index >= 0)
+                        Bookmarks.Insert(index + offset, newItem);
+                    else
+                        Bookmarks.Add(newItem);
+                }
+                break;
+            }
+
+            default:
+                if (Bookmarks.Any(b => string.Equals(b.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    return;
+                Bookmarks.Add(newItem);
+                break;
         }
 
         SelectedBookmark = newItem;
@@ -1352,6 +1379,51 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Bookmarks.Clear();
             foreach (var bookmark in bookmarks)
                 Bookmarks.Add(bookmark);
+            ValidateBookmarkTargets();
+        });
+    }
+
+    /// <summary>
+    /// Marks bookmarks whose target no longer exists so they render ghosted,
+    /// like the original CubicExplorer. Existence checks run off the UI thread
+    /// because targets may live on slow network shares.
+    /// </summary>
+    private void ValidateBookmarkTargets()
+    {
+        static void Collect(IEnumerable<BookmarkItem> items, List<BookmarkItem> into)
+        {
+            foreach (var item in items)
+            {
+                if (!item.IsFolder && !string.IsNullOrWhiteSpace(item.Path))
+                    into.Add(item);
+                Collect(item.Children, into);
+            }
+        }
+
+        var candidates = new List<BookmarkItem>();
+        Collect(Bookmarks, candidates);
+        if (candidates.Count == 0)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            var results = candidates
+                .Select(item =>
+                {
+                    var isDirectory = _fileSystemService.DirectoryExists(item.Path);
+                    var isFile = !isDirectory && _fileSystemService.FileExists(item.Path);
+                    return (item, missing: !isDirectory && !isFile, targetIsFile: isFile);
+                })
+                .ToList();
+
+            Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var (item, missing, targetIsFile) in results)
+                {
+                    item.IsMissing = missing;
+                    item.TargetIsFile = targetIsFile;
+                }
+            });
         });
     }
 
@@ -1374,6 +1446,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Bookmarks.Clear();
             foreach (var bookmark in bookmarks)
                 Bookmarks.Add(bookmark);
+            ValidateBookmarkTargets();
         }
         else
         {
@@ -1392,7 +1465,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Name = record.Name,
             Path = record.Path,
-            IsFolder = true // All bookmarks should be folders
+            // Older exports predate the IsFolder flag; there, only folder
+            // categories were stored without a path.
+            IsFolder = record.IsFolder || string.IsNullOrWhiteSpace(record.Path)
         };
         if (record.Children != null)
         {
@@ -1410,6 +1485,36 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return new BookmarkRecord(item.Name, item.Path, item.IsFolder, children.Count > 0 ? children : null);
     }
 
+    /// <summary>
+    /// Merges an imported bookmark into <paramref name="target"/> instead of
+    /// blindly appending, so re-importing the same export does not duplicate
+    /// folder categories. Folders merge by Name (case-insensitive) with their
+    /// children merged recursively; leaf bookmarks dedupe by Path.
+    /// </summary>
+    private static void MergeImportedBookmark(BookmarkItem imported, ObservableCollection<BookmarkItem> target)
+    {
+        if (imported.IsFolder)
+        {
+            var existing = target.FirstOrDefault(b => b.IsFolder
+                && string.Equals(b.Name, imported.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                foreach (var child in imported.Children.ToList())
+                    MergeImportedBookmark(child, existing.Children);
+                return;
+            }
+
+            target.Add(imported);
+            return;
+        }
+
+        if (target.Any(b => !b.IsFolder
+            && string.Equals(b.Path, imported.Path, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        target.Add(imported);
+    }
+
     private void LoadDrives()
     {
         Drives.Clear();
@@ -1419,7 +1524,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Drives.Add(drive);
             FolderTreeRoots.Add(FolderTreeNodeViewModel.CreateDriveNode(
-                _fileSystemService, drive.Name, drive.FullPath));
+                _fileSystemService, drive.Name, drive.FullPath,
+                () => _userSettings.ShowHiddenFiles));
         }
     }
 
@@ -2235,6 +2341,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         NavigateTabToPath(ActiveTab!, resolvedPath);
     }
 
+    public void OpenPathInNewTab(string path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && _fileSystemService.DirectoryExists(path))
+        {
+            if (!ActivateOpenTab(path))
+                CreateTab(path, null, activate: true);
+        }
+    }
+
     public void NavigateCurrentPaneToPath(string path)
     {
         var resolvedPath = _fileSystemService.ResolveDirectoryPath(path);
@@ -2559,11 +2674,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
     }
 
-    public void UpdateBookmarkDragFeedback(BookmarkItem? source, BookmarkItem? target, BookmarkDropPlacement placement = BookmarkDropPlacement.None)
+    public void UpdateBookmarkDragFeedback(BookmarkItem? source, BookmarkItem? target,
+        BookmarkDropPlacement placement = BookmarkDropPlacement.None, bool isExternalDrop = false)
     {
         ClearBookmarkDropTargets();
 
-        if (source == null)
+        if (source == null && !isExternalDrop)
         {
             BookmarkDragFeedbackText = string.Empty;
             HasBookmarkDragFeedback = false;
@@ -2572,7 +2688,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var canDrop = CanDropBookmark(source, target, placement);
+        var canDrop = isExternalDrop
+            ? placement != BookmarkDropPlacement.None
+            : CanDropBookmark(source, target, placement);
         HasBookmarkDragFeedback = true;
         IsBookmarkDragFeedbackInvalid = !canDrop;
         IsBookmarkRootDropTarget = canDrop && placement == BookmarkDropPlacement.Root;
@@ -2705,16 +2823,73 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
     }
 
+    /// <summary>
+    /// Selection-driven navigation: only folder targets navigate. Files are
+    /// opened via <see cref="OpenBookmarkCommand"/> (double-click/Open) so a
+    /// single click never launches a file.
+    /// </summary>
     [RelayCommand]
     private void NavigateBookmark(BookmarkItem? bookmark)
     {
         if (bookmark == null) return;
         if (string.IsNullOrWhiteSpace(bookmark.Path)) return;
-        
+
+        // Only folder targets navigate; file targets are left to OpenBookmark so
+        // a single click never launches a file (bookkeeping still runs).
+        if (ResolveBookmarkTarget(bookmark) == BookmarkTargetKind.Directory)
+            NavigateCurrentPaneToPath(bookmark.Path);
+    }
+
+    [RelayCommand]
+    private void OpenBookmark(BookmarkItem? bookmark)
+    {
+        if (bookmark == null) return;
+        if (string.IsNullOrWhiteSpace(bookmark.Path)) return;
+
+        switch (ResolveBookmarkTarget(bookmark))
+        {
+            case BookmarkTargetKind.Directory:
+                NavigateCurrentPaneToPath(bookmark.Path);
+                break;
+            case BookmarkTargetKind.File:
+                _fileSystemService.OpenFile(bookmark.Path);
+                break;
+        }
+    }
+
+    private enum BookmarkTargetKind
+    {
+        Missing,
+        Directory,
+        File
+    }
+
+    /// <summary>
+    /// Resolves a bookmark's target once and keeps the model's <see
+    /// cref="BookmarkItem.IsMissing"/> and <see cref="BookmarkItem.TargetIsFile"/>
+    /// flags in sync, so all four open/navigate commands share the same rules.
+    /// </summary>
+    private BookmarkTargetKind ResolveBookmarkTarget(BookmarkItem bookmark)
+    {
+        if (string.IsNullOrWhiteSpace(bookmark.Path))
+            return BookmarkTargetKind.Missing;
+
         if (_fileSystemService.DirectoryExists(bookmark.Path))
         {
-            NavigateCurrentPaneToPath(bookmark.Path);
+            bookmark.IsMissing = false;
+            bookmark.TargetIsFile = false;
+            return BookmarkTargetKind.Directory;
         }
+
+        if (_fileSystemService.FileExists(bookmark.Path))
+        {
+            bookmark.IsMissing = false;
+            bookmark.TargetIsFile = true;
+            return BookmarkTargetKind.File;
+        }
+
+        bookmark.IsMissing = true;
+        return BookmarkTargetKind.Missing;
     }
 
     [RelayCommand]
@@ -2818,12 +2993,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void OpenBookmarkInNewTab(BookmarkItem? bookmark)
     {
         if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
-        if (_fileSystemService.DirectoryExists(bookmark.Path))
-        {
-            if (ActivateOpenTab(bookmark.Path))
-                return;
 
-            CreateTab(bookmark.Path, null, activate: true);
+        switch (ResolveBookmarkTarget(bookmark))
+        {
+            case BookmarkTargetKind.Directory:
+                if (ActivateOpenTab(bookmark.Path))
+                    return;
+                CreateTab(bookmark.Path, null, activate: true);
+                break;
+            case BookmarkTargetKind.File:
+                _fileSystemService.OpenFile(bookmark.Path);
+                break;
         }
     }
 
@@ -2831,14 +3011,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void OpenBookmarkInOtherPane(BookmarkItem? bookmark)
     {
         if (bookmark == null || string.IsNullOrWhiteSpace(bookmark.Path)) return;
-        if (!IsDualPaneMode) ToggleDualPane();
-        
-        if (_fileSystemService.DirectoryExists(bookmark.Path))
+
+        // Resolve the target before splitting the window: a dead bookmark must
+        // not toggle dual-pane mode and then navigate nothing.
+        switch (ResolveBookmarkTarget(bookmark))
         {
-            if (IsRightPaneActive)
-                ActiveTab?.NavigateTo(bookmark.Path);
-            else
-                _rightPaneTab?.NavigateTo(bookmark.Path);
+            case BookmarkTargetKind.Directory:
+                if (!IsDualPaneMode) ToggleDualPane();
+                if (IsRightPaneActive)
+                    ActiveTab?.NavigateTo(bookmark.Path);
+                else
+                    _rightPaneTab?.NavigateTo(bookmark.Path);
+                break;
+            case BookmarkTargetKind.File:
+                _fileSystemService.OpenFile(bookmark.Path);
+                break;
         }
     }
 
@@ -2861,10 +3048,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (records != null)
                 {
                     foreach (var record in records)
-                    {
-                        TryAddBookmark(record.Path, record.Name, save: false);
-                    }
+                        MergeImportedBookmark(MapRecordToBookmark(record), Bookmarks);
                     SaveBookmarks();
+                    ValidateBookmarkTargets();
                 }
             }
         }
@@ -2907,7 +3093,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     Name = name,
                     Path = path,
-                    IsFolder = true // Bookmarks in CubicExplorer XML are folders
+                    // CubicExplorer XML distinguishes <category> containers
+                    // from <item> bookmarks; only categories are folders.
+                    IsFolder = isCategory || string.IsNullOrWhiteSpace(path)
                 };
 
                 targetCollection.Add(newItem);
@@ -2938,8 +3126,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Bookmarks.Add(new BookmarkItem
         {
             Name = name,
-            Path = path,
-            IsFolder = true
+            Path = path
         });
 
         if (save)
@@ -2980,8 +3167,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Bookmarks.Add(new BookmarkItem
         {
             Name = name,
-            Path = path,
-            IsFolder = true
+            Path = path
         });
 
         if (save)
@@ -3005,7 +3191,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _settingsService.SettingsChanged -= OnExternalSettingsChanged;
 
         if (_bookmarkService != null)
+        {
             _bookmarkService.BookmarksChanged -= OnExternalBookmarksChanged;
+            // Persist expansion state (the old app saved "isopen" at exit).
+            _bookmarkService.Save(Bookmarks);
+        }
 
         DropStackItems.CollectionChanged -= _dropStackCollectionChangedHandler;
 
@@ -3270,6 +3460,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void ApplyAndSaveSettings(Models.UserSettings newSettings)
     {
+        var showHiddenChanged = _userSettings.ShowHiddenFiles != newSettings.ShowHiddenFiles;
         _userSettings.DefaultViewMode = newSettings.DefaultViewMode;
         _userSettings.ShowHiddenFiles = newSettings.ShowHiddenFiles;
         _userSettings.StartupFolder = newSettings.StartupFolder;
@@ -3289,6 +3480,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         ApplyFilterPreferencesToAllTabs();
         OnPropertyChanged(nameof(DetailsColumnSettings));
         _settingsService?.Save(_userSettings);
+
+        if (showHiddenChanged)
+            RefreshFolderTreeForHiddenChange();
+    }
+
+    private void RefreshFolderTreeForHiddenChange()
+    {
+        foreach (var root in FolderTreeRoots)
+        {
+            _ = root.ReloadChildrenAsync();
+        }
     }
 
     public void RefreshNewFileTemplatesCatalog()

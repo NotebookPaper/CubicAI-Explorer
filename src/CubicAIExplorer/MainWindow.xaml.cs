@@ -577,11 +577,18 @@ public partial class MainWindow : Window
         CommitRightPaneAddressEdit();
     }
 
+    private bool _suppressFolderTreeNavigation;
+    private bool _suppressBookmarkNavigation;
+
     private void TreeViewItem_Selected(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is TreeViewItem item && item.DataContext is FolderTreeNodeViewModel node)
         {
-            ViewModel.SelectTreeNode(node);
+            if (!_suppressFolderTreeNavigation
+                && Mouse.RightButton != MouseButtonState.Pressed)
+            {
+                ViewModel.SelectTreeNode(node);
+            }
             e.Handled = true;
         }
     }
@@ -592,7 +599,7 @@ public partial class MainWindow : Window
         {
             if (!bookmark.IsFolder || !string.IsNullOrWhiteSpace(bookmark.Path))
             {
-                ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+                ViewModel.OpenBookmarkCommand.Execute(bookmark);
                 e.Handled = true;
             }
         }
@@ -603,7 +610,9 @@ public partial class MainWindow : Window
         if (e.OriginalSource is TreeViewItem item && item.DataContext is BookmarkItem bookmark)
         {
             ViewModel.SelectedBookmark = bookmark;
-            if (!string.IsNullOrWhiteSpace(bookmark.Path))
+            if (!_suppressBookmarkNavigation
+                && Mouse.RightButton != MouseButtonState.Pressed
+                && !string.IsNullOrWhiteSpace(bookmark.Path))
             {
                 ViewModel.NavigateBookmarkCommand.Execute(bookmark);
             }
@@ -611,11 +620,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void FolderTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (treeItem?.DataContext is not FolderTreeNodeViewModel node)
+            return;
+
+        _suppressFolderTreeNavigation = true;
+        treeItem.IsSelected = true;
+        ViewModel.SelectedTreeNode = node;
+        _suppressFolderTreeNavigation = false;
+    }
+
     private void BookmarkBarButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: BookmarkItem bookmark })
         {
-            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            ViewModel.OpenBookmarkCommand.Execute(bookmark);
             e.Handled = true;
         }
     }
@@ -624,7 +645,7 @@ public partial class MainWindow : Window
     {
         if (TryGetBookmarkBarContextBookmark(sender, out var bookmark))
         {
-            ViewModel.NavigateBookmarkCommand.Execute(bookmark);
+            ViewModel.OpenBookmarkCommand.Execute(bookmark);
             e.Handled = true;
         }
     }
@@ -798,6 +819,13 @@ public partial class MainWindow : Window
 
     private void BookmarkTree_MouseLeave(object sender, MouseEventArgs e)
     {
+        // Don't interfere if a context menu is open
+        if (BookmarkTree.ContextMenu?.IsOpen == true)
+            return;
+        // Also check any TreeViewItem context menus
+        var focused = Keyboard.FocusedElement as FrameworkElement;
+        if (focused is MenuItem)
+            return;
         // Don't cancel if we have capture — we're still dragging
         if (!BookmarkTree.IsMouseCaptured)
             CancelBookmarkMouseDrag();
@@ -819,6 +847,9 @@ public partial class MainWindow : Window
         if (GetDroppedDirectories(e).Any())
         {
             e.Effects = DragDropEffects.Copy;
+            var dropTarget = ResolveBookmarkDropTarget(e.GetPosition(BookmarkTree));
+            UpdateBookmarkHoverExpand(dropTarget);
+            ViewModel.UpdateBookmarkDragFeedback(null, dropTarget.Target, dropTarget.Placement, isExternalDrop: true);
         }
         else
         {
@@ -829,19 +860,20 @@ public partial class MainWindow : Window
 
     private void BookmarkTree_DragLeave(object sender, DragEventArgs e)
     {
+        ViewModel.ClearBookmarkDragFeedback();
+        ResetBookmarkHoverExpand();
         e.Handled = true;
     }
 
     private void BookmarkTree_Drop(object sender, DragEventArgs e)
     {
         var dropTarget = ResolveBookmarkDropTarget(e.GetPosition(BookmarkTree));
-        var targetParent = dropTarget.Placement == BookmarkDropPlacement.Into
-            ? dropTarget.Target
-            : null;
 
         foreach (var path in GetDroppedDirectories(e))
-            ViewModel.AddBookmarkFromPath(path, targetParent);
+            ViewModel.AddBookmarkFromPath(path, dropTarget.Target, dropTarget.Placement);
 
+        ViewModel.ClearBookmarkDragFeedback();
+        ResetBookmarkHoverExpand();
         e.Handled = true;
     }
 
@@ -1071,34 +1103,51 @@ public partial class MainWindow : Window
 
     private void FolderTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || string.IsNullOrWhiteSpace(node.FullPath))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (ViewModel.CurrentSettings.UseShellContextMenu)
         {
-            if (FolderTree.SelectedItem is FolderTreeNodeViewModel node && !string.IsNullOrWhiteSpace(node.FullPath))
+            if (ShowShellContextMenuForPaths(FolderTree, new List<string> { node.FullPath }))
             {
-                if (ShowShellContextMenuForPaths(FolderTree, new List<string> { node.FullPath }))
-                {
-                    e.Handled = true;
-                    return;
-                }
+                e.Handled = true;
+                return;
             }
         }
     }
 
+    private void BookmarkTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (treeItem == null || treeItem.DataContext is not BookmarkItem bookmark)
+            return;
+
+        // Select without navigating
+        _suppressBookmarkNavigation = true;
+        treeItem.IsSelected = true;
+        ViewModel.SelectedBookmark = bookmark;
+        _suppressBookmarkNavigation = false;
+    }
+
     private void BookmarkTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (ViewModel.CurrentSettings.UseShellContextMenu)
+        if (BookmarkTree.SelectedItem is not BookmarkItem bookmark)
         {
-            if (BookmarkTree.SelectedItem is BookmarkItem item && !string.IsNullOrWhiteSpace(item.Path))
+            e.Handled = true;
+            return;
+        }
+
+        if (ViewModel.CurrentSettings.UseShellContextMenu
+            && !string.IsNullOrWhiteSpace(bookmark.Path)
+            && Path.IsPathRooted(bookmark.Path)
+            && (Directory.Exists(bookmark.Path) || File.Exists(bookmark.Path)))
+        {
+            if (ShowShellContextMenuForPaths(BookmarkTree, new List<string> { bookmark.Path }))
             {
-                // Only use shell menu if it's a real filesystem path
-                if (Path.IsPathRooted(item.Path) && (Directory.Exists(item.Path) || File.Exists(item.Path)))
-                {
-                    if (ShowShellContextMenuForPaths(BookmarkTree, new List<string> { item.Path }))
-                    {
-                        e.Handled = true;
-                        return;
-                    }
-                }
+                e.Handled = true;
             }
         }
     }
@@ -1599,6 +1648,36 @@ public partial class MainWindow : Window
         ViewModel.OpenInExplorerCommand.Execute(null);
     }
 
+    private void FolderTreeOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetSelectedFolderTreePath(out var path))
+            ViewModel.NavigateCurrentPaneToPath(path);
+    }
+
+    private void FolderTreeOpenInNewTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetSelectedFolderTreePath(out var path))
+            ViewModel.OpenPathInNewTab(path);
+    }
+
+    private void FolderTreeAddBookmark_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetSelectedFolderTreePath(out var path))
+            ViewModel.AddBookmarkFromPath(path, null);
+    }
+
+    private void FolderTreeCopyPath_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetSelectedFolderTreePath(out var path))
+            Clipboard.SetText(path);
+    }
+
+    private void FolderTreeOpenInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetSelectedFolderTreePath(out var path))
+            ViewModel.FileSystemService.OpenInDefaultApp(path);
+    }
+
     private void OpenInNewWindow_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.OpenInNewWindowCommand.Execute(null);
@@ -2032,6 +2111,7 @@ public partial class MainWindow : Window
             HookRightFileListViewModel(_boundViewModel.RightPaneTab?.FileList);
             ApplyDetailsLayoutToBothPanes();
             UpdatePaneHighlight();
+            UpdateSidebarRowHeights();
             QueueTabStripUpdate(scrollActiveIntoView: true);
             QueueFilePaneVisibilityCheck();
         }
@@ -2151,6 +2231,14 @@ public partial class MainWindow : Window
             || e.PropertyName == nameof(MainViewModel.IsDualPaneMode))
         {
             UpdatePaneHighlight();
+        }
+
+        if (e.PropertyName is nameof(MainViewModel.IsRecentFoldersVisible)
+            or nameof(MainViewModel.IsBookmarksVisible)
+            or nameof(MainViewModel.IsSavedSearchesVisible)
+            or nameof(MainViewModel.IsDropStackVisible))
+        {
+            UpdateSidebarRowHeights();
         }
     }
 
@@ -3478,6 +3566,170 @@ public partial class MainWindow : Window
         RightPaneHeader.Background = rightActive
             ? ActiveHeaderGradient
             : (Brush)FindResource("ClassicHeaderBrush");
+    }
+
+    private readonly GridLength _zeroHeight = new(0, GridUnitType.Pixel);
+
+    private void UpdateSidebarRowHeights()
+    {
+        var vm = _boundViewModel;
+        if (vm == null) return;
+
+        if (!vm.IsRecentFoldersVisible) RecentRow.Height = _zeroHeight;
+        else if (RecentRow.Height.Value < 1) RecentRow.Height = new GridLength(120);
+
+        if (!vm.IsBookmarksVisible) BookmarksRow.Height = _zeroHeight;
+        else if (BookmarksRow.Height.Value < 1) BookmarksRow.Height = new GridLength(1, GridUnitType.Star);
+
+        if (!vm.IsSavedSearchesVisible) SavedSearchesRow.Height = _zeroHeight;
+        else if (SavedSearchesRow.Height.Value < 1) SavedSearchesRow.Height = new GridLength(120);
+
+        if (!vm.IsDropStackVisible) DropStackRow.Height = _zeroHeight;
+        else if (DropStackRow.Height.Value < 1) DropStackRow.Height = new GridLength(180);
+
+        UpdateSidebarSplitterVisibility(vm);
+    }
+
+    private void SidebarSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if (sender is not FrameworkElement thumb) return;
+        var row = Grid.GetRow(thumb);
+
+        if (!TryGetSidebarSectionIndexes(row, out var aboveIndex, out var belowIndex))
+            return;
+
+        var aboveDef = SidebarGrid.RowDefinitions[aboveIndex];
+        var belowDef = SidebarGrid.RowDefinitions[belowIndex];
+        var minimumHeight = 60d;
+        var aboveMinimum = aboveIndex == 8 ? 100d : minimumHeight;
+        var belowMinimum = belowIndex == 8 ? 100d : minimumHeight;
+
+        var newAbove = Math.Max(aboveMinimum, aboveDef.ActualHeight + e.VerticalChange);
+        var newBelow = Math.Max(belowMinimum, belowDef.ActualHeight - e.VerticalChange);
+
+        if (newAbove < aboveMinimum || newBelow < belowMinimum) return;
+
+        aboveDef.Height = new GridLength(newAbove, GridUnitType.Pixel);
+        belowDef.Height = new GridLength(newBelow, GridUnitType.Pixel);
+    }
+
+    private void MainVerticalSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if (_boundViewModel == null) return;
+        var newWidth = Math.Max(150, _boundViewModel.SidebarWidth + e.HorizontalChange);
+        _boundViewModel.SidebarWidth = newWidth;
+    }
+
+    private void DualPaneSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if (sender is not FrameworkElement thumb) return;
+        var grid = thumb.Parent as Grid;
+        if (grid == null) return;
+
+        // Column 0 = left pane, Column 1 = splitter, Column 2 = right pane
+        var leftCol = grid.ColumnDefinitions[0];
+        var rightCol = DualPaneCol;
+
+        var newLeft = Math.Max(100, leftCol.ActualWidth + e.HorizontalChange);
+        var newRight = Math.Max(100, rightCol.ActualWidth - e.HorizontalChange);
+
+        if (newLeft < 100 || newRight < 100) return;
+
+        leftCol.Width = new GridLength(newLeft, GridUnitType.Pixel);
+        rightCol.Width = new GridLength(newRight, GridUnitType.Pixel);
+    }
+
+    private void PreviewSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        // Preview column grows when dragged left (negative delta)
+        var newWidth = Math.Max(180, PreviewCol.ActualWidth - e.HorizontalChange);
+        PreviewCol.Width = new GridLength(newWidth, GridUnitType.Pixel);
+    }
+
+    private void UpdateSidebarSplitterVisibility(MainViewModel vm)
+    {
+        RecentSplitter.Visibility = HasVisibleSidebarSection(0, vm) && HasVisibleSidebarSectionAfter(0, vm)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        BookmarksSplitter.Visibility = HasVisibleSidebarSectionBefore(2, vm) && HasVisibleSidebarSectionAfter(2, vm)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        SavedSearchesSplitter.Visibility = HasVisibleSidebarSectionBefore(4, vm) && HasVisibleSidebarSectionAfter(4, vm)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        DropStackSplitter.Visibility = HasVisibleSidebarSectionBefore(6, vm) && HasVisibleSidebarSectionAfter(6, vm)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private bool TryGetSidebarSectionIndexes(int splitterRow, out int aboveIndex, out int belowIndex)
+    {
+        aboveIndex = -1;
+        belowIndex = -1;
+
+        for (var row = splitterRow - 1; row >= 0; row -= 2)
+        {
+            if (SidebarGrid.RowDefinitions[row].Height.Value > 0)
+            {
+                aboveIndex = row;
+                break;
+            }
+        }
+
+        for (var row = splitterRow + 1; row < SidebarGrid.RowDefinitions.Count; row += 2)
+        {
+            if (SidebarGrid.RowDefinitions[row].Height.Value > 0)
+            {
+                belowIndex = row;
+                break;
+            }
+        }
+
+        return aboveIndex >= 0 && belowIndex >= 0;
+    }
+
+    private static bool HasVisibleSidebarSection(int rowIndex, MainViewModel vm)
+        => rowIndex switch
+        {
+            0 => vm.IsRecentFoldersVisible,
+            2 => vm.IsBookmarksVisible,
+            4 => vm.IsSavedSearchesVisible,
+            6 => vm.IsDropStackVisible,
+            8 => true,
+            _ => false
+        };
+
+    private static bool HasVisibleSidebarSectionBefore(int rowIndex, MainViewModel vm)
+    {
+        for (var current = rowIndex; current >= 0; current -= 2)
+        {
+            if (HasVisibleSidebarSection(current, vm))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasVisibleSidebarSectionAfter(int rowIndex, MainViewModel vm)
+    {
+        for (var current = rowIndex + 2; current <= 8; current += 2)
+        {
+            if (HasVisibleSidebarSection(current, vm))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool TryGetSelectedFolderTreePath(out string path)
+    {
+        path = string.Empty;
+
+        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || string.IsNullOrWhiteSpace(node.FullPath))
+            return false;
+
+        path = node.FullPath;
+        return true;
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject

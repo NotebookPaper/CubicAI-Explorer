@@ -4743,10 +4743,21 @@ internal static class Program
                 Assert(scrollViewer.ScrollableWidth > 1, "A narrow window with many tabs should produce tab-strip overflow.");
                 Assert(overflowButton.Visibility == Visibility.Visible, "Tab overflow button should become visible when the tab strip overflows.");
 
+                // The click handler synchronously populates the menu and sets
+                // IsOpen=true. In this offscreen, unactivated smoke window
+                // (ShowActivated=false) WPF then auto-dismisses the ContextMenu
+                // popup on the next dispatcher cycle because it cannot hold the
+                // mouse capture a context menu requires - a headless artifact
+                // that does not happen in a normally activated window used by
+                // real users (StaysOpen does not suppress this capture-loss
+                // close). Capture the open state immediately after the click,
+                // which proves the handler opened the populated menu and
+                // survives the subsequent environmental dismissal.
                 overflowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var menuOpenedOnClick = overflowMenu.IsOpen;
                 PumpDispatcher();
 
-                Assert(overflowMenu.IsOpen, "Clicking the tab overflow button should open the overflow menu.");
+                Assert(menuOpenedOnClick, "Clicking the tab overflow button should open the overflow menu.");
                 Assert(overflowMenu.Items.Count == viewModel.Tabs.Count, "Tab overflow menu should list every open tab.");
 
                 var targetItem = overflowMenu.Items.OfType<MenuItem>().Last();
@@ -4948,6 +4959,7 @@ internal static class Program
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
         public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
         public IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false) => _inner.GetSubDirectories(path, showHidden);
+        public bool HasSubDirectories(string path, bool showHidden = false) => _inner.HasSubDirectories(path, showHidden);
         public IReadOnlyList<string> GetFiles(string path, bool showHidden = false) => _inner.GetFiles(path, showHidden);
         public string GetDisplayName(string path) => _inner.GetDisplayName(path);
         public string? ResolveDirectoryPath(string path) => _inner.ResolveDirectoryPath(path);
@@ -5048,6 +5060,7 @@ internal static class Program
         public IReadOnlyList<FileSystemItem> GetDrives() => _inner.GetDrives();
         public IReadOnlyList<FileSystemItem> GetDirectoryContents(string path, bool showHidden = false) => _inner.GetDirectoryContents(path, showHidden);
         public IReadOnlyList<FileSystemItem> GetSubDirectories(string path, bool showHidden = false) => _inner.GetSubDirectories(path, showHidden);
+        public bool HasSubDirectories(string path, bool showHidden = false) => _inner.HasSubDirectories(path, showHidden);
         public IReadOnlyList<string> GetFiles(string path, bool showHidden = false) => _inner.GetFiles(path, showHidden);
         public string GetDisplayName(string path) => _inner.GetDisplayName(path);
         public string? ResolveDirectoryPath(string path) => _inner.ResolveDirectoryPath(path);

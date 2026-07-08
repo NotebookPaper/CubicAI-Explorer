@@ -119,7 +119,8 @@ The app has a working UI with:
 - Multi-select support with selection count in status bar
 - Inline rename in file list (F2)
 - Drag/drop copy/move in file list
-- Bookmarks with persistence (`%AppData%\\CubicAIExplorer\\bookmarks.json`)
+- Bookmarks with persistence (`%AppData%\\CubicAIExplorer\\bookmarks.json`), distinguishing folder categories from bookmark items, persisting expanded state, and ghosting bookmarks whose target is missing
+- Explorer-style natural sorting (StrCmpLogicalW) in folder tree and file list name sort; folder tree honors the hidden-files setting and only shows expanders for folders that have subfolders
 - Undo/redo history for rename/copy/move/new-folder/permanent-delete
 - Classic Cubic/XP-inspired theme pass
 - Full toolbar with Cut/Copy/Paste/Delete/Undo/Redo/Refresh buttons

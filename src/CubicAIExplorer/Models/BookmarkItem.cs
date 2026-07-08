@@ -31,5 +31,20 @@ public partial class BookmarkItem : ObservableObject
     [ObservableProperty]
     private bool _isDropAfterTarget;
 
+    /// <summary>
+    /// True when the bookmark's target path no longer exists; rendered ghosted
+    /// like the original CubicExplorer did for dead bookmarks.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isMissing;
+
+    /// <summary>
+    /// Cached kind of a leaf bookmark's target: true when the target is a file,
+    /// false when it is a directory (or unknown/missing). Populated on the
+    /// background validation pass so icon rendering needs no disk I/O.
+    /// </summary>
+    [ObservableProperty]
+    private bool _targetIsFile;
+
     public ObservableCollection<BookmarkItem> Children { get; } = [];
 }

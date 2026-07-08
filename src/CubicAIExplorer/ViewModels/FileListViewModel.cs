@@ -1957,7 +1957,9 @@ public partial class FileListViewModel : ObservableObject, IDisposable
         var baseOrder = groupedOrder ?? items.OrderByDescending(static item => item.ItemType == FileSystemItemType.Directory);
         IEnumerable<FileSystemItem> orderedItems = SortMode switch
         {
-            FileListSortMode.Name => ApplyDirection(baseOrder, static item => item.Name),
+            FileListSortMode.Name => IsSortDescending
+                ? baseOrder.ThenByDescending(static item => item.Name, NaturalStringComparer.Instance)
+                : baseOrder.ThenBy(static item => item.Name, NaturalStringComparer.Instance),
             FileListSortMode.Size => ApplyDirection(baseOrder, static item => item.Size)
                 .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase),
             FileListSortMode.Type => ApplyDirection(baseOrder, static item => item.TypeDescription)

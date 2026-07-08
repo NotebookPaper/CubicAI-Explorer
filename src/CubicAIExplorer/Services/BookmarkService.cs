@@ -6,7 +6,11 @@ namespace CubicAIExplorer.Services;
 
 public sealed class BookmarkService : IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly DebouncedJsonFileWatcher<List<BookmarkItem>>? _watcher;
 
     public event EventHandler<List<BookmarkItem>>? BookmarksChanged;
@@ -192,7 +196,10 @@ public sealed class BookmarkService : IDisposable
         {
             Name = record.Name,
             Path = record.Path,
-            IsFolder = true
+            // Legacy files (before IsFolder was persisted) only stored folder
+            // categories as path-less entries, so fall back to that inference.
+            IsFolder = record.IsFolder ?? string.IsNullOrWhiteSpace(record.Path),
+            IsExpanded = record.IsExpanded ?? false
         };
         if (record.Children != null)
         {
@@ -210,7 +217,9 @@ public sealed class BookmarkService : IDisposable
         var record = new BookmarkRecord
         {
             Name = item.Name,
-            Path = item.Path
+            Path = item.Path,
+            IsFolder = item.IsFolder,
+            IsExpanded = item.IsFolder && item.IsExpanded ? true : null
         };
         if (item.Children.Count > 0)
         {
@@ -229,6 +238,8 @@ public sealed class BookmarkService : IDisposable
     {
         public string Name { get; set; } = string.Empty;
         public string Path { get; set; } = string.Empty;
+        public bool? IsFolder { get; set; }
+        public bool? IsExpanded { get; set; }
         public List<BookmarkRecord>? Children { get; set; }
     }
 }

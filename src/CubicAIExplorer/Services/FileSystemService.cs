@@ -104,10 +104,29 @@ public sealed class FileSystemService : IFileSystemService
                 .Where(d => !d.Attributes.HasFlag(FileAttributes.System)
                     && (showHidden || !d.Attributes.HasFlag(FileAttributes.Hidden)))
                 .Select(CreateItem)
+                .OrderBy(static item => item.Name, NaturalStringComparer.Instance)
                 .ToList();
         }
         catch (UnauthorizedAccessException) { return []; }
         catch (IOException) { return []; }
+    }
+
+    public bool HasSubDirectories(string path, bool showHidden = false)
+    {
+        var sanitized = SanitizePath(path);
+        if (sanitized == null) return false;
+
+        try
+        {
+            var dirInfo = new DirectoryInfo(sanitized);
+            if (!dirInfo.Exists) return false;
+
+            return dirInfo.EnumerateDirectories()
+                .Any(d => !d.Attributes.HasFlag(FileAttributes.System)
+                    && (showHidden || !d.Attributes.HasFlag(FileAttributes.Hidden)));
+        }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (IOException) { return false; }
     }
 
     public IReadOnlyList<string> GetFiles(string path, bool showHidden = false)
