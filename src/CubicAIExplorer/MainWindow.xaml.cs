@@ -584,7 +584,8 @@ public partial class MainWindow : Window
     {
         if (e.OriginalSource is TreeViewItem item && item.DataContext is FolderTreeNodeViewModel node)
         {
-            if (!_suppressFolderTreeNavigation
+            if (!node.IsPlaceholder
+                && !_suppressFolderTreeNavigation
                 && Mouse.RightButton != MouseButtonState.Pressed)
             {
                 ViewModel.SelectTreeNode(node);
@@ -624,6 +625,8 @@ public partial class MainWindow : Window
     {
         var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
         if (treeItem?.DataContext is not FolderTreeNodeViewModel node)
+            return;
+        if (node.IsPlaceholder)
             return;
 
         _suppressFolderTreeNavigation = true;
@@ -1103,7 +1106,7 @@ public partial class MainWindow : Window
 
     private void FolderTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || string.IsNullOrWhiteSpace(node.FullPath))
+        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || node.IsPlaceholder || string.IsNullOrWhiteSpace(node.FullPath))
         {
             e.Handled = true;
             return;
@@ -1593,7 +1596,7 @@ public partial class MainWindow : Window
         _folderTreeDragStarting = false;
 
         var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
-        if (treeItem?.DataContext is FolderTreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath))
+        if (treeItem?.DataContext is FolderTreeNodeViewModel node && !node.IsPlaceholder && !string.IsNullOrEmpty(node.FullPath))
         {
             var data = new DataObject(DataFormats.FileDrop, new[] { node.FullPath });
             DragDrop.DoDragDrop(FolderTree, data, DragDropEffects.Copy | DragDropEffects.Link);
@@ -1610,7 +1613,7 @@ public partial class MainWindow : Window
         }
 
         var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
-        if (treeItem?.DataContext is FolderTreeNodeViewModel)
+        if (treeItem?.DataContext is FolderTreeNodeViewModel dragOverNode && !dragOverNode.IsPlaceholder)
         {
             e.Effects = (e.KeyStates & DragDropKeyStates.ControlKey) != 0
                 ? DragDropEffects.Copy
@@ -1631,7 +1634,7 @@ public partial class MainWindow : Window
             return;
 
         var treeItem = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
-        if (treeItem?.DataContext is not FolderTreeNodeViewModel targetNode)
+        if (treeItem?.DataContext is not FolderTreeNodeViewModel targetNode || targetNode.IsPlaceholder)
             return;
 
         var droppedPaths = e.Data.GetData(DataFormats.FileDrop) as string[];
@@ -2297,16 +2300,12 @@ public partial class MainWindow : Window
         if (fileListViewModel == null || listView.Items.Count == 0)
             return;
 
+        // Nudge the virtualizing panel into generating the first row after a
+        // pane becomes visible. A missing container here is a transient layout
+        // state; it must never mutate user-facing settings such as ViewMode.
         listView.UpdateLayout();
         listView.ScrollIntoView(listView.Items[0]);
         listView.UpdateLayout();
-
-        if (listView.ItemContainerGenerator.ContainerFromIndex(0) == null
-            && string.Equals(fileListViewModel.ViewMode, "Details", StringComparison.OrdinalIgnoreCase))
-        {
-            fileListViewModel.ViewMode = "List";
-            listView.UpdateLayout();
-        }
     }
 
     private void UpdateTabStripAffordances()
@@ -3570,47 +3569,59 @@ public partial class MainWindow : Window
 
     private readonly GridLength _zeroHeight = new(0, GridUnitType.Pixel);
 
+    // Single source of truth for the sidebar's stacked sections, in top-to-bottom
+    // order. Every sidebar layout concern (row heights, splitter visibility, drag
+    // targets) is driven from this table instead of duplicating the row indexes,
+    // default heights, and visibility flags across several helpers.
+    private sealed record SidebarSection(
+        RowDefinition Row,
+        Thumb? SplitterBelow,
+        Func<MainViewModel, bool> IsVisible,
+        GridLength DefaultHeight,
+        double MinDragHeight);
+
+    private SidebarSection[]? _sidebarSections;
+
+    private SidebarSection[] SidebarSections => _sidebarSections ??=
+    [
+        new SidebarSection(RecentRow, RecentSplitter, vm => vm.IsRecentFoldersVisible, new GridLength(120), 60d),
+        new SidebarSection(BookmarksRow, BookmarksSplitter, vm => vm.IsBookmarksVisible, new GridLength(1, GridUnitType.Star), 60d),
+        new SidebarSection(SavedSearchesRow, SavedSearchesSplitter, vm => vm.IsSavedSearchesVisible, new GridLength(120), 60d),
+        new SidebarSection(DropStackRow, DropStackSplitter, vm => vm.IsDropStackVisible, new GridLength(180), 60d),
+        // Folders (row 8) is always visible and anchors the bottom of the stack.
+        new SidebarSection(SidebarGrid.RowDefinitions[8], null, static _ => true, new GridLength(2, GridUnitType.Star), 100d),
+    ];
+
     private void UpdateSidebarRowHeights()
     {
         var vm = _boundViewModel;
         if (vm == null) return;
 
-        if (!vm.IsRecentFoldersVisible) RecentRow.Height = _zeroHeight;
-        else if (RecentRow.Height.Value < 1) RecentRow.Height = new GridLength(120);
-
-        if (!vm.IsBookmarksVisible) BookmarksRow.Height = _zeroHeight;
-        else if (BookmarksRow.Height.Value < 1) BookmarksRow.Height = new GridLength(1, GridUnitType.Star);
-
-        if (!vm.IsSavedSearchesVisible) SavedSearchesRow.Height = _zeroHeight;
-        else if (SavedSearchesRow.Height.Value < 1) SavedSearchesRow.Height = new GridLength(120);
-
-        if (!vm.IsDropStackVisible) DropStackRow.Height = _zeroHeight;
-        else if (DropStackRow.Height.Value < 1) DropStackRow.Height = new GridLength(180);
+        foreach (var section in SidebarSections)
+        {
+            if (!section.IsVisible(vm))
+                section.Row.Height = _zeroHeight;
+            else if (section.Row.Height.Value < 1)
+                section.Row.Height = section.DefaultHeight;
+        }
 
         UpdateSidebarSplitterVisibility(vm);
     }
 
     private void SidebarSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
     {
-        if (sender is not FrameworkElement thumb) return;
-        var row = Grid.GetRow(thumb);
+        if (sender is not Thumb thumb) return;
 
-        if (!TryGetSidebarSectionIndexes(row, out var aboveIndex, out var belowIndex))
+        if (!TryGetSidebarDragSections(thumb, out var above, out var below))
             return;
 
-        var aboveDef = SidebarGrid.RowDefinitions[aboveIndex];
-        var belowDef = SidebarGrid.RowDefinitions[belowIndex];
-        var minimumHeight = 60d;
-        var aboveMinimum = aboveIndex == 8 ? 100d : minimumHeight;
-        var belowMinimum = belowIndex == 8 ? 100d : minimumHeight;
+        var newAbove = Math.Max(above.MinDragHeight, above.Row.ActualHeight + e.VerticalChange);
+        var newBelow = Math.Max(below.MinDragHeight, below.Row.ActualHeight - e.VerticalChange);
 
-        var newAbove = Math.Max(aboveMinimum, aboveDef.ActualHeight + e.VerticalChange);
-        var newBelow = Math.Max(belowMinimum, belowDef.ActualHeight - e.VerticalChange);
+        if (newAbove < above.MinDragHeight || newBelow < below.MinDragHeight) return;
 
-        if (newAbove < aboveMinimum || newBelow < belowMinimum) return;
-
-        aboveDef.Height = new GridLength(newAbove, GridUnitType.Pixel);
-        belowDef.Height = new GridLength(newBelow, GridUnitType.Pixel);
+        above.Row.Height = new GridLength(newAbove, GridUnitType.Pixel);
+        below.Row.Height = new GridLength(newBelow, GridUnitType.Pixel);
     }
 
     private void MainVerticalSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
@@ -3648,73 +3659,62 @@ public partial class MainWindow : Window
 
     private void UpdateSidebarSplitterVisibility(MainViewModel vm)
     {
-        RecentSplitter.Visibility = HasVisibleSidebarSection(0, vm) && HasVisibleSidebarSectionAfter(0, vm)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        BookmarksSplitter.Visibility = HasVisibleSidebarSectionBefore(2, vm) && HasVisibleSidebarSectionAfter(2, vm)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        SavedSearchesSplitter.Visibility = HasVisibleSidebarSectionBefore(4, vm) && HasVisibleSidebarSectionAfter(4, vm)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        DropStackSplitter.Visibility = HasVisibleSidebarSectionBefore(6, vm) && HasVisibleSidebarSectionAfter(6, vm)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        var sections = SidebarSections;
+
+        // A section's splitter is shown only when the section itself is visible
+        // AND at least one later section is visible. Because hidden sections never
+        // keep their splitter, exactly one splitter renders between any two
+        // adjacent visible sections (the one belonging to the upper section).
+        for (var i = 0; i < sections.Length; i++)
+        {
+            var splitter = sections[i].SplitterBelow;
+            if (splitter == null) continue;
+
+            var visible = sections[i].IsVisible(vm) && HasVisibleSectionAfter(sections, i, vm);
+            splitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
-    private bool TryGetSidebarSectionIndexes(int splitterRow, out int aboveIndex, out int belowIndex)
+    private bool TryGetSidebarDragSections(Thumb thumb, out SidebarSection above, out SidebarSection below)
     {
-        aboveIndex = -1;
-        belowIndex = -1;
+        above = null!;
+        below = null!;
 
-        for (var row = splitterRow - 1; row >= 0; row -= 2)
+        var vm = _boundViewModel;
+        if (vm == null) return false;
+
+        var sections = SidebarSections;
+        var splitterIndex = Array.FindIndex(sections, s => ReferenceEquals(s.SplitterBelow, thumb));
+        if (splitterIndex < 0) return false;
+
+        // Nearest visible section at or above the dragged splitter.
+        for (var i = splitterIndex; i >= 0; i--)
         {
-            if (SidebarGrid.RowDefinitions[row].Height.Value > 0)
+            if (sections[i].IsVisible(vm))
             {
-                aboveIndex = row;
+                above = sections[i];
                 break;
             }
         }
 
-        for (var row = splitterRow + 1; row < SidebarGrid.RowDefinitions.Count; row += 2)
+        // Nearest visible section below the dragged splitter.
+        for (var i = splitterIndex + 1; i < sections.Length; i++)
         {
-            if (SidebarGrid.RowDefinitions[row].Height.Value > 0)
+            if (sections[i].IsVisible(vm))
             {
-                belowIndex = row;
+                below = sections[i];
                 break;
             }
         }
 
-        return aboveIndex >= 0 && belowIndex >= 0;
+        return above is not null && below is not null;
     }
 
-    private static bool HasVisibleSidebarSection(int rowIndex, MainViewModel vm)
-        => rowIndex switch
-        {
-            0 => vm.IsRecentFoldersVisible,
-            2 => vm.IsBookmarksVisible,
-            4 => vm.IsSavedSearchesVisible,
-            6 => vm.IsDropStackVisible,
-            8 => true,
-            _ => false
-        };
-
-    private static bool HasVisibleSidebarSectionBefore(int rowIndex, MainViewModel vm)
+    private static bool HasVisibleSectionAfter(SidebarSection[] sections, int index, MainViewModel vm)
     {
-        for (var current = rowIndex; current >= 0; current -= 2)
+        for (var i = index + 1; i < sections.Length; i++)
         {
-            if (HasVisibleSidebarSection(current, vm))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool HasVisibleSidebarSectionAfter(int rowIndex, MainViewModel vm)
-    {
-        for (var current = rowIndex + 2; current <= 8; current += 2)
-        {
-            if (HasVisibleSidebarSection(current, vm))
+            if (sections[i].IsVisible(vm))
                 return true;
         }
 
@@ -3725,7 +3725,7 @@ public partial class MainWindow : Window
     {
         path = string.Empty;
 
-        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || string.IsNullOrWhiteSpace(node.FullPath))
+        if (FolderTree.SelectedItem is not FolderTreeNodeViewModel node || node.IsPlaceholder || string.IsNullOrWhiteSpace(node.FullPath))
             return false;
 
         path = node.FullPath;

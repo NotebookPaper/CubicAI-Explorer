@@ -19,6 +19,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // The smoke test harness instantiates this App class for its XAML
+        // resources. Production startup must not run there: it would race the
+        // single-instance mutex against a real running instance (shutting the
+        // test host down and poking the user's window) and write real AppData.
+        if (Environment.GetEnvironmentVariable("CUBICAI_SMOKE_MODE") == "1")
+            return;
+
         _singleInstance = new SingleInstanceService();
         if (!_singleInstance.TryAcquire())
         {

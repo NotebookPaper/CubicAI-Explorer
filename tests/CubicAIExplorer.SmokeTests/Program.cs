@@ -3085,6 +3085,7 @@ internal static class Program
 
         var fileListView = window.FindName("FileListView") as ListView;
         Assert(fileListView != null, "Main window should expose the file list control.");
+        WaitFor(() => { DoEvents(); return fileListView!.Items.Count >= 2; }, 5000);
         Assert(fileListView!.Items.Count >= 2, "Main window file list should render startup folder items.");
         fileListView.ScrollIntoView(fileListView.Items[0]);
         fileListView.UpdateLayout();
@@ -4816,6 +4817,10 @@ internal static class Program
     {
         if (Application.Current == null)
         {
+            // Keep production OnStartup (single instance, real settings, real
+            // main window) from running inside the test host; we only want the
+            // App.xaml resources.
+            Environment.SetEnvironmentVariable("CUBICAI_SMOKE_MODE", "1");
             var app = new CubicAIExplorer.App();
             app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             app.InitializeComponent();

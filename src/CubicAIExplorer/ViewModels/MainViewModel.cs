@@ -19,7 +19,7 @@ namespace CubicAIExplorer.ViewModels;
 
 public partial class MainViewModel : ObservableObject, IDisposable
 {
-    private static readonly JsonSerializerOptions BookmarkJsonOptions = new()
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new()
     {
         WriteIndented = true
     };
@@ -1457,32 +1457,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 "Downloads"), save: false);
             SaveBookmarks();
         }
-    }
-
-    private BookmarkItem MapRecordToBookmark(BookmarkRecord record)
-    {
-        var item = new BookmarkItem
-        {
-            Name = record.Name,
-            Path = record.Path,
-            // Older exports predate the IsFolder flag; there, only folder
-            // categories were stored without a path.
-            IsFolder = record.IsFolder || string.IsNullOrWhiteSpace(record.Path)
-        };
-        if (record.Children != null)
-        {
-            foreach (var childRecord in record.Children)
-            {
-                item.Children.Add(MapRecordToBookmark(childRecord));
-            }
-        }
-        return item;
-    }
-
-    private BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
-    {
-        var children = item.Children.Select(MapBookmarkToRecord).ToList();
-        return new BookmarkRecord(item.Name, item.Path, item.IsFolder, children.Count > 0 ? children : null);
     }
 
     /// <summary>
@@ -2997,9 +2971,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         switch (ResolveBookmarkTarget(bookmark))
         {
             case BookmarkTargetKind.Directory:
-                if (ActivateOpenTab(bookmark.Path))
-                    return;
-                CreateTab(bookmark.Path, null, activate: true);
+                OpenPathInNewTab(bookmark.Path);
                 break;
             case BookmarkTargetKind.File:
                 _fileSystemService.OpenFile(bookmark.Path);
@@ -3044,11 +3016,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             else
             {
                 var json = File.ReadAllText(filePath);
-                var records = JsonSerializer.Deserialize<List<BookmarkRecord>>(json);
+                var records = JsonSerializer.Deserialize<List<BookmarkService.BookmarkRecord>>(json);
                 if (records != null)
                 {
                     foreach (var record in records)
-                        MergeImportedBookmark(MapRecordToBookmark(record), Bookmarks);
+                        MergeImportedBookmark(BookmarkService.MapRecordToBookmark(record), Bookmarks);
                     SaveBookmarks();
                     ValidateBookmarkTargets();
                 }
@@ -3143,10 +3115,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             var payload = Bookmarks
-                .Select(MapBookmarkToRecord)
+                .Select(BookmarkService.MapBookmarkToRecord)
                 .ToList();
 
-            File.WriteAllText(filePath, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
+            File.WriteAllText(filePath, JsonSerializer.Serialize(payload, BookmarkService.JsonOptions));
             _dialogService.ShowMessage($"Exported {payload.Count} root bookmarks.", "Export Successful", System.Windows.MessageBoxImage.Information);
         }
         catch (Exception ex)
@@ -3265,7 +3237,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         });
     }
 
-    private sealed record BookmarkRecord(string Name, string Path, bool IsFolder = false, List<BookmarkRecord>? Children = null);
     private sealed record ClosedTabState(int Index, TabItem Tab);
     private sealed class SavedSearchRecord
     {
@@ -4677,7 +4648,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     MaxDate = s.MaxDate
                 })
                 .ToList();
-            File.WriteAllText(path, JsonSerializer.Serialize(payload, BookmarkJsonOptions));
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, IndentedJsonOptions));
         }
         catch
         {

@@ -6,7 +6,7 @@ namespace CubicAIExplorer.Services;
 
 public sealed class BookmarkService : IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -190,7 +190,7 @@ public sealed class BookmarkService : IDisposable
         }
     }
 
-    private static BookmarkItem MapRecordToBookmark(BookmarkRecord record)
+    internal static BookmarkItem MapRecordToBookmark(BookmarkRecord record)
     {
         var item = new BookmarkItem
         {
@@ -212,7 +212,7 @@ public sealed class BookmarkService : IDisposable
         return item;
     }
 
-    private static BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
+    internal static BookmarkRecord MapBookmarkToRecord(BookmarkItem item)
     {
         var record = new BookmarkRecord
         {
@@ -234,7 +234,7 @@ public sealed class BookmarkService : IDisposable
         _watcher?.Dispose();
     }
 
-    private sealed class BookmarkRecord
+    internal sealed class BookmarkRecord
     {
         public string Name { get; set; } = string.Empty;
         public string Path { get; set; } = string.Empty;

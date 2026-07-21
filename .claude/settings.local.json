@@ -21,7 +21,9 @@
       "Bash(cd \"src/CubicAIExplorer/Resources\" && magick -background none -density 384 appicon-v2.svg -resize 256x256 appicon-v2-256.png && magick -background none -density 384 appicon-v2.svg -resize 128x128 appicon-v2-128.png && magick -background none -density 384 appicon-v2.svg -resize 64x64 appicon-v2-64.png && magick -background none -density 384 appicon-v2.svg -resize 48x48 appicon-v2-48.png && magick -background none -density 384 appicon-v2.svg -resize 32x32 appicon-v2-32.png && magick -background none -density 384 appicon-v2.svg -resize 16x16 appicon-v2-16.png && echo \"PNGs done\")",
       "Bash(cd \"src/CubicAIExplorer/Resources\" && magick appicon-v2-256.png appicon-v2-128.png appicon-v2-64.png appicon-v2-48.png appicon-v2-32.png appicon-v2-16.png appicon-v2.ico && echo \"ICO done\" && ls -la appicon-v2*)",
       "Bash(cd \"C:/dev/CubicAI_rewrite/src/CubicAIExplorer/Resources\" && magick appicon-v2-256.png appicon-v2-128.png appicon-v2-64.png appicon-v2-48.png appicon-v2-32.png appicon-v2-16.png appicon-v2.ico && echo \"ICO done\" && ls -la appicon-v2*)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "PowerShell(dotnet build *)",
+      "PowerShell(dotnet run *)"
     ]
   }
 }

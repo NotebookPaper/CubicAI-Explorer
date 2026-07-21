@@ -46,27 +46,6 @@ public partial class FolderTreeNodeViewModel : ObservableObject
         }
     }
 
-    public void LoadChildren()
-    {
-        if (_hasLoadedChildren || _isLoadingChildren)
-            return;
-
-        _hasLoadedChildren = true;
-        _isLoadingChildren = true;
-        Children.Clear();
-        Children.Add(CreatePlaceholder(_fileSystemService));
-
-        try
-        {
-            var subdirs = LoadChildEntries();
-            PopulateChildren(subdirs);
-        }
-        finally
-        {
-            _isLoadingChildren = false;
-        }
-    }
-
     public async Task LoadChildrenAsync()
     {
         if (_hasLoadedChildren || _isLoadingChildren)
