@@ -930,10 +930,15 @@ public partial class MainWindow : Window
         if (targetItem.IsVisible)
             relativePosition = BookmarkTree.TranslatePoint(position, targetItem);
 
+        // A TreeViewItem's ActualHeight includes its entire expanded subtree, not
+        // just the header row. Using it for the drop-zone math would make Into/After
+        // unreachable on expanded folders, so measure only the header row's height.
+        var rowHeight = GetTreeViewItemHeaderHeight(targetItem);
+
         if (target.IsFolder)
         {
-            var topZone = targetItem.ActualHeight * 0.25;
-            var bottomZone = targetItem.ActualHeight * 0.75;
+            var topZone = rowHeight * 0.25;
+            var bottomZone = rowHeight * 0.75;
             if (relativePosition.Y < topZone)
                 return (target, BookmarkDropPlacement.Before, targetItem);
             if (relativePosition.Y <= bottomZone)
@@ -942,9 +947,24 @@ public partial class MainWindow : Window
         }
 
         // Non-folder items: top half = before, bottom half = after
-        if (relativePosition.Y < targetItem.ActualHeight * 0.5)
+        if (relativePosition.Y < rowHeight * 0.5)
             return (target, BookmarkDropPlacement.Before, targetItem);
         return (target, BookmarkDropPlacement.After, targetItem);
+    }
+
+    // Returns the height of a TreeViewItem's header row alone, excluding any
+    // expanded child rows that ActualHeight would otherwise fold in.
+    private static double GetTreeViewItemHeaderHeight(TreeViewItem item)
+    {
+        if (item.Template?.FindName("PART_Header", item) is FrameworkElement header
+            && header.ActualHeight > 0)
+        {
+            return header.ActualHeight;
+        }
+
+        // Collapsed folders and leaves have no child rows, so ActualHeight is
+        // already just the header; fall back to it when the part isn't found.
+        return item.ActualHeight;
     }
 
     private void ImportBookmarks_Click(object sender, RoutedEventArgs e)

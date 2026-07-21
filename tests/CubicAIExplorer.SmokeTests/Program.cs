@@ -4647,7 +4647,12 @@ internal static class Program
 
                 var targetBounds = GetElementBoundsRelativeTo(targetContainer, bookmarkTree);
                 var childBounds = GetElementBoundsRelativeTo(childContainer, bookmarkTree);
-                var intoPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + (targetBounds.Height / 2));
+                // targetBounds spans the whole expanded subtree (header + children),
+                // so its center lands on the child row. The header row alone is the
+                // span from the folder's top down to its first child's top; the drop
+                // classification must key off that, not the inflated subtree bounds.
+                var headerHeight = childBounds.Top - targetBounds.Top;
+                var intoPoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + (headerHeight / 2));
                 var beforePoint = new Point(targetBounds.Left + (targetBounds.Width / 2), targetBounds.Top + 2);
 
                 bookmarkTree.CaptureMouse();
