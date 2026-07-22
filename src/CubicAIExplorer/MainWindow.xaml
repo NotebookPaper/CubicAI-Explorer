@@ -925,59 +925,76 @@
                             </TreeView.ItemContainerStyle>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate DataType="{x:Type models:BookmarkItem}" ItemsSource="{Binding Children}">
-                                    <Border Margin="0" Padding="0"
-                                            BorderBrush="Transparent" BorderThickness="0"
-                                            Background="Transparent">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsDropBeforeTarget}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#0078D7" />
-                                                        <Setter Property="BorderThickness" Value="0,2,0,0" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding IsDropAfterTarget}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#0078D7" />
-                                                        <Setter Property="BorderThickness" Value="0,0,0,2" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding IsDropIntoTarget}" Value="True">
-                                                        <Setter Property="Background" Value="#0078D7" />
-                                                        <Setter Property="BorderBrush" Value="#005A9E" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <StackPanel Orientation="Horizontal" Margin="1,1,6,1">
-                                            <Image Width="16" Height="16" Margin="0,0,6,0"
-                                                   Style="{StaticResource GhostableIconImageStyle}">
-                                                <Image.Source>
-                                                    <MultiBinding Converter="{StaticResource ShellIconConverter}">
-                                                        <Binding Path="Path" />
-                                                        <Binding Path="IsFolder" />
-                                                        <Binding Path="TargetIsFile" />
-                                                    </MultiBinding>
-                                                </Image.Source>
-                                            </Image>
-                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground"
-                                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
-                                                        <Style.Triggers>
-                                                            <!-- Ghost dead bookmarks unless selected, like the original -->
-                                                            <MultiDataTrigger>
-                                                                <MultiDataTrigger.Conditions>
-                                                                    <Condition Binding="{Binding IsMissing}" Value="True" />
-                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" Value="False" />
-                                                                </MultiDataTrigger.Conditions>
-                                                                <Setter Property="Foreground" Value="{StaticResource GhostedTextBrush}" />
-                                                            </MultiDataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </Border>
+                                    <Grid>
+                                        <Border x:Name="RowBorder" Margin="0" Padding="0"
+                                                BorderBrush="Transparent" BorderThickness="0"
+                                                Background="Transparent">
+                                            <StackPanel Orientation="Horizontal" Margin="1,1,6,1">
+                                                <Image Width="16" Height="16" Margin="0,0,6,0"
+                                                       Style="{StaticResource GhostableIconImageStyle}">
+                                                    <Image.Source>
+                                                        <MultiBinding Converter="{StaticResource ShellIconConverter}">
+                                                            <Binding Path="Path" />
+                                                            <Binding Path="IsFolder" />
+                                                            <Binding Path="TargetIsFile" />
+                                                            <Binding Path="IsExpanded" />
+                                                        </MultiBinding>
+                                                    </Image.Source>
+                                                </Image>
+                                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground"
+                                                                    Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
+                                                            <Style.Triggers>
+                                                                <!-- Ghost dead bookmarks unless selected, like the original -->
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsMissing}" Value="True" />
+                                                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" Value="False" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Foreground" Value="{StaticResource GhostedTextBrush}" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Insert-before marker: line along the top edge with an up caret -->
+                                        <Grid x:Name="BeforeMarker" VerticalAlignment="Top"
+                                              IsHitTestVisible="False" Visibility="Collapsed">
+                                            <Rectangle Height="2" VerticalAlignment="Top" Fill="#0078D7" />
+                                            <Path Data="M4.5,0 L9,6 L0,6 Z" Fill="#0078D7"
+                                                  Width="9" Height="6"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                  Margin="2,0,0,0" />
+                                        </Grid>
+
+                                        <!-- Insert-after marker: line along the bottom edge with a down caret -->
+                                        <Grid x:Name="AfterMarker" VerticalAlignment="Bottom"
+                                              IsHitTestVisible="False" Visibility="Collapsed">
+                                            <Rectangle Height="2" VerticalAlignment="Bottom" Fill="#0078D7" />
+                                            <Path Data="M0,0 L9,0 L4.5,6 Z" Fill="#0078D7"
+                                                  Width="9" Height="6"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                  Margin="2,0,0,0" />
+                                        </Grid>
+                                    </Grid>
+                                    <HierarchicalDataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsDropBeforeTarget}" Value="True">
+                                            <Setter TargetName="BeforeMarker" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsDropAfterTarget}" Value="True">
+                                            <Setter TargetName="AfterMarker" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsDropIntoTarget}" Value="True">
+                                            <Setter TargetName="RowBorder" Property="Background" Value="#0078D7" />
+                                            <Setter TargetName="RowBorder" Property="BorderBrush" Value="#005A9E" />
+                                            <Setter TargetName="RowBorder" Property="BorderThickness" Value="1" />
+                                        </DataTrigger>
+                                    </HierarchicalDataTemplate.Triggers>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
