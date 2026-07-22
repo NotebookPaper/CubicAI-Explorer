@@ -13,6 +13,7 @@ public sealed class ShellIconService : IShellIconService
     private const uint SHGFI_ICON = 0x000000100;
     private const uint SHGFI_SMALLICON = 0x000000001;
     private const uint SHGFI_LARGEICON = 0x000000000;
+    private const uint SHGFI_OPENICON = 0x000000002;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
     private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
@@ -20,15 +21,18 @@ public sealed class ShellIconService : IShellIconService
 
     private readonly ConcurrentDictionary<string, BitmapSource?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public BitmapSource? GetIcon(string path, FileSystemItemType itemType, bool smallIcon = true)
+    public BitmapSource? GetIcon(string path, FileSystemItemType itemType, bool smallIcon = true, bool openFolder = false)
     {
-        var cacheKey = BuildCacheKey(path, itemType, smallIcon);
-        return _cache.GetOrAdd(cacheKey, _ => LoadIcon(path, itemType, smallIcon));
+        var cacheKey = BuildCacheKey(path, itemType, smallIcon, openFolder);
+        return _cache.GetOrAdd(cacheKey, _ => LoadIcon(path, itemType, smallIcon, openFolder));
     }
 
-    private static string BuildCacheKey(string path, FileSystemItemType itemType, bool smallIcon)
+    private static string BuildCacheKey(string path, FileSystemItemType itemType, bool smallIcon, bool openFolder)
     {
         var sizeKey = smallIcon ? "sm" : "lg";
+        // Only folder-like items have a distinct open state; keep the flag off
+        // the key for files so their extension-keyed cache stays deduplicated.
+        var openKey = openFolder && itemType != FileSystemItemType.File ? ":open" : string.Empty;
         if (itemType == FileSystemItemType.File)
         {
             var extension = Path.GetExtension(path);
@@ -37,17 +41,19 @@ public sealed class ShellIconService : IShellIconService
 
         if (itemType == FileSystemItemType.Bookmark)
         {
-            return $"bookmark:{path}:{sizeKey}";
+            return $"bookmark:{path}:{sizeKey}{openKey}";
         }
 
-        return $"path:{path}:{sizeKey}";
+        return $"path:{path}:{sizeKey}{openKey}";
     }
 
-    private static BitmapSource? LoadIcon(string path, FileSystemItemType itemType, bool smallIcon)
+    private static BitmapSource? LoadIcon(string path, FileSystemItemType itemType, bool smallIcon, bool openFolder)
     {
         try
         {
             var flags = SHGFI_ICON | (smallIcon ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+            if (openFolder && itemType != FileSystemItemType.File)
+                flags |= SHGFI_OPENICON;
             var fileAttributes = FILE_ATTRIBUTE_NORMAL;
             var shellPath = path;
 

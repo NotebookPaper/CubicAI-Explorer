@@ -39,8 +39,10 @@ public sealed class ShellIconConverter : IValueConverter, IMultiValueConverter
 
     /// <summary>
     /// MultiBinding entry point for bookmark icons: values are (path, isFolder,
-    /// targetIsFile). Including the cached target-kind flags lets the icon
-    /// refresh when background validation resolves them, with zero disk I/O.
+    /// targetIsFile, isExpanded). Including the cached target-kind flags lets the
+    /// icon refresh when background validation resolves them, with zero disk I/O;
+    /// the expanded flag switches folders/categories to their open-folder icon,
+    /// like the original CubicExplorer did.
     /// </summary>
     public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
@@ -50,10 +52,13 @@ public sealed class ShellIconConverter : IValueConverter, IMultiValueConverter
         var path = values[0] as string ?? string.Empty;
         var isFolder = values[1] is bool folder && folder;
         var targetIsFile = values[2] is bool file && file;
+        var isExpanded = values.Length > 3 && values[3] is bool expanded && expanded;
 
         try
         {
-            return IconService.GetIcon(path, ResolveBookmarkType(isFolder, targetIsFile));
+            var type = ResolveBookmarkType(isFolder, targetIsFile);
+            var openFolder = isExpanded && type == FileSystemItemType.Directory;
+            return IconService.GetIcon(path, type, openFolder: openFolder);
         }
         catch
         {

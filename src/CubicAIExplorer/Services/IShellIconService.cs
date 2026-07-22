@@ -5,5 +5,5 @@ namespace CubicAIExplorer.Services;
 
 public interface IShellIconService
 {
-    BitmapSource? GetIcon(string path, FileSystemItemType itemType, bool smallIcon = true);
+    BitmapSource? GetIcon(string path, FileSystemItemType itemType, bool smallIcon = true, bool openFolder = false);
 }

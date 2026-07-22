@@ -2607,7 +2607,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void RemoveBookmark(BookmarkItem? bookmark)
     {
         if (bookmark == null) return;
-        
+
+        // Match the original CubicExplorer's SafeDeleteSelectedNodes: deleting a
+        // category that still holds bookmarks is destructive, so confirm first.
+        // Leaf bookmarks delete silently, as they did in the original.
+        if (bookmark.Children.Count > 0
+            && _dialogService.CanShowDialogs
+            && !_dialogService.ShowConfirmation(
+                $"Are you sure you want to delete '{bookmark.Name}' and its {bookmark.Children.Count} bookmark(s)?",
+                "Confirm Delete"))
+        {
+            return;
+        }
+
         // Remove from root or from parent children
         if (Bookmarks.Contains(bookmark))
         {
